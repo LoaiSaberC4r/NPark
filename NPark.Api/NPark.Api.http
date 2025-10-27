@@ -1,0 +1,6 @@
+@NPark.Api_HostAddress = http://localhost:5156
+
+GET {{NPark.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
