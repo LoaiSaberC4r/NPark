@@ -7,8 +7,18 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="FluentValidation" Version="12.0.0" />
+    <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\BuildingBlock.Application\BuildingBlock.Application.csproj" />
     <ProjectReference Include="..\NPark.Domain\NPark.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Feature\UserManagement\Command\" />
+    <Folder Include="Feature\UserManagement\Query\" />
   </ItemGroup>
 
 </Project>

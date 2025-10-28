@@ -4,11 +4,11 @@ namespace NPark.Domain.Entities
 {
     public class Permission : Entity<Guid>
     {
-        private List<RolePermission> _rolePermissions = new List<RolePermission>();
+        private List<RolePermission> _rolePermissions { get; set; } = new();
         public string NameEn { get; set; } = string.Empty;
         public string NameAr { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
-        public IReadOnlyList<RolePermission> RolePermissions => _rolePermissions;
+        public IReadOnlyCollection<RolePermission> RolePermissions => _rolePermissions;
 
         private Permission()
         { }

@@ -1,7 +1,9 @@
-﻿using BuildingBlock.Application.Repositories;
+﻿using BuildingBlock.Application.Abstraction.Encryption;
+using BuildingBlock.Application.Repositories;
 using BuildingBlock.Application.Time;
 using BuildingBlock.Infrastracture.Interceptors;
 using BuildingBlock.Infrastracture.Repositories;
+using BuildingBlock.Infrastracture.Service;
 using BuildingBlock.Infrastracture.Time;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -37,6 +39,13 @@ namespace BuildingBlock.Infrastracture.Bootstrap
             return services
                 .AddBuildingBlockAuditing()
                 .AddBuildingBlockSoftDelete();
+        }
+
+        public static IServiceCollection AddSecurity(this IServiceCollection services)
+        {
+            services.AddSingleton<IPasswordService, PasswordService>();
+            services.AddSingleton<IEncryptionService, EncryptionService>();
+            return services;
         }
     }
 }

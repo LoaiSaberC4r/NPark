@@ -14,6 +14,7 @@ namespace NPark.Domain.Entities
 
         public static RolePermission Create(Guid roleId, Guid permissionId) => new RolePermission()
         {
+            Id = Guid.NewGuid(),
             RoleId = roleId,
             PermissionId = permissionId
         };

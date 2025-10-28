@@ -9,7 +9,7 @@ namespace NPark.Domain.Entities
         public string NameAr { get; private set; } = string.Empty;
         public string Description { get; private set; } = string.Empty;
 
-        public IReadOnlyCollection<RolePermission> GetPermissions => Permissions.AsReadOnly();
+        public IReadOnlyCollection<RolePermission> GetPermissions => Permissions;
 
         private Role()
         { }

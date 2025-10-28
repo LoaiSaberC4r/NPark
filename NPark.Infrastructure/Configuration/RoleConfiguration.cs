@@ -17,7 +17,5 @@ namespace NPark.Infrastructure.Configuration
                 .WithOne(x => x.Role)
                 .HasForeignKey(x => x.RoleId);
         }
-
-    {
     }
 }
