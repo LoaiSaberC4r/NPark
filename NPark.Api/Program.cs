@@ -51,11 +51,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseSharedLocalization();
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+
+app.UseSwagger();
+app.UseSwaggerUI();
+
 // Custom Middleware
 app.MapLoggingDiagnostics();
 ///////////////////////
