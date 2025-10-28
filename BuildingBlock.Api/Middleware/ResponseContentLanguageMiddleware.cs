@@ -11,9 +11,15 @@ namespace BuildingBlock.Api.Middleware
 
         public async Task Invoke(HttpContext context)
         {
+            // اضبط الهيدر قبل الإرسال (بأمان)
+            context.Response.OnStarting(() =>
+            {
+                var lang = CultureInfo.CurrentUICulture?.TwoLetterISOLanguageName ?? "en";
+                context.Response.Headers["Content-Language"] = lang;
+                return Task.CompletedTask;
+            });
+
             await _next(context);
-            var lang = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-            context.Response.Headers["Content-Language"] = lang;
         }
     }
 }

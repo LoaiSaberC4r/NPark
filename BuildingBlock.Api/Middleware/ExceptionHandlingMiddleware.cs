@@ -40,6 +40,13 @@ namespace BuildingBlock.Api.Middleware
                             context.Request.Path, corr, traceId);
                 }
 
+                // لو الريسبونس بدأ فعلاً، مينفعش نعدل هيدرز/بودي
+                if (context.Response.HasStarted)
+                {
+                    Log.Warning("The response has already started. Cannot write error response (traceId: {TraceId})", traceId);
+                    throw; // سيبه يطلع للهوستنج/DevExceptionPage
+                }
+
                 var problem = new
                 {
                     type = "https://tools.ietf.org/html/rfc9110#section-15.6.1",
@@ -47,12 +54,19 @@ namespace BuildingBlock.Api.Middleware
                     status = (int)HttpStatusCode.InternalServerError,
                     traceId,
                     correlationId = corr,
-                    detail = _env.IsDevelopment() ? ex.ToString() : null   //should here null
+                    detail = _env.IsDevelopment() ? ex.ToString() : null
                 };
 
-                context.Response.ContentType = "application/problem+json";
+                var json = JsonSerializer.Serialize(problem, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                });
+
+                context.Response.Clear();
                 context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
-                await context.Response.WriteAsync(JsonSerializer.Serialize(problem));
+                context.Response.ContentType = "application/problem+json; charset=utf-8";
+                await context.Response.WriteAsync(json);
             }
         }
     }

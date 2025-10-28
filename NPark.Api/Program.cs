@@ -1,11 +1,18 @@
-using BuildingBlock.Api.Bootstrap;
+﻿using BuildingBlock.Api.Bootstrap;
 using BuildingBlock.Api.Logging;
 using BuildingBlock.Api.OpenAi;
 using NPark.Application.Bootstrap;
 using NPark.Infrastructure.Bootstrap;
 
 var builder = WebApplication.CreateBuilder(args);
-
+//builder.WebHost.ConfigureKestrel(options =>
+//{
+//    options.ListenLocalhost(7298, o =>
+//    {
+//        o.UseHttps();
+//        o.Protocols = HttpProtocols.Http1;   // ⬅️ إجبار HTTP/1.1
+//    });
+//});
 // Add services to the container.
 builder.Services.InfrastructureInjection(builder.Configuration);
 builder.Services.AddApplicationBootstrap();
@@ -25,9 +32,24 @@ builder.Services.AddSharedLocalization(opts =>
     opts.AllowQueryStringLang = true;
 });
 builder.Services.AddMemoryCache();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("OpenAll_NoCreds", policy =>
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+    );
+});
 
 var app = builder.Build();
+app.UseSerilogPipeline();
+app.UseCors("OpenAll_NoCreds");
+app.UseHttpsRedirection();
 
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseSharedLocalization();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -35,12 +57,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 // Custom Middleware
-app.UseSerilogPipeline();
-app.UseSharedLocalization();
 app.MapLoggingDiagnostics();
 ///////////////////////
-app.UseHttpsRedirection();
-app.UseAuthentication();
-app.UseAuthorization();
 app.MapControllers();
 app.Run();
