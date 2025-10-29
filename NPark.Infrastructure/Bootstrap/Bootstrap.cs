@@ -35,6 +35,7 @@ namespace NPark.Infrastructure.Bootstrap
             services.EnsureDatabaseInitializationAndUpToDate();
             services.AddHttpClient();
             services.AddSingleton<ICacheService, MemoryCacheService>();
+            services.AddMediaService();
             //services.AddSeeding();
             services.AddAuth(configuration);
 

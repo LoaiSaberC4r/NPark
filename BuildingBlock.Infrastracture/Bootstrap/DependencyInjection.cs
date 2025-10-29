@@ -1,4 +1,5 @@
 ﻿using BuildingBlock.Application.Abstraction.Encryption;
+using BuildingBlock.Application.Abstraction.Media;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Application.Time;
 using BuildingBlock.Infrastracture.Interceptors;
@@ -45,6 +46,12 @@ namespace BuildingBlock.Infrastracture.Bootstrap
         {
             services.AddSingleton<IPasswordService, PasswordService>();
             services.AddSingleton<IEncryptionService, EncryptionService>();
+            return services;
+        }
+
+        public static IServiceCollection AddMediaService(this IServiceCollection services)
+        {
+            services.AddSingleton<IMediaService, MediaService>();
             return services;
         }
     }

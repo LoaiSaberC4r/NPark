@@ -7,8 +7,8 @@ namespace NPark.Application.Feature.PricingSchemaManagement.Command.Add
     {
         public string Name { get; set; }
         public DurationType DurationType { get; set; }
-        public TimeSpan StartTime { get; set; }
-        public TimeSpan EndTime { get; set; }
+        public TimeSpan? StartTime { get; set; }
+        public TimeSpan? EndTime { get; set; }
         public decimal Price { get; set; }
         public bool IsRepeated { get; set; }
         public int? OrderPriority { get; set; }
