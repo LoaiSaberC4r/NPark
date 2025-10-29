@@ -79,6 +79,51 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to IsRepeated cannot be true when DurationType is Days..
+        /// </summary>
+        public static string Conflict_IsRepeated {
+            get {
+                return ResourceManager.GetString("Conflict_IsRepeated", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to EndTime cannot be earlier than StartTime..
+        /// </summary>
+        public static string Invalid_EndTime {
+            get {
+                return ResourceManager.GetString("Invalid_EndTime", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to TotalDays must be greater than zero when DurationType is Days..
+        /// </summary>
+        public static string Invalid_TotalDays {
+            get {
+                return ResourceManager.GetString("Invalid_TotalDays", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to TotalHours must be greater than zero when DurationType is Hours..
+        /// </summary>
+        public static string Invalid_TotalHour {
+            get {
+                return ResourceManager.GetString("Invalid_TotalHour", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Price cannot be less than zero..
+        /// </summary>
+        public static string InvalidPrice {
+            get {
+                return ResourceManager.GetString("InvalidPrice", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to he field {0} is required..
         /// </summary>
         public static string IsRequired {
@@ -93,6 +138,24 @@ namespace NPark.Domain.Resource {
         public static string NotFound {
             get {
                 return ResourceManager.GetString("NotFound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to OrderPriority must be unique..
+        /// </summary>
+        public static string OrderPiority_Unique {
+            get {
+                return ResourceManager.GetString("OrderPiority_Unique", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to OrderPriority is required when IsRepeated is true..
+        /// </summary>
+        public static string OrderPiorityIsRequired {
+            get {
+                return ResourceManager.GetString("OrderPiorityIsRequired", resourceCulture);
             }
         }
         
@@ -120,6 +183,24 @@ namespace NPark.Domain.Resource {
         public static string PasswordRequired {
             get {
                 return ResourceManager.GetString("PasswordRequired", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to TotalDays is required when DurationType is Days..
+        /// </summary>
+        public static string TotalDay_Require {
+            get {
+                return ResourceManager.GetString("TotalDay_Require", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to TotalHours is required when DurationType is Hours..
+        /// </summary>
+        public static string TotalHour_Require {
+            get {
+                return ResourceManager.GetString("TotalHour_Require", resourceCulture);
             }
         }
         

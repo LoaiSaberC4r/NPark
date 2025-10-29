@@ -123,11 +123,32 @@
   <data name="ConfirmPasswordRequired" xml:space="preserve">
     <value>يرجى تأكيد كلمة المرور.</value>
   </data>
+  <data name="Conflict_IsRepeated" xml:space="preserve">
+    <value>لا يمكن أن يكون "مكرر" صحيحًا عندما يكون "نوع المدة" أيام.</value>
+  </data>
+  <data name="InvalidPrice" xml:space="preserve">
+    <value>لا يمكن أن يكون السعر أقل من الصفر.</value>
+  </data>
+  <data name="Invalid_EndTime" xml:space="preserve">
+    <value>لا يمكن أن يكون وقت الانتهاء قبل وقت البدء.</value>
+  </data>
+  <data name="Invalid_TotalDays" xml:space="preserve">
+    <value>"عدد الأيام" يجب أن يكون أكبر من صفر عندما يكون "نوع المدة" هو أيام.</value>
+  </data>
+  <data name="Invalid_TotalHour" xml:space="preserve">
+    <value>"عدد الساعات" يجب أن يكون أكبر من صفر عندما يكون "نوع المدة" هو ساعات.</value>
+  </data>
   <data name="IsRequired" xml:space="preserve">
     <value>الحقل {0} مطلوب.</value>
   </data>
   <data name="NotFound" xml:space="preserve">
     <value>المورد غير موجود</value>
+  </data>
+  <data name="OrderPiorityIsRequired" xml:space="preserve">
+    <value>تحديد أولوية الطلب أمر مطلوب عندما يكون "مكرر" صحيحًا.</value>
+  </data>
+  <data name="OrderPiority_Unique" xml:space="preserve">
+    <value>يجب أن تكون أولوية الطلب فريدة.</value>
   </data>
   <data name="OutOfRange" xml:space="preserve">
     <value>القيمة خارج النطاق للحقل: {0}.</value>
@@ -137,6 +158,12 @@
   </data>
   <data name="PasswordRequired" xml:space="preserve">
     <value>كلمة المرور مطلوبة.</value>
+  </data>
+  <data name="TotalDay_Require" xml:space="preserve">
+    <value>"عدد الأيام" مطلوب عندما يكون "نوع المدة" هو أيام.</value>
+  </data>
+  <data name="TotalHour_Require" xml:space="preserve">
+    <value>"عدد الساعات" مطلوب عندما يكون "نوع المدة" هو ساعات.</value>
   </data>
   <data name="WrongLogin" xml:space="preserve">
     <value>اسم المستخدم أو كلمة المرور غير صحيحة.</value>

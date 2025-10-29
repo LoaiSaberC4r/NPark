@@ -123,11 +123,32 @@
   <data name="ConfirmPasswordRequired" xml:space="preserve">
     <value>Please confirm your password.</value>
   </data>
+  <data name="Conflict_IsRepeated" xml:space="preserve">
+    <value>IsRepeated cannot be true when DurationType is Days.</value>
+  </data>
+  <data name="InvalidPrice" xml:space="preserve">
+    <value>Price cannot be less than zero.</value>
+  </data>
+  <data name="Invalid_EndTime" xml:space="preserve">
+    <value>EndTime cannot be earlier than StartTime.</value>
+  </data>
+  <data name="Invalid_TotalDays" xml:space="preserve">
+    <value>TotalDays must be greater than zero when DurationType is Days.</value>
+  </data>
+  <data name="Invalid_TotalHour" xml:space="preserve">
+    <value>TotalHours must be greater than zero when DurationType is Hours.</value>
+  </data>
   <data name="IsRequired" xml:space="preserve">
     <value>he field {0} is required.</value>
   </data>
   <data name="NotFound" xml:space="preserve">
     <value>Resource not found.</value>
+  </data>
+  <data name="OrderPiorityIsRequired" xml:space="preserve">
+    <value>OrderPriority is required when IsRepeated is true.</value>
+  </data>
+  <data name="OrderPiority_Unique" xml:space="preserve">
+    <value>OrderPriority must be unique.</value>
   </data>
   <data name="OutOfRange" xml:space="preserve">
     <value>Value out of range for: {0}.</value>
@@ -137,6 +158,12 @@
   </data>
   <data name="PasswordRequired" xml:space="preserve">
     <value>Password is required.</value>
+  </data>
+  <data name="TotalDay_Require" xml:space="preserve">
+    <value>TotalDays is required when DurationType is Days.</value>
+  </data>
+  <data name="TotalHour_Require" xml:space="preserve">
+    <value>TotalHours is required when DurationType is Hours.</value>
   </data>
   <data name="WrongLogin" xml:space="preserve">
     <value>Invalid username or password.</value>
