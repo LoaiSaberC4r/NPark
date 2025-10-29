@@ -21,6 +21,7 @@ namespace NPark.Api.Controllers
             return result.ToIActionResult();
         }
 
+        //[Permission("Read")]
         [HttpGet(nameof(GetAll))]
         public async Task<IActionResult> GetAll([FromQuery] GetAllPricingSchemaQuery query, CancellationToken cancellationToken)
         {

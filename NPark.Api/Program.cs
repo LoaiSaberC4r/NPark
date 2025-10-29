@@ -1,6 +1,7 @@
 ﻿using BuildingBlock.Api.Bootstrap;
 using BuildingBlock.Api.Logging;
 using BuildingBlock.Api.OpenAi;
+using Microsoft.OpenApi.Models;
 using Newtonsoft.Json.Converters;
 using NPark.Application.Bootstrap;
 using NPark.Infrastructure.Bootstrap;
@@ -25,6 +26,31 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
+    // Add Bearer Authentication to Swagger
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        In = ParameterLocation.Header,
+        Description = "Please enter the Bearer token",
+        Name = "Authorization",
+        Type = SecuritySchemeType.ApiKey,
+        BearerFormat = "JWT",
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
+
     c.OperationFilter<ResultPatternOperationFilter>();
 });
 // ---------Serilog-------- /
