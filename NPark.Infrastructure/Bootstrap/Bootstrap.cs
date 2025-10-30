@@ -14,6 +14,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using NPark.Application.Abstraction;
+using NPark.Application.Options;
 using NPark.Infrastructure.Authorization;
 using NPark.Infrastructure.Options;
 using NPark.Infrastructure.Services.Seeders;
@@ -27,6 +28,8 @@ namespace NPark.Infrastructure.Bootstrap
         public static IServiceCollection InfrastructureInjection(this IServiceCollection services, IConfiguration configuration)
         {
             services.Configure<EncryptionOptions>(configuration.GetSection("EncryptionOptions"));
+            services.Configure<SalaryConfig>(configuration.GetSection("SalaryConfig"));
+
             services.AddDbConfig(configuration);
             services.AddScoped<IDbContextProvider, DbContextProvider<NParkDBContext>>();
             services.AddSecurity();
@@ -36,6 +39,7 @@ namespace NPark.Infrastructure.Bootstrap
             services.AddHttpClient();
             services.AddSingleton<ICacheService, MemoryCacheService>();
             services.AddMediaService();
+            services.AddQrCodeService();
             //services.AddSeeding();
             services.AddAuth(configuration);
 

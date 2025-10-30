@@ -1,5 +1,6 @@
 ﻿using BuildingBlock.Application.Abstraction.Encryption;
 using BuildingBlock.Application.Abstraction.Media;
+using BuildingBlock.Application.Abstraction.QrCode;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Application.Time;
 using BuildingBlock.Infrastracture.Interceptors;
@@ -52,6 +53,12 @@ namespace BuildingBlock.Infrastracture.Bootstrap
         public static IServiceCollection AddMediaService(this IServiceCollection services)
         {
             services.AddSingleton<IMediaService, MediaService>();
+            return services;
+        }
+
+        public static IServiceCollection AddQrCodeService(this IServiceCollection services)
+        {
+            services.AddSingleton<IQRCodeService, QRCodeService>();
             return services;
         }
     }
