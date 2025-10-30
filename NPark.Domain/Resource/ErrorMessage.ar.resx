@@ -120,6 +120,9 @@
   <data name="AlreadyExists" xml:space="preserve">
     <value>المورد موجود بالفعل.</value>
   </data>
+  <data name="CardNumber_Required" xml:space="preserve">
+    <value>رقم البطاقة مطلوب.</value>
+  </data>
   <data name="ConfirmPasswordRequired" xml:space="preserve">
     <value>يرجى تأكيد كلمة المرور.</value>
   </data>
@@ -132,6 +135,15 @@
   <data name="Invalid_EndTime" xml:space="preserve">
     <value>لا يمكن أن يكون وقت الانتهاء قبل وقت البدء.</value>
   </data>
+  <data name="Invalid_Image" xml:space="preserve">
+    <value>صورة يجب أن تكون صورة صالحة</value>
+  </data>
+  <data name="Invalid_NationalId" xml:space="preserve">
+    <value>رقم البطاقة الشخصية يجب أن يكون رقم مصري مكون من 14 رقم."</value>
+  </data>
+  <data name="Invalid_PhoneNumber" xml:space="preserve">
+    <value>رقم الهاتف يجب أن يكون رقم هاتف مصري صالح.</value>
+  </data>
   <data name="Invalid_TotalDays" xml:space="preserve">
     <value>"عدد الأيام" يجب أن يكون أكبر من صفر عندما يكون "نوع المدة" هو أيام.</value>
   </data>
@@ -140,6 +152,9 @@
   </data>
   <data name="IsRequired" xml:space="preserve">
     <value>الحقل {0} مطلوب.</value>
+  </data>
+  <data name="Name_Required" xml:space="preserve">
+    <value>الاسم مطلوب</value>
   </data>
   <data name="NotFound" xml:space="preserve">
     <value>المورد غير موجود</value>
@@ -159,11 +174,26 @@
   <data name="PasswordRequired" xml:space="preserve">
     <value>كلمة المرور مطلوبة.</value>
   </data>
+  <data name="Phone_Required" xml:space="preserve">
+    <value>الهاتف مطلوب</value>
+  </data>
+  <data name="PricingSchemeId" xml:space="preserve">
+    <value>معرف خطة التسعير مطلوب.</value>
+  </data>
   <data name="TotalDay_Require" xml:space="preserve">
     <value>"عدد الأيام" مطلوب عندما يكون "نوع المدة" هو أيام.</value>
   </data>
   <data name="TotalHour_Require" xml:space="preserve">
-    <value>"عدد الساعات" مطلوب عندما يكون "نوع المدة" هو ساعات.</value>
+    <value>عدد الساعات" مطلوب عندما يكون "نوع المدة" هو ساعات.</value>
+  </data>
+  <data name="Unique_NationalId" xml:space="preserve">
+    <value>رقم البطاقة الشخصية يجب أن يكون فريد</value>
+  </data>
+  <data name="Unique_Phone" xml:space="preserve">
+    <value>رقم الهاتف يجب أن يكون فريد</value>
+  </data>
+  <data name="VehicleNumber_Required" xml:space="preserve">
+    <value>رقم المركبة مطلوب.</value>
   </data>
   <data name="WrongLogin" xml:space="preserve">
     <value>اسم المستخدم أو كلمة المرور غير صحيحة.</value>

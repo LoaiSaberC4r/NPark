@@ -5,6 +5,8 @@ namespace NPark.Domain.Entities
 {
     public class PricingScheme : Entity<Guid>
     {
+        private List<ParkingMemberships> _parkingMemberships = new();
+
         public string Name { get; private set; } = string.Empty;
         public DurationType DurationType { get; private set; }
         public TimeSpan? StartTime { get; private set; }
@@ -14,6 +16,7 @@ namespace NPark.Domain.Entities
         public int? OrderPriority { get; private set; }
         public int? TotalDays { get; private set; }
         public int? TotalHours { get; private set; }
+        public IReadOnlyCollection<ParkingMemberships> ParkingMemberships => _parkingMemberships;
 
         private PricingScheme()
         { }

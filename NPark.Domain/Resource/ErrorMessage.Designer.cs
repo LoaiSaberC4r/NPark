@@ -70,6 +70,15 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Card number is required..
+        /// </summary>
+        public static string CardNumber_Required {
+            get {
+                return ResourceManager.GetString("CardNumber_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Please confirm your password..
         /// </summary>
         public static string ConfirmPasswordRequired {
@@ -93,6 +102,33 @@ namespace NPark.Domain.Resource {
         public static string Invalid_EndTime {
             get {
                 return ResourceManager.GetString("Invalid_EndTime", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to image must be a valid image file (jpg, png, jpeg)..
+        /// </summary>
+        public static string Invalid_Image {
+            get {
+                return ResourceManager.GetString("Invalid_Image", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to National ID must be a valid 14-digit Egyptian ID..
+        /// </summary>
+        public static string Invalid_NationalId {
+            get {
+                return ResourceManager.GetString("Invalid_NationalId", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Phone number must be a valid Egyptian phone number..
+        /// </summary>
+        public static string Invalid_PhoneNumber {
+            get {
+                return ResourceManager.GetString("Invalid_PhoneNumber", resourceCulture);
             }
         }
         
@@ -129,6 +165,15 @@ namespace NPark.Domain.Resource {
         public static string IsRequired {
             get {
                 return ResourceManager.GetString("IsRequired", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Name is required..
+        /// </summary>
+        public static string Name_Required {
+            get {
+                return ResourceManager.GetString("Name_Required", resourceCulture);
             }
         }
         
@@ -187,6 +232,24 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Phone is required..
+        /// </summary>
+        public static string Phone_Required {
+            get {
+                return ResourceManager.GetString("Phone_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Pricing Scheme ID is required..
+        /// </summary>
+        public static string PricingSchemeId {
+            get {
+                return ResourceManager.GetString("PricingSchemeId", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to TotalDays is required when DurationType is Days..
         /// </summary>
         public static string TotalDay_Require {
@@ -201,6 +264,33 @@ namespace NPark.Domain.Resource {
         public static string TotalHour_Require {
             get {
                 return ResourceManager.GetString("TotalHour_Require", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to National ID must be unique.
+        /// </summary>
+        public static string Unique_NationalId {
+            get {
+                return ResourceManager.GetString("Unique_NationalId", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Phone number must be unique..
+        /// </summary>
+        public static string Unique_Phone {
+            get {
+                return ResourceManager.GetString("Unique_Phone", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Vehicle number is required..
+        /// </summary>
+        public static string VehicleNumber_Required {
+            get {
+                return ResourceManager.GetString("VehicleNumber_Required", resourceCulture);
             }
         }
         

@@ -2,7 +2,6 @@
 using BuildingBlock.Api.Logging;
 using BuildingBlock.Api.OpenAi;
 using Microsoft.OpenApi.Models;
-using Newtonsoft.Json.Converters;
 using NPark.Application.Bootstrap;
 using NPark.Infrastructure.Bootstrap;
 
@@ -18,11 +17,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.InfrastructureInjection(builder.Configuration);
 builder.Services.AddApplicationBootstrap();
-builder.Services.AddControllers()
-    .AddNewtonsoftJson(options =>
-    {
-        options.SerializerSettings.Converters.Add(new StringEnumConverter());
-    });
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
