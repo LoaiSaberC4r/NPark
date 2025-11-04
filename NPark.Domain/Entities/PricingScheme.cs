@@ -34,6 +34,20 @@ namespace NPark.Domain.Entities
             TotalHours = totalHours
         };
 
+        public void Update(string name, DurationType durationType, TimeSpan? startTime, TimeSpan? endTime, bool isRepeated, decimal salary, int? orderPriority, int? totalDays, int? totalHours
+            )
+        {
+            Name = name;
+            DurationType = durationType;
+            StartTime = startTime;
+            EndTime = endTime;
+            IsRepeated = isRepeated;
+            Salary = salary;
+            OrderPriority = orderPriority;
+            TotalDays = totalDays;
+            TotalHours = totalHours;
+        }
+
         public void UpdateName(string name) => Name = name;
 
         public void UpdateDurationType(DurationType durationType) => DurationType = durationType;

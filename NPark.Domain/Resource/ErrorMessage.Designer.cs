@@ -97,11 +97,38 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Allowed parking slots must be greater than 0.
+        /// </summary>
+        public static string Invalid_AllowedParkingSlots {
+            get {
+                return ResourceManager.GetString("Invalid_AllowedParkingSlots", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to EndTime cannot be earlier than StartTime..
         /// </summary>
         public static string Invalid_EndTime {
             get {
                 return ResourceManager.GetString("Invalid_EndTime", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Entry gates count must be at least 1.
+        /// </summary>
+        public static string Invalid_EntryGatesCount {
+            get {
+                return ResourceManager.GetString("Invalid_EntryGatesCount", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Exit gates count must be at least 1.
+        /// </summary>
+        public static string Invalid_ExitGatesCount {
+            get {
+                return ResourceManager.GetString("Invalid_ExitGatesCount", resourceCulture);
             }
         }
         
@@ -133,6 +160,24 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Invalid price type.
+        /// </summary>
+        public static string Invalid_PriceType {
+            get {
+                return ResourceManager.GetString("Invalid_PriceType", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Invalid print type..
+        /// </summary>
+        public static string Invalid_PrintType {
+            get {
+                return ResourceManager.GetString("Invalid_PrintType", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to TotalDays must be greater than zero when DurationType is Days..
         /// </summary>
         public static string Invalid_TotalDays {
@@ -147,6 +192,15 @@ namespace NPark.Domain.Resource {
         public static string Invalid_TotalHour {
             get {
                 return ResourceManager.GetString("Invalid_TotalHour", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Invalid vehicle/passenger data type.
+        /// </summary>
+        public static string Invalid_VehiclePassengerData {
+            get {
+                return ResourceManager.GetString("Invalid_VehiclePassengerData", resourceCulture);
             }
         }
         
@@ -237,6 +291,15 @@ namespace NPark.Domain.Resource {
         public static string Phone_Required {
             get {
                 return ResourceManager.GetString("Phone_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to PricingSchemaId is required when PriceType is set to &apos;Enter.
+        /// </summary>
+        public static string PricingSchemaId_RequiredWhenEnter {
+            get {
+                return ResourceManager.GetString("PricingSchemaId_RequiredWhenEnter", resourceCulture);
             }
         }
         

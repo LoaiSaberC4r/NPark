@@ -135,6 +135,12 @@
   <data name="Invalid_EndTime" xml:space="preserve">
     <value>EndTime cannot be earlier than StartTime.</value>
   </data>
+  <data name="Invalid_EntryGatesCount" xml:space="preserve">
+    <value>Entry gates count must be at least 1</value>
+  </data>
+  <data name="Invalid_ExitGatesCount" xml:space="preserve">
+    <value>Exit gates count must be at least 1</value>
+  </data>
   <data name="Invalid_Image" xml:space="preserve">
     <value>image must be a valid image file (jpg, png, jpeg).</value>
   </data>
@@ -200,5 +206,20 @@
   </data>
   <data name="WrongPassword" xml:space="preserve">
     <value>Wrong Password</value>
+  </data>
+  <data name="Invalid_PriceType" xml:space="preserve">
+    <value>Invalid price type</value>
+  </data>
+  <data name="Invalid_VehiclePassengerData" xml:space="preserve">
+    <value>Invalid vehicle/passenger data type</value>
+  </data>
+  <data name="Invalid_PrintType" xml:space="preserve">
+    <value>Invalid print type.</value>
+  </data>
+  <data name="Invalid_AllowedParkingSlots" xml:space="preserve">
+    <value>Allowed parking slots must be greater than 0</value>
+  </data>
+  <data name="PricingSchemaId_RequiredWhenEnter" xml:space="preserve">
+    <value>PricingSchemaId is required when PriceType is set to 'Enter</value>
   </data>
 </root>

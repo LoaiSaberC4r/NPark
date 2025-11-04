@@ -3,7 +3,10 @@ using BuildingBlock.Api.ControllerTemplate;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using NPark.Application.Feature.PricingSchemaManagement.Command.Add;
+using NPark.Application.Feature.PricingSchemaManagement.Command.Delete;
+using NPark.Application.Feature.PricingSchemaManagement.Command.Update;
 using NPark.Application.Feature.PricingSchemaManagement.Query.GetAll;
+using NPark.Application.Feature.PricingSchemaManagement.Query.GetPricingSchema;
 
 namespace NPark.Api.Controllers
 {
@@ -21,11 +24,32 @@ namespace NPark.Api.Controllers
             return result.ToIActionResult();
         }
 
+        [HttpPut(nameof(Update))]
+        public async Task<IActionResult> Update([FromBody] UpdatePricingSchemaCommand command, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(command, cancellationToken);
+            return result.ToIActionResult();
+        }
+
         //[Permission("Read")]
         [HttpGet(nameof(GetAll))]
         public async Task<IActionResult> GetAll([FromQuery] GetAllPricingSchemaQuery query, CancellationToken cancellationToken)
         {
             var result = await sender.Send(query, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [HttpGet(nameof(GetWithoudPagination))]
+        public async Task<IActionResult> GetWithoudPagination([FromQuery] GetPricingSchemaQuery query, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(query, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [HttpDelete(nameof(Delete))]
+        public async Task<IActionResult> Delete([FromQuery] DeletePricingSchemaCommand command, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(command, cancellationToken);
             return result.ToIActionResult();
         }
     }

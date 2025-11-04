@@ -1,11 +1,12 @@
-﻿using NPark.Domain.Enums;
+﻿using BuildingBlock.Application.Abstraction;
+using NPark.Domain.Enums;
 
-namespace NPark.Application.Feature.PricingSchemaManagement.Query.GetAll
+namespace NPark.Application.Feature.PricingSchemaManagement.Command.Update
 {
-    public sealed record GetAllPricingSchemaQueryResponse
+    public sealed record UpdatePricingSchemaCommand : ICommand
     {
         public Guid Id { get; set; }
-        public string Name { get; set; } = string.Empty;
+        public string Name { get; set; }
         public DurationType DurationType { get; set; }
         public TimeSpan? StartTime { get; set; }
         public TimeSpan? EndTime { get; set; }

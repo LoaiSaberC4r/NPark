@@ -17,6 +17,7 @@ using NPark.Application.Abstraction;
 using NPark.Application.Options;
 using NPark.Infrastructure.Authorization;
 using NPark.Infrastructure.Options;
+using NPark.Infrastructure.Services;
 using NPark.Infrastructure.Services.Seeders;
 using NPark.Infrastructure.Services.Token;
 using System.Text;
@@ -42,6 +43,12 @@ namespace NPark.Infrastructure.Bootstrap
             services.AddQrCodeService();
             //services.AddSeeding();
             services.AddAuth(configuration);
+
+            services.AddHttpClient("device-http", c =>
+            {
+            }).SetHandlerLifetime(TimeSpan.FromMinutes(5));
+
+            services.AddScoped<ISendProtocol, SendProtocol>();
 
             return services;
         }

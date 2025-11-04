@@ -40,18 +40,17 @@ namespace NPark.Application.Feature.PricingSchemaManagement.Command.Add
             }
             if (request.DurationType == Domain.Enums.DurationType.Hours)
             {
-                var endTime = request.StartTime + TimeSpan.FromHours(request.TotalHours ?? 0);
                 var entityHour = PricingScheme.Create(
                 request.Name,
                 request.DurationType,
                 request.StartTime,
-                endTime,
+                request.EndTime,
                 request.IsRepeated,
                 request.Price,
                 null, null, request.TotalHours);
-                _logger.LogInformation("Added  entity by hours at {DateTime}", DateTime.UtcNow);
                 await _repository.AddAsync(entityHour, cancellationToken);
                 await _repository.SaveChangesAsync(cancellationToken);
+                _logger.LogInformation("Added  entity by hours at {DateTime}", DateTime.UtcNow);
                 return Result.Ok();
             }
 
@@ -63,10 +62,10 @@ namespace NPark.Application.Feature.PricingSchemaManagement.Command.Add
                 request.IsRepeated,
                 request.Price,
                 null, request.TotalDays, null);
-            _logger.LogInformation("Added entity by days at {DateTime}", DateTime.UtcNow);
 
             await _repository.AddAsync(entityDays, cancellationToken);
             await _repository.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Added entity by days at {DateTime}", DateTime.UtcNow);
             return Result.Ok();
         }
     }

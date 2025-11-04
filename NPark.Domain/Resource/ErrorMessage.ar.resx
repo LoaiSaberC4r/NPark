@@ -135,6 +135,12 @@
   <data name="Invalid_EndTime" xml:space="preserve">
     <value>لا يمكن أن يكون وقت الانتهاء قبل وقت البدء.</value>
   </data>
+  <data name="Invalid_EntryGatesCount" xml:space="preserve">
+    <value>عدد بوابات الدخول يجب ألا يقل عن 1</value>
+  </data>
+  <data name="Invalid_ExitGatesCount" xml:space="preserve">
+    <value>عدد بوابات الخروج يجب ألا يقل عن1.</value>
+  </data>
   <data name="Invalid_Image" xml:space="preserve">
     <value>صورة يجب أن تكون صورة صالحة</value>
   </data>
@@ -200,5 +206,20 @@
   </data>
   <data name="WrongPassword" xml:space="preserve">
     <value>كلمة المرور غير صحيحة </value>
+  </data>
+  <data name="Invalid_PriceType" xml:space="preserve">
+    <value>نوع التسعير غير صالح</value>
+  </data>
+  <data name="Invalid_VehiclePassengerData" xml:space="preserve">
+    <value>نوع بيانات السيارة أو الراكب غير صالح.</value>
+  </data>
+  <data name="Invalid_PrintType" xml:space="preserve">
+    <value>نوع الطباعة غير صالح</value>
+  </data>
+  <data name="Invalid_AllowedParkingSlots" xml:space="preserve">
+    <value>عدد الباكيات المسموح يجب أن يكون أكبر من صفر</value>
+  </data>
+  <data name="PricingSchemaId_RequiredWhenEnter" xml:space="preserve">
+    <value>يجب إدخال معرف جدول التسعير عند اختيار نوع التسعير 'عند الدخول</value>
   </data>
 </root>
