@@ -3,6 +3,7 @@
     public enum DurationType
     {
         Days = 1,
-        Hours = 2
+        Hours = 2,
+        Years = 3
     }
 }

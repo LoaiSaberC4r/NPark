@@ -7,6 +7,7 @@ using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetAll;
 
 namespace NPark.Api.Controllers
 {
+    [Route("api/[controller]")]
     public class ParkingMembershipsController : ControllerTemplate
     {
         public ParkingMembershipsController(ISender sender) : base(sender)

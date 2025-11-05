@@ -4,27 +4,28 @@ namespace NPark.Domain.Entities
 {
     public class ParkingMemberships : Entity<Guid>
     {
+        private List<ParkingMembershipsAttachment> _attachments = new List<ParkingMembershipsAttachment>();
         public string Name { get; private set; } = string.Empty;
 
         public string Phone { get; private set; } = string.Empty;
         public string NationalId { get; private set; } = string.Empty;
-        public string? VehicleImage { get; private set; } = string.Empty;
+
         public string VehicleNumber { get; private set; } = string.Empty;
-        public int CardNumber { get; private set; }
+        public string CardNumber { get; private set; }
         public Guid PricingSchemeId { get; private set; }
         public PricingScheme PricingScheme { get; private set; } = null!;
         public DateTime CreatedAt { get; private set; }
         public DateTime EndDate { get; private set; }
+        public IReadOnlyList<ParkingMembershipsAttachment> Attachments => _attachments;
 
         private ParkingMemberships()
         { }
 
-        public static ParkingMemberships Create(string name, string phone, string nationalId, string? vehicleImage, string vehicleNumber, int cardNumber, Guid pricingSchemeId, DateTime createdAt, DateTime endDate) => new ParkingMemberships()
+        public static ParkingMemberships Create(string name, string phone, string nationalId, string vehicleNumber, string cardNumber, Guid pricingSchemeId, DateTime createdAt, DateTime endDate) => new ParkingMemberships()
         {
             Name = name,
             Phone = phone,
             NationalId = nationalId,
-            VehicleImage = vehicleImage,
             VehicleNumber = vehicleNumber,
             CardNumber = cardNumber,
             PricingSchemeId = pricingSchemeId,
@@ -34,11 +35,22 @@ namespace NPark.Domain.Entities
 
         public void UpdateEndDate(DateTime endDate) => EndDate = endDate;
 
-        public void UpdateVehicleImage(string vehicleImage) => VehicleImage = vehicleImage;
+        public void AddAttachment(string filePath) => _attachments.Add(ParkingMembershipsAttachment.Create(this.Id, filePath));
+
+        public void RemoveAttachment(Guid attachmentId)
+        {
+            var attachment = _attachments.FirstOrDefault(a => a.Id == attachmentId);
+            if (attachment != null)
+            {
+                _attachments.Remove(attachment);
+            }
+        }
+
+        public void RemoveAllAttachments() => _attachments.Clear();
 
         public void UpdateVehicleNumber(string vehicleNumber) => VehicleNumber = vehicleNumber;
 
-        public void UpdateCardNumber(int cardNumber) => CardNumber = cardNumber;
+        public void UpdateCardNumber(string cardNumber) => CardNumber = cardNumber;
 
         public void UpdatePricingSchemeId(Guid pricingSchemeId) => PricingSchemeId = pricingSchemeId;
 

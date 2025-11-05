@@ -8,6 +8,7 @@ namespace NPark.Domain.Entities
         public int EntryGatesCount { get; private set; } = 1;   // عدد بوابات الدخول
         public int ExitGatesCount { get; private set; } = 1;    // عدد بوابات الخروج
         public int? AllowedParkingSlots { get; private set; } = 100; // عدد الباكيات المسموح
+        public TimeSpan? GracePeriod { get; private set; } = null!;
 
         // ===== Behavior Enums =====
         public PriceType PriceType { get; private set; } = PriceType.Exit;
@@ -24,21 +25,25 @@ namespace NPark.Domain.Entities
         private ParkingSystemConfiguration()
         { }
 
-        public static ParkingSystemConfiguration Create(int entryGatesCount, int exitGatesCount, int? allowedParkingSlots, PriceType priceType, VehiclePassengerData vehiclePassengerData, PrintType printType, bool dateTimeFlag, bool ticketIdFlag, bool feesFlag, Guid? pricingSchemaId) => new ParkingSystemConfiguration()
-        {
-            EntryGatesCount = entryGatesCount,
-            ExitGatesCount = exitGatesCount,
-            AllowedParkingSlots = allowedParkingSlots,
-            PriceType = priceType,
-            VehiclePassengerData = vehiclePassengerData,
-            PrintType = printType,
-            DateTimeFlag = dateTimeFlag,
-            TicketIdFlag = ticketIdFlag,
-            FeesFlag = feesFlag,
-            PricingSchemaId = pricingSchemaId
-        };
+        public static ParkingSystemConfiguration Create(int entryGatesCount, int exitGatesCount, int? allowedParkingSlots, PriceType priceType, VehiclePassengerData vehiclePassengerData, PrintType printType, bool dateTimeFlag,
+            bool ticketIdFlag, bool feesFlag, Guid? pricingSchemaId, TimeSpan? gracePeriod) => new ParkingSystemConfiguration()
+            {
+                EntryGatesCount = entryGatesCount,
+                ExitGatesCount = exitGatesCount,
+                AllowedParkingSlots = allowedParkingSlots,
+                PriceType = priceType,
+                VehiclePassengerData = vehiclePassengerData,
+                PrintType = printType,
+                DateTimeFlag = dateTimeFlag,
+                TicketIdFlag = ticketIdFlag,
+                FeesFlag = feesFlag,
+                GracePeriod = gracePeriod,
+                PricingSchemaId = pricingSchemaId
+            };
 
-        public void Update(ParkingSystemConfiguration configuration, int entryGatesCount, int exitGatesCount, int? allowedParkingSlots, PriceType priceType, VehiclePassengerData vehiclePassengerData, PrintType printType, bool dateTimeFlag, bool ticketIdFlag, bool feesFlag, Guid? pricingSchemaId)
+        public void Update(ParkingSystemConfiguration configuration, int entryGatesCount, int exitGatesCount,
+            int? allowedParkingSlots, PriceType priceType, VehiclePassengerData vehiclePassengerData,
+            PrintType printType, bool dateTimeFlag, bool ticketIdFlag, bool feesFlag, Guid? pricingSchemaId, TimeSpan? gracePeriod)
         {
             configuration.EntryGatesCount = entryGatesCount;
             configuration.ExitGatesCount = exitGatesCount;
@@ -49,6 +54,7 @@ namespace NPark.Domain.Entities
             configuration.DateTimeFlag = dateTimeFlag;
             configuration.TicketIdFlag = ticketIdFlag;
             configuration.FeesFlag = feesFlag;
+            configuration.GracePeriod = gracePeriod;
             configuration.PricingSchemaId = pricingSchemaId;
         }
     }

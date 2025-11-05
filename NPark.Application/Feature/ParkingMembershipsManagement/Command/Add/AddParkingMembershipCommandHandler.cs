@@ -29,25 +29,38 @@ namespace NPark.Application.Feature.ParkingMembershipsManagement.Command.Add
             {
                 endDate = DateTime.UtcNow.AddDays(pricingEntity.TotalDays ?? 0);
             }
-            else
+            else if (pricingEntity.DurationType == DurationType.Hours)
             {
                 endDate = DateTime.UtcNow.AddHours(pricingEntity.TotalHours ?? 0);
             }
-            var filePath = string.Empty;
-            if (request.VehicleImage is not null)
+            else if (pricingEntity.DurationType == DurationType.Years)
             {
-                filePath = await _mediaService.SaveAsync(request.VehicleImage, FileNames.ParkingMemberships);
+                endDate = DateTime.UtcNow.AddYears(1);
             }
+            var filePath = string.Empty;
+            //if (request.VehicleImage is not null)
+            //{
+            //    filePath = await _mediaService.SaveAsync(request.VehicleImage, FileNames.ParkingMemberships);
+            //}
+
             var parkingMemberships = ParkingMemberships.Create(
-                request.Name,
-                request.Phone,
-                request.NationalId,
-                filePath,
-                request.VehicleNumber,
-                request.CardNumber,
-                request.PricingSchemeId,
-                DateTime.UtcNow,
-                endDate);
+                        request.Name,
+                        request.Phone,
+                        request.NationalId,
+                        request.VehicleNumber,
+                        request.CardNumber,
+                        request.PricingSchemeId,
+                        DateTime.UtcNow,
+                        endDate);
+            if (request.VehicleImage is { Count: > 0 })
+            {
+                foreach (var file in request.VehicleImage)
+                {
+                    filePath = await _mediaService.SaveAsync(file, FileNames.ParkingMemberships);
+                    parkingMemberships.AddAttachment(filePath);
+                }
+            }
+
             await _parkingrepository.AddAsync(parkingMemberships, cancellationToken);
             await _parkingrepository.SaveChangesAsync(cancellationToken);
             return Result.Ok();

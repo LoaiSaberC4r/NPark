@@ -21,18 +21,6 @@ namespace NPark.Application.Feature.PricingSchemaManagement.Command.Add
             RuleFor(x => x.Price).GreaterThanOrEqualTo(0).WithMessage(ErrorMessage.InvalidPrice);
             RuleFor(x => x.IsRepeated).NotNull().WithMessage(ErrorMessage.IsRequired);
 
-            // OrderPriority is required only if IsRepeated is true
-            RuleFor(x => x.OrderPriority)
-                .NotEmpty().When(x => x.IsRepeated)
-                .WithMessage(ErrorMessage.OrderPiorityIsRequired);
-
-            // Ensure OrderPriority is unique when IsRepeated is true
-            RuleFor(x => x.OrderPriority)
-                .MustAsync(async (orderPriority, cancellationToken) =>
-                !await _repository.IsExistAsync(x => x.OrderPriority == orderPriority, cancellationToken))
-                .When(x => x.IsRepeated)
-                .WithMessage(ErrorMessage.OrderPiority_Unique);
-
             // Ensure EndTime is not before StartTime
             RuleFor(x => x.EndTime)
                 .GreaterThan(x => x.StartTime)

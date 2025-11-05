@@ -13,7 +13,7 @@ namespace NPark.Infrastructure.Configuration
             builder.Property(x => x.Name).IsRequired().HasMaxLength(100);
             builder.Property(x => x.Phone).IsRequired().HasMaxLength(15);
             builder.Property(x => x.NationalId).IsRequired();
-            builder.Property(x => x.VehicleImage).IsRequired(false);
+
             builder.Property(x => x.VehicleNumber).IsRequired().HasMaxLength(20);
             builder.Property(x => x.CardNumber).IsRequired();
             builder.Property(x => x.CreatedAt).IsRequired();
@@ -22,6 +22,10 @@ namespace NPark.Infrastructure.Configuration
                    .WithMany(x => x.ParkingMemberships)
                    .HasForeignKey(x => x.PricingSchemeId)
                    .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasMany(x => x.Attachments)
+                   .WithOne(x => x.ParkingMemberships)
+                   .HasForeignKey(x => x.ParkingMembershipsId);
         }
     }
 }

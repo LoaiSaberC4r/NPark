@@ -3,10 +3,13 @@ using BuildingBlock.Api.ControllerTemplate;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using NPark.Application.Feature.PricingSchemaManagement.Command.Add;
+using NPark.Application.Feature.PricingSchemaManagement.Command.AddOrderSchema;
 using NPark.Application.Feature.PricingSchemaManagement.Command.Delete;
 using NPark.Application.Feature.PricingSchemaManagement.Command.Update;
 using NPark.Application.Feature.PricingSchemaManagement.Query.GetAll;
+using NPark.Application.Feature.PricingSchemaManagement.Query.GetOrderSchema;
 using NPark.Application.Feature.PricingSchemaManagement.Query.GetPricingSchema;
+using NPark.Application.Feature.PricingSchemaManagement.Query.GetRepeatedPricingSchema;
 
 namespace NPark.Api.Controllers
 {
@@ -50,6 +53,27 @@ namespace NPark.Api.Controllers
         public async Task<IActionResult> Delete([FromQuery] DeletePricingSchemaCommand command, CancellationToken cancellationToken)
         {
             var result = await sender.Send(command, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [HttpGet(nameof(GetRepeated))]
+        public async Task<IActionResult> GetRepeated([FromQuery] GetRepeatedPricingSchemaQuery query, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(query, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [HttpPost(nameof(AddOrder))]
+        public async Task<IActionResult> AddOrder([FromBody] AddOrderSchemaCommand command, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(command, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [HttpGet(nameof(GetOrder))]
+        public async Task<IActionResult> GetOrder([FromQuery] GetOrderSchemaQuery query, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(query, cancellationToken);
             return result.ToIActionResult();
         }
     }

@@ -16,7 +16,6 @@ namespace NPark.Infrastructure.Configuration
             builder.Property(x => x.EndTime).IsRequired(false);
             builder.Property(x => x.Salary).IsRequired();
             builder.Property(x => x.IsRepeated).IsRequired();
-            builder.Property(x => x.OrderPriority).IsRequired(false);
             builder.Property(x => x.TotalDays).IsRequired(false);
             builder.Property(x => x.TotalHours).IsRequired(false);
         }

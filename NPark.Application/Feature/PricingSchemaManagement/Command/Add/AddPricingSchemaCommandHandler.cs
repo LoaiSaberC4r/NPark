@@ -28,7 +28,6 @@ namespace NPark.Application.Feature.PricingSchemaManagement.Command.Add
                     null,
                     request.IsRepeated,
                     request.Price,
-                    request.OrderPriority,
                      null, request.TotalHours);
 
                 _logger.LogInformation("Added repeated entity at {DateTime}", DateTime.UtcNow);
@@ -47,26 +46,44 @@ namespace NPark.Application.Feature.PricingSchemaManagement.Command.Add
                 request.EndTime,
                 request.IsRepeated,
                 request.Price,
-                null, null, request.TotalHours);
+               null, request.TotalHours);
                 await _repository.AddAsync(entityHour, cancellationToken);
                 await _repository.SaveChangesAsync(cancellationToken);
                 _logger.LogInformation("Added  entity by hours at {DateTime}", DateTime.UtcNow);
                 return Result.Ok();
             }
+            else if (request.DurationType == Domain.Enums.DurationType.Days)
+            {
+                var entityDays = PricingScheme.Create(
+        request.Name,
+        request.DurationType,
+        request.StartTime,
+        request.EndTime,
+        request.IsRepeated,
+        request.Price,
+         request.TotalDays, null);
 
-            var entityDays = PricingScheme.Create(
-                request.Name,
-                request.DurationType,
-                request.StartTime,
-                request.EndTime,
-                request.IsRepeated,
-                request.Price,
-                null, request.TotalDays, null);
+                await _repository.AddAsync(entityDays, cancellationToken);
+                await _repository.SaveChangesAsync(cancellationToken);
+                _logger.LogInformation("Added entity by days at {DateTime}", DateTime.UtcNow);
+                return Result.Ok();
+            }
+            else
+            {
+                var entityYears = PricingScheme.Create(
+        request.Name,
+        request.DurationType,
+        request.StartTime,
+        request.EndTime,
+        request.IsRepeated,
+        request.Price,
+        365, null);
 
-            await _repository.AddAsync(entityDays, cancellationToken);
-            await _repository.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Added entity by days at {DateTime}", DateTime.UtcNow);
-            return Result.Ok();
+                await _repository.AddAsync(entityYears, cancellationToken);
+                await _repository.SaveChangesAsync(cancellationToken);
+                _logger.LogInformation("Added entity by days at {DateTime}", DateTime.UtcNow);
+                return Result.Ok();
+            }
         }
     }
 }

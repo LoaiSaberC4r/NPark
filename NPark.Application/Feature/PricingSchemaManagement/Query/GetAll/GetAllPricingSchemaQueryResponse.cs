@@ -11,7 +11,6 @@ namespace NPark.Application.Feature.PricingSchemaManagement.Query.GetAll
         public TimeSpan? EndTime { get; set; }
         public decimal Price { get; set; }
         public bool IsRepeated { get; set; }
-        public int? OrderPriority { get; set; }
         public int? TotalDays { get; set; }
         public int? TotalHours { get; set; }
     }

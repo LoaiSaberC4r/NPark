@@ -30,7 +30,6 @@ namespace NPark.Application.Specifications.PricingSchemaSpecification
                 EndTime = x.EndTime,
                 StartTime = x.StartTime,
                 IsRepeated = x.IsRepeated,
-                OrderPriority = x.OrderPriority,
                 TotalDays = x.TotalDays,
                 TotalHours = x.TotalHours
             });

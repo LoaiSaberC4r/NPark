@@ -9,6 +9,8 @@ namespace NPark.Application.Specifications.ParkingMembershipSpecification
     {
         public GetParkingMembershipWithPriceSchemaSpec(GetAllParkingMembershipQuery request)
         {
+            Include(x => x.PricingScheme);
+            Include(x => x.Attachments);
             if (request.SearchText != null)
             {
                 AddCriteria(x => x.Name.Contains(request.SearchText) ||
@@ -39,7 +41,11 @@ namespace NPark.Application.Specifications.ParkingMembershipSpecification
                 EndTime = x.PricingScheme.EndTime,
                 EndDate = x.EndDate,
                 CardNumber = x.CardNumber,
-                VehicleImage = $"Media/{FileNames.ParkingMemberships}{x.VehicleImage}"
+                VehicleImage = x.Attachments.Select(x => new GetAllParkingAttachment
+                {
+                    FilePath = $"Media/{FileNames.ParkingMemberships}/{x.FilePath}",
+                    Id = x.Id,
+                }).ToList(),
             });
         }
     }

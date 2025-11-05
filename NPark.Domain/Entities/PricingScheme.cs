@@ -13,7 +13,6 @@ namespace NPark.Domain.Entities
         public TimeSpan? EndTime { get; private set; }
         public bool IsRepeated { get; private set; }
         public decimal Salary { get; private set; }
-        public int? OrderPriority { get; private set; }
         public int? TotalDays { get; private set; }
         public int? TotalHours { get; private set; }
         public IReadOnlyCollection<ParkingMemberships> ParkingMemberships => _parkingMemberships;
@@ -21,7 +20,7 @@ namespace NPark.Domain.Entities
         private PricingScheme()
         { }
 
-        public static PricingScheme Create(string name, DurationType durationType, TimeSpan? startTime, TimeSpan? endTime, bool isRepeated, decimal salary, int? orderPriority, int? totalDays, int? totalHours) => new PricingScheme()
+        public static PricingScheme Create(string name, DurationType durationType, TimeSpan? startTime, TimeSpan? endTime, bool isRepeated, decimal salary, int? totalDays, int? totalHours) => new PricingScheme()
         {
             Name = name,
             DurationType = durationType,
@@ -29,12 +28,11 @@ namespace NPark.Domain.Entities
             EndTime = endTime,
             IsRepeated = isRepeated,
             Salary = salary,
-            OrderPriority = orderPriority,
             TotalDays = totalDays,
             TotalHours = totalHours
         };
 
-        public void Update(string name, DurationType durationType, TimeSpan? startTime, TimeSpan? endTime, bool isRepeated, decimal salary, int? orderPriority, int? totalDays, int? totalHours
+        public void Update(string name, DurationType durationType, TimeSpan? startTime, TimeSpan? endTime, bool isRepeated, decimal salary, int? totalDays, int? totalHours
             )
         {
             Name = name;
@@ -43,7 +41,6 @@ namespace NPark.Domain.Entities
             EndTime = endTime;
             IsRepeated = isRepeated;
             Salary = salary;
-            OrderPriority = orderPriority;
             TotalDays = totalDays;
             TotalHours = totalHours;
         }
@@ -59,7 +56,5 @@ namespace NPark.Domain.Entities
         public void UpdateIsRepeated(bool isRepeated) => IsRepeated = isRepeated;
 
         public void UpdateSalary(decimal salary) => Salary = salary;
-
-        public void UpdateOrderPriority(int? orderPriority) => OrderPriority = orderPriority;
     }
 }

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NPark.Infrastructure;
 
@@ -11,9 +12,11 @@ using NPark.Infrastructure;
 namespace NPark.Infrastructure.Migrations
 {
     [DbContext(typeof(NParkDBContext))]
-    partial class NParkDBContextModelSnapshot : ModelSnapshot
+    [Migration("20251104145623_AddParkingMembershipAttachment")]
+    partial class AddParkingMembershipAttachment
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,31 +24,6 @@ namespace NPark.Infrastructure.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
-
-            modelBuilder.Entity("NPark.Domain.Entities.OrderPricingSchema", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("Count")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedOnUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("ModifiedOnUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("PricingSchemaId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PricingSchemaId");
-
-                    b.ToTable("OrderPricingSchemas", (string)null);
-                });
 
             modelBuilder.Entity("NPark.Domain.Entities.ParkingMemberships", b =>
                 {
@@ -150,9 +128,6 @@ namespace NPark.Infrastructure.Migrations
                     b.Property<bool>("FeesFlag")
                         .HasColumnType("bit");
 
-                    b.Property<TimeSpan?>("GracePeriod")
-                        .HasColumnType("time");
-
                     b.Property<DateTime?>("ModifiedOnUtc")
                         .HasColumnType("datetime2");
 
@@ -234,6 +209,9 @@ namespace NPark.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<int?>("OrderPriority")
+                        .HasColumnType("int");
 
                     b.Property<decimal>("Salary")
                         .HasColumnType("decimal(18,2)");
@@ -404,17 +382,6 @@ namespace NPark.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Users", (string)null);
-                });
-
-            modelBuilder.Entity("NPark.Domain.Entities.OrderPricingSchema", b =>
-                {
-                    b.HasOne("NPark.Domain.Entities.PricingScheme", "PricingScheme")
-                        .WithMany()
-                        .HasForeignKey("PricingSchemaId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("PricingScheme");
                 });
 
             modelBuilder.Entity("NPark.Domain.Entities.ParkingMemberships", b =>

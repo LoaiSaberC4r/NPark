@@ -10,6 +10,7 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
         public int? AllowedParkingSlots { get; set; }
 
         public PriceType PriceType { get; set; }
+        public TimeSpan? GracePeriod { get; set; }
         public VehiclePassengerData VehiclePassengerData { get; set; }
         public PrintType PrintType { get; set; }
 

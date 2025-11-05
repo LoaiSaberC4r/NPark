@@ -21,6 +21,7 @@ namespace NPark.Application.Specifications.ParkingSystemConfigurationSpec
                 DateTimeFlag = x.DateTimeFlag,
                 TicketIdFlag = x.TicketIdFlag,
                 FeesFlag = x.FeesFlag,
+                GracePeriod = x.GracePeriod,
                 PricingSchemaId = x.PricingSchemaId,
                 PricingSchemaName = (x.PricingScheme == null) ? string.Empty : x.PricingScheme.Name
             });

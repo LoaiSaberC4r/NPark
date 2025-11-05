@@ -14,6 +14,7 @@ namespace NPark.Infrastructure.Configuration
             builder.Property(x => x.ExitGatesCount).IsRequired();
             builder.Property(x => x.AllowedParkingSlots).IsRequired(false);
             builder.Property(x => x.PriceType).IsRequired();
+            builder.Property(x => x.GracePeriod).IsRequired(false);
             builder.Property(x => x.VehiclePassengerData).IsRequired();
             builder.Property(x => x.PrintType).IsRequired();
             builder.Property(x => x.DateTimeFlag).IsRequired();
@@ -22,7 +23,6 @@ namespace NPark.Infrastructure.Configuration
             builder.Property(x => x.PricingSchemaId).IsRequired(false);
             builder.HasOne(x => x.PricingScheme).WithMany().
                 HasForeignKey(x => x.PricingSchemaId).OnDelete(DeleteBehavior.Restrict);
-
         }
     }
 }

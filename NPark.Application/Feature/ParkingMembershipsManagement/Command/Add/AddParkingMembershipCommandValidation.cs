@@ -38,9 +38,9 @@ namespace NPark.Application.Feature.ParkingMembershipsManagement.Command.Add
                 .NotEmpty().WithMessage(ErrorMessage.PricingSchemeId)
                 .MustAsync(async (id, token) => await _pricingRepo.IsExistAsync(x => x.Id == id, token)).WithMessage(ErrorMessage.NotFound);
 
-            RuleFor(x => x.VehicleImage)
-                .Must(BeAValidImage!).WithMessage(ErrorMessage.Invalid_Image)
-                .When(x => x.VehicleImage != null);
+            RuleForEach(x => x.VehicleImage).
+                Must(BeAValidImage!).WithMessage(ErrorMessage.Invalid_Image)
+                .When(x => x.VehicleImage != null && x.VehicleImage is { Count: > 0 });
         }
 
         private bool BeAValidImage(IFormFile file)

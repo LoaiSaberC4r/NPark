@@ -17,7 +17,6 @@ namespace NPark.Api.Controllers
         {
             var result = await sender.Send(command, cancellationToken);
             return File(result.Value, "image/png", "ticket-qr.png");
-
         }
     }
 }

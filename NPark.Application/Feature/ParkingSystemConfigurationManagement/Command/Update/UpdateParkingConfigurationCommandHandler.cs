@@ -29,7 +29,8 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                        request.DateTimeFlag,
                        request.TicketIdFlag,
                        request.FeesFlag,
-                       request.PricingSchemaId == Guid.Empty ? null : request.PricingSchemaId
+                       request.PricingSchemaId == Guid.Empty ? null : request.PricingSchemaId,
+                       request.GracePeriod
                    );
                 await _parkingSystemConfigurationRepository.AddAsync(entity, cancellationToken);
                 await _parkingSystemConfigurationRepository.SaveChangesAsync(cancellationToken);
@@ -48,7 +49,8 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                        request.DateTimeFlag,
                        request.TicketIdFlag,
                        request.FeesFlag,
-                       request.PricingSchemaId == Guid.Empty ? null : request.PricingSchemaId
+                       request.PricingSchemaId == Guid.Empty ? null : request.PricingSchemaId,
+                          request.GracePeriod
                    );
                 await _parkingSystemConfigurationRepository.SaveChangesAsync(cancellationToken);
                 return Result.Ok();

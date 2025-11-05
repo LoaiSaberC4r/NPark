@@ -29,7 +29,6 @@ namespace NPark.Application.Feature.PricingSchemaManagement.Command.Update
                       null,
                       request.IsRepeated,
                       request.Price,
-                      request.OrderPriority,
                        null, request.TotalHours);
 
                 await _repository.SaveChangesAsync(cancellationToken);
@@ -45,24 +44,41 @@ namespace NPark.Application.Feature.PricingSchemaManagement.Command.Update
                   request.EndTime,
                   request.IsRepeated,
                   request.Price,
-                  null, null, request.TotalHours);
+                  null, request.TotalHours);
                 await _repository.SaveChangesAsync(cancellationToken);
                 _logger.LogInformation("Updated  entity by hours at {DateTime}", DateTime.UtcNow);
                 return Result.Ok();
             }
+            else if (request.DurationType == Domain.Enums.DurationType.Days)
+            {
+                entity!.Update(
+            request.Name,
+            request.DurationType,
+            request.StartTime,
+            request.EndTime,
+            request.IsRepeated,
+            request.Price,
+             request.TotalDays, null);
 
-            entity!.Update(
-                   request.Name,
-                   request.DurationType,
-                   request.StartTime,
-                   request.EndTime,
-                   request.IsRepeated,
-                   request.Price,
-                   null, request.TotalDays, null);
+                await _repository.SaveChangesAsync(cancellationToken);
+                _logger.LogInformation("Updated entity by days at {DateTime}", DateTime.UtcNow);
+                return Result.Ok();
+            }
+            else
+            {
+                entity!.Update(
+                       request.Name,
+                       request.DurationType,
+                       request.StartTime,
+                       request.EndTime,
+                       request.IsRepeated,
+                       request.Price,
+                      365, null);
 
-            await _repository.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Updated entity by days at {DateTime}", DateTime.UtcNow);
-            return Result.Ok();
+                await _repository.SaveChangesAsync(cancellationToken);
+                _logger.LogInformation("Updated entity by days at {DateTime}", DateTime.UtcNow);
+                return Result.Ok();
+            }
         }
     }
 }
