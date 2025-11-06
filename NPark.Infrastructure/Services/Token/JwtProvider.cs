@@ -23,7 +23,7 @@ namespace NPark.Infrastructure.Services.Token
             _options = options.Value ?? throw new ArgumentNullException(nameof(options));
         }
 
-        public async Task<UserTokenDto> Generate(User user, CancellationToken cancellationToken = default)
+        public async Task<UserTokenDto> Generate(User user, ParkingGate? gate = null, CancellationToken cancellationToken = default)
         {
             var spec = new GetUserWithPermissionSpecification(user.Id);
             var userEntity = await _repository.FirstOrDefaultWithSpecAsync(spec, cancellationToken);
@@ -36,6 +36,10 @@ namespace NPark.Infrastructure.Services.Token
             new("email", user.Email ?? ""),
             new("phoneNumber", user.PhoneNumber ?? ""),
         };
+            if (gate is not null)
+            {
+                claims.Add(new Claim("gateId", gate.Id.ToString()));
+            }
             claims.Add(new Claim(ClaimTypes.Role, userEntity.Role.NameEn));
             foreach (var permission in userEntity.Role.GetPermissions)
             {

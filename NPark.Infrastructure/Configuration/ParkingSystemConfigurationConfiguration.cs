@@ -23,6 +23,12 @@ namespace NPark.Infrastructure.Configuration
             builder.Property(x => x.PricingSchemaId).IsRequired(false);
             builder.HasOne(x => x.PricingScheme).WithMany().
                 HasForeignKey(x => x.PricingSchemaId).OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasMany(x => x.ParkingGates)
+                .WithOne(x => x.ParkingSystemConfiguration)
+                .HasForeignKey(x => x.ParkingSystemConfigurationId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Cascade);
         }
     }
 }

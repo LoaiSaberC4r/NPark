@@ -5,6 +5,6 @@ namespace NPark.Application.Abstraction
 {
     public interface IJwtProvider
     {
-        Task<UserTokenDto> Generate(User user, CancellationToken cancellationToken = default);
+        Task<UserTokenDto> Generate(User user, ParkingGate? gate = null, CancellationToken cancellationToken = default);
     }
 }

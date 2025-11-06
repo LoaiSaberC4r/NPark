@@ -4,8 +4,12 @@ using NPark.Domain.Enums;
 namespace NPark.Domain.Entities
 {
     public sealed class ParkingSystemConfiguration : Entity<int>
-    {         // ===== Basic Parking Setup =====
+    {
+        private List<ParkingGate> _parkingGates = new List<ParkingGate>(); // بوابات الباكيات>
+
+        // ===== Basic Parking Setup =====
         public int EntryGatesCount { get; private set; } = 1;   // عدد بوابات الدخول
+
         public int ExitGatesCount { get; private set; } = 1;    // عدد بوابات الخروج
         public int? AllowedParkingSlots { get; private set; } = 100; // عدد الباكيات المسموح
         public TimeSpan? GracePeriod { get; private set; } = null!;
@@ -21,6 +25,8 @@ namespace NPark.Domain.Entities
         public bool DateTimeFlag { get; private set; } = true;
         public bool TicketIdFlag { get; private set; } = true;
         public bool FeesFlag { get; private set; } = true;
+
+        public IReadOnlyCollection<ParkingGate> ParkingGates => _parkingGates;
 
         private ParkingSystemConfiguration()
         { }
@@ -56,6 +62,21 @@ namespace NPark.Domain.Entities
             configuration.FeesFlag = feesFlag;
             configuration.GracePeriod = gracePeriod;
             configuration.PricingSchemaId = pricingSchemaId;
+        }
+
+        public void SetParkingGates(List<ParkingGate> parkingGates)
+        {
+            _parkingGates = parkingGates;
+        }
+
+        public void AddParkingGate(ParkingGate parkingGate)
+        {
+            _parkingGates.Add(parkingGate);
+        }
+
+        public void ClearParkingGates()
+        {
+            _parkingGates.Clear();
         }
     }
 }
