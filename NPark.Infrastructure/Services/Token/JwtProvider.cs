@@ -30,12 +30,12 @@ namespace NPark.Infrastructure.Services.Token
             if (userEntity == null) throw new Exception("User not found");
 
             var claims = new List<Claim>
-        {
-            new("userId", user.Id.ToString()),
-            new("userName", user.Name    ?? ""),
-            new("email", user.Email ?? ""),
-            new("phoneNumber", user.PhoneNumber ?? ""),
-        };
+            {
+                new("userId", user.Id.ToString()),
+                new("userName", user.Name    ?? ""),
+                new("email", user.Email ?? ""),
+                new("phoneNumber", user.PhoneNumber ?? ""),
+            };
             if (gate is not null)
             {
                 claims.Add(new Claim("gateId", gate.Id.ToString()));

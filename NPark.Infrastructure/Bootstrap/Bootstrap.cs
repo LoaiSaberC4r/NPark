@@ -14,6 +14,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using NPark.Application.Abstraction;
+using NPark.Application.Abstraction.Security;
 using NPark.Application.Options;
 using NPark.Infrastructure.Authorization;
 using NPark.Infrastructure.Options;
@@ -49,6 +50,7 @@ namespace NPark.Infrastructure.Bootstrap
             }).SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
             services.AddScoped<ISendProtocol, SendProtocol>();
+            services.AddScoped<ITokenReader, JwtReader>();
 
             return services;
         }

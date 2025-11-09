@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using NPark.Application.Feature.Auth.Command.Login;
 using NPark.Application.Feature.Auth.Command.LoginFirstTime;
+using NPark.Application.Feature.Auth.Command.LogOut;
 
 namespace NPark.Api.Controllers
 {
@@ -23,6 +24,13 @@ namespace NPark.Api.Controllers
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginCommand command, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(command, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [HttpPost(nameof(Logout))]
+        public async Task<IActionResult> Logout([FromBody] LogoutCommand command, CancellationToken cancellationToken)
         {
             var result = await sender.Send(command, cancellationToken);
             return result.ToIActionResult();

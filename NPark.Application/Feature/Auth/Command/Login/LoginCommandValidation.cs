@@ -35,7 +35,7 @@ namespace NPark.Application.Feature.Auth.Command.Login
                 .WithMessage("Gate Not Found")
                 .MustAsync(async (command, cancellation) =>
                 {
-                    return await _parkingGateRepository.IsExistAsync(x => x.GateNumber == command.GateNumber && x.GateType == command.GateType && x.IsOccupied == false);
+                    return await _parkingGateRepository.IsExistAsync(x => x.GateNumber == command.GateNumber && x.GateType == command.GateType && x.IsOccupied != false);
                 })
                 .WithMessage("Gate Already Occupied");
         }
