@@ -11,7 +11,8 @@ namespace CRM.Application.Specification.TicketSpecification
             if (req.SearchText != null)
             {
                 AddCriteria(x => x.Subject.Contains(req.SearchText) || x.Description.Contains(req.SearchText)
-               || x.Email.Contains(req.SearchText) || x.PhoneNumber.Contains(req.SearchText));
+               || x.Email.Contains(req.SearchText) || x.PhoneNumber.Contains(req.SearchText) ||
+               x.Site.NameAr.Contains(req.SearchText) || x.Site.NameEn.Contains(req.SearchText));
             }
             if (req.Severity != null)
                 AddCriteria(x => x.Severity == req.Severity);

@@ -3,6 +3,7 @@ using BuildingBlock.Api.ControllerTemplate;
 using CRM.Api.Attribute;
 using CRM.Application.Feature.TicketManagement.Command.Add;
 using CRM.Application.Feature.TicketManagement.Command.ChangeTicketStatus;
+using CRM.Application.Feature.TicketManagement.Query.GetAccountTicketCount;
 using CRM.Application.Feature.TicketManagement.Query.GetAllSuperAdmin;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -34,6 +35,13 @@ namespace CRM.Api.Controllers
 
         [HttpGet(nameof(GetAllForSuperAdmin))]
         public async Task<IActionResult> GetAllForSuperAdmin([FromQuery] GetAllSuperAdminQuery query, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(query, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [HttpGet(nameof(GetAccount))]
+        public async Task<IActionResult> GetAccount([FromQuery] GetAccountTicketCountQuery query, CancellationToken cancellationToken)
         {
             var result = await sender.Send(query, cancellationToken);
             return result.ToIActionResult();
