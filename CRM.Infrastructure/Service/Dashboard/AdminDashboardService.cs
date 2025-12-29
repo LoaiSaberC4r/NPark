@@ -14,22 +14,42 @@ namespace CRM.Infrastructure.Service.Dashboard
             _context = context;
         }
 
-        public async Task<AdminDashboardDto> AdminDashboard(CancellationToken cancellationToken = default)
+        public async Task<AdminDashboardDto> AdminDashboard(CancellationToken ct = default)
         {
-            var totalClients = await _context.Set<Account>().CountAsync(cancellationToken);
-            var totalPendingTickets = await _context.Set<Ticket>().Where(t => t.Status == Domain.Enums.TicketStatus.Pending)
-                .CountAsync(cancellationToken);
-            var totalAssignedTickets = await _context.Set<Ticket>().Where(t => t.Status == Domain.Enums.TicketStatus.Assigned)
-                .CountAsync(cancellationToken);
-            var totalClosedTickets = await _context.Set<Ticket>().Where(t => t.Status == Domain.Enums.TicketStatus.Closed)
-                .CountAsync(cancellationToken);
+            var now = DateTime.UtcNow;
+            var end30 = now.AddDays(30);
+
+            var totalClients = await _context.Set<Account>().CountAsync(ct);
+
+            var ticketAgg = await _context.Set<Ticket>()
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    Pending = g.Count(t => t.Status == Domain.Enums.TicketStatus.Pending),
+                    Assigned = g.Count(t => t.Status == Domain.Enums.TicketStatus.Assigned),
+                    Closed = g.Count(t => t.Status == Domain.Enums.TicketStatus.Closed),
+                })
+                .FirstOrDefaultAsync(ct)
+                ?? new { Pending = 0, Assigned = 0, Closed = 0 };
+
+            var productAgg = await _context.Set<SiteProduct>()
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    EndingWithin30Days = g.Count(sp => sp.SupportEndDate >= now && sp.SupportEndDate <= end30),
+                    Ended = g.Count(sp => sp.SupportEndDate < now)
+                })
+                .FirstOrDefaultAsync(ct)
+                ?? new { EndingWithin30Days = 0, Ended = 0 };
 
             return new AdminDashboardDto
             {
                 TotalClients = totalClients,
-                TotalPendingTickets = totalPendingTickets,
-                TotalAssignedTickets = totalAssignedTickets,
-                TotalClosedTickets = totalClosedTickets
+                TotalPendingTickets = ticketAgg.Pending,
+                TotalAssignedTickets = ticketAgg.Assigned,
+                TotalClosedTickets = ticketAgg.Closed,
+                TotalProductsEndedWithing30Days = productAgg.EndingWithin30Days,
+                TtoalProductsEnded = productAgg.Ended
             };
         }
     }

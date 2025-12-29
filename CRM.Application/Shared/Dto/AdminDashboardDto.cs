@@ -6,5 +6,7 @@
         public long TotalPendingTickets { get; set; }
         public long TotalAssignedTickets { get; set; }
         public long TotalClosedTickets { get; set; }
+        public long TotalProductsEndedWithing30Days { get; set; }
+        public long TtoalProductsEnded { get; set; }
     }
 }
