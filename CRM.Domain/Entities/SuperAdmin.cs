@@ -9,17 +9,19 @@ namespace CRM.Domain.Entities
         public string PhoneNumber { get; private set; } = string.Empty;
         public Guid RoleId { get; private set; }
         public Role Role { get; private set; } = null!;
+        public bool IsFirstLogin { get; private set; } = true;
 
         private SuperAdmin()
         { }
 
-        public static SuperAdmin Create(string email, string password, string phoneNumber)
+        public static SuperAdmin Create(string email, string password, string phoneNumber, bool isFirstLogin = true)
         {
             return new SuperAdmin()
             {
                 Email = email,
                 Password = password,
                 PhoneNumber = phoneNumber,
+                IsFirstLogin = isFirstLogin
             };
         }
 

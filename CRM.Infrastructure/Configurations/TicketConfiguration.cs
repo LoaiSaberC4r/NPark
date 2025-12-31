@@ -15,10 +15,13 @@ namespace CRM.Infrastructure.Configurations
             builder.Property(x => x.Severity).IsRequired();
             builder.Property(x => x.Email).IsRequired().HasMaxLength(100);
             builder.Property(x => x.PhoneNumber).IsRequired(false).HasMaxLength(100);
+            builder.Property(x => x.ClosedDateUtc).IsRequired(false);
             builder.Property(x => x.Description).IsRequired().HasMaxLength(2000);
             builder.HasMany(x => x.Attachments).WithOne(x => x.Ticket).HasForeignKey(x => x.TicketId).OnDelete(DeleteBehavior.Cascade);
             builder.HasOne(x => x.Site).WithMany(x => x.Tickets).HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.Cascade);
             builder.HasOne(x => x.Product).WithMany(x => x.Tickets).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            builder.HasOne(x => x.AssignedToUser).WithMany().HasForeignKey(x => x.AssignedTo).OnDelete(DeleteBehavior.Restrict).IsRequired(false);
+            builder.HasOne(x => x.ClosedByUser).WithMany().HasForeignKey(x => x.ClosedBy).OnDelete(DeleteBehavior.Restrict).IsRequired(false);
             builder.HasIndex(x => x.Email);
         }
     }

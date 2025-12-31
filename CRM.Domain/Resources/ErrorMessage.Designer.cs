@@ -205,6 +205,15 @@ namespace CRM.Domain.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Renewal date must be in the future..
+        /// </summary>
+        public static string RenewalDate_MustBeFuture {
+            get {
+                return ResourceManager.GetString("RenewalDate_MustBeFuture", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Site English name is required..
         /// </summary>
         public static string Site_NameEn_Required {
@@ -228,6 +237,42 @@ namespace CRM.Domain.Resources {
         public static string Site_Products_Empty {
             get {
                 return ResourceManager.GetString("Site_Products_Empty", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Site product id is required..
+        /// </summary>
+        public static string SiteProduct_Id_Required {
+            get {
+                return ResourceManager.GetString("SiteProduct_Id_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Site product not found.
+        /// </summary>
+        public static string SiteProduct_NotFound {
+            get {
+                return ResourceManager.GetString("SiteProduct_NotFound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to New support end date must be later than the current support end date.
+        /// </summary>
+        public static string SiteProduct_RenewalDate_MustBeLaterThanCurrent {
+            get {
+                return ResourceManager.GetString("SiteProduct_RenewalDate_MustBeLaterThanCurrent", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Password does not meet the required complexity..
+        /// </summary>
+        public static string Support_Password_Invalid {
+            get {
+                return ResourceManager.GetString("Support_Password_Invalid", resourceCulture);
             }
         }
         

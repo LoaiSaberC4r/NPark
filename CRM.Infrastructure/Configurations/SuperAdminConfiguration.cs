@@ -14,6 +14,7 @@ namespace CRM.Infrastructure.Configurations
             builder.Property(x => x.Email).IsRequired().HasMaxLength(100);
             builder.Property(x => x.Password).IsRequired().HasMaxLength(100);
             builder.Property(x => x.PhoneNumber).IsRequired(false).HasMaxLength(100);
+            builder.Property(x => x.IsFirstLogin).IsRequired().HasDefaultValue(true);
             builder.HasIndex(x => x.Email).IsUnique();
             builder.HasOne(x => x.Role).WithMany(x => x.SuperAdmins).HasForeignKey(x => x.RoleId).OnDelete(DeleteBehavior.Restrict);
         }

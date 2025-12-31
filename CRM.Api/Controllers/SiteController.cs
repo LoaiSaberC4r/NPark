@@ -1,6 +1,7 @@
 ﻿using BuildingBlock.Api;
 using BuildingBlock.Api.ControllerTemplate;
 using CRM.Api.Attribute;
+using CRM.Application.Feature.SiteManagement.Command.AddProduct;
 using CRM.Application.Feature.SiteManagement.Query.GetAll;
 using CRM.Application.Feature.SiteManagement.Query.GetSites;
 using CRM.Application.Feature.SiteManagement.Query.GetSuperAdminSites;
@@ -37,6 +38,13 @@ namespace CRM.Api.Controllers
         public async Task<IActionResult> GetSuperAdminSites([FromQuery] GetSuperAdminSitesQuery query, CancellationToken cancellationToken)
         {
             var result = await sender.Send(query, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [HttpPost(nameof(AddProduct))]
+        public async Task<IActionResult> AddProduct([FromBody] AddProductSiteCommand command, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(command, cancellationToken);
             return result.ToIActionResult();
         }
     }

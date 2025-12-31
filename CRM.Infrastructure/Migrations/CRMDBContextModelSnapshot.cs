@@ -248,6 +248,9 @@ namespace CRM.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedOnUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<DateTime?>("EnrollmentDate")
+                        .HasColumnType("datetime2");
+
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
@@ -259,6 +262,11 @@ namespace CRM.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("SiteId", "ProductId");
+
+                    b.HasIndex("EnrollmentDate");
+
+                    b.HasIndex("Id")
+                        .IsUnique();
 
                     b.HasIndex("ProductId");
 
@@ -278,6 +286,11 @@ namespace CRM.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("IsFirstLogin")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.Property<DateTime?>("ModifiedOnUtc")
                         .HasColumnType("datetime2");
@@ -309,6 +322,15 @@ namespace CRM.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("AssignedTo")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ClosedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ClosedDateUtc")
+                        .HasColumnType("datetime2");
 
                     b.Property<DateTime>("CreatedOnUtc")
                         .HasColumnType("datetime2");
@@ -347,6 +369,10 @@ namespace CRM.Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AssignedTo");
+
+                    b.HasIndex("ClosedBy");
 
                     b.HasIndex("Email");
 
@@ -456,6 +482,16 @@ namespace CRM.Infrastructure.Migrations
 
             modelBuilder.Entity("CRM.Domain.Entities.Ticket", b =>
                 {
+                    b.HasOne("CRM.Domain.Entities.Account", "AssignedToUser")
+                        .WithMany()
+                        .HasForeignKey("AssignedTo")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CRM.Domain.Entities.Account", "ClosedByUser")
+                        .WithMany()
+                        .HasForeignKey("ClosedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CRM.Domain.Entities.Product", "Product")
                         .WithMany("Tickets")
                         .HasForeignKey("ProductId")
@@ -467,6 +503,10 @@ namespace CRM.Infrastructure.Migrations
                         .HasForeignKey("SiteId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("AssignedToUser");
+
+                    b.Navigation("ClosedByUser");
 
                     b.Navigation("Product");
 

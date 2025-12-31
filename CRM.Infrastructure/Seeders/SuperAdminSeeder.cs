@@ -60,7 +60,8 @@ namespace CRM.Infrastructure.Seeders
             var user = SuperAdmin.Create(
                 email: email,
                 password: hashedPassword,
-                phoneNumber: phone
+                phoneNumber: phone,
+                false
                );
 
             user.UpdateRole(roleId);

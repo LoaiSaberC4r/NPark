@@ -9,6 +9,7 @@ namespace CRM.Domain.Entities
         public Site Site { get; private set; }
         public Product Product { get; private set; }
         public DateTime SupportEndDate { get; private set; }
+        public DateTime? EnrollmentDate { get; private set; }
 
         private SiteProduct()
         {
@@ -21,5 +22,16 @@ namespace CRM.Domain.Entities
             ProductId = productId,
             SupportEndDate = supportEndDate
         };
+
+        public void RenewSupport(DateTime newSupportEndDate)
+        {
+            if (newSupportEndDate <= SupportEndDate)
+            {
+                throw new ArgumentException("New support end date must be later than the current support end date.");
+            }
+            SupportEndDate = newSupportEndDate;
+        }
+
+        public void Enroll(DateTime enrollmentDate) => EnrollmentDate = enrollmentDate;
     }
 }

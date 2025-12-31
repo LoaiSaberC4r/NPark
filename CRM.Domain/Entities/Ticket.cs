@@ -18,6 +18,12 @@ namespace CRM.Domain.Entities
         public Guid ProductId { get; private set; }
         public Product Product { get; private set; }
         public IReadOnlyList<TicketAttachment> Attachments => _attachments;
+        public Guid? AssignedTo { get; private set; }
+        public Account? AssignedToUser { get; private set; }
+        public Guid? ClosedBy { get; private set; }
+        public Account? ClosedByUser { get; private set; }
+        public DateTime? ClosedDateUtc { get; private set; }
+        public TimeSpan? TimeTakenToClose => ClosedDateUtc.HasValue ? CreatedOnUtc.Subtract(ClosedDateUtc.Value) : null;
 
         private Ticket()
         { }
@@ -40,5 +46,13 @@ namespace CRM.Domain.Entities
         public void UpdateStatus(TicketStatus status) => Status = status;
 
         public void UpdateSeverity(TicketSeverity severity) => Severity = severity;
+
+        public void SetAssignTo(Guid userId) => AssignedTo = userId;
+
+        public void CloseTicket(Guid userId)
+        {
+            UpdateStatus(TicketStatus.Closed);
+            ClosedBy = userId;
+        }
     }
 }
