@@ -88,6 +88,60 @@ namespace CRM.Domain.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to New password does not meet the required complexity..
+        /// </summary>
+        public static string ChangePassword_NewPassword_Invalid {
+            get {
+                return ResourceManager.GetString("ChangePassword_NewPassword_Invalid", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to New password must not exceed 128 characters..
+        /// </summary>
+        public static string ChangePassword_NewPassword_MaxLength {
+            get {
+                return ResourceManager.GetString("ChangePassword_NewPassword_MaxLength", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to New password must be at least 8 characters..
+        /// </summary>
+        public static string ChangePassword_NewPassword_MinLength {
+            get {
+                return ResourceManager.GetString("ChangePassword_NewPassword_MinLength", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to New password is required..
+        /// </summary>
+        public static string ChangePassword_NewPassword_Required {
+            get {
+                return ResourceManager.GetString("ChangePassword_NewPassword_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to New password must be different from old password..
+        /// </summary>
+        public static string ChangePassword_NewPassword_SameAsOld {
+            get {
+                return ResourceManager.GetString("ChangePassword_NewPassword_SameAsOld", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Old password is required..
+        /// </summary>
+        public static string ChangePassword_OldPassword_Required {
+            get {
+                return ResourceManager.GetString("ChangePassword_OldPassword_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Email is already in use.
         /// </summary>
         public static string Email_Exist {

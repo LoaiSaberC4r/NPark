@@ -10,8 +10,10 @@ namespace CRM.Domain.Entities
         public string? NameAr { get; private set; } = string.Empty;
         public string Email { get; private set; } = string.Empty;
         public string Password { get; private set; } = string.Empty;
-        public bool IsLoginBefore { get; private set; }
+
+        public bool? IsFirstLogin { get; private set; }
         public bool IsDeleted { get; set; }
+
         public DateTime? DeletedOnUtc { get; set; }
         public DateTime? RestoredOnUtc { get; set; }
         public Guid RoleId { get; private set; }
@@ -35,7 +37,7 @@ namespace CRM.Domain.Entities
                 NameAr = nameAr,
                 Email = email,
                 Password = password,
-                IsLoginBefore = false,
+                IsFirstLogin = true,
                 IsDeleted = false
             };
         }
@@ -47,5 +49,9 @@ namespace CRM.Domain.Entities
         public void RemoveSite(Site site) => _sites.Remove(site);
 
         public void AssignRole(Guid roleId) => RoleId = roleId;
+
+        public void UpdateLoginStatus(bool isFirstLogin) => IsFirstLogin = isFirstLogin;
+
+        public void ChangePassword(string newPassword) => Password = newPassword;
     }
 }

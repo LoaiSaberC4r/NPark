@@ -1,4 +1,5 @@
 ﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction.Encryption;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
 using CRM.Application.Abstraction;
@@ -11,20 +12,24 @@ namespace CRM.Application.Feature.SupportManagement.Command.Add
     {
         private readonly IGenericRepository<SuperAdmin> _superAdminRepository;
         private readonly IEmailSender _emailSender;
-        public AddSupportCommandHandler(IGenericRepository<SuperAdmin> superAdminRepository, IEmailSender emailSender)
+        private readonly IPasswordService _passwordService;
+        public AddSupportCommandHandler(IGenericRepository<SuperAdmin> superAdminRepository, IEmailSender emailSender, IPasswordService passwordService)
         {
             _superAdminRepository = superAdminRepository ?? throw new ArgumentNullException(nameof(superAdminRepository));
             _emailSender = emailSender ?? throw new ArgumentNullException(nameof(emailSender));
+            _passwordService = passwordService ?? throw new ArgumentNullException(nameof(passwordService));
         }
         public async Task<Result> Handle(AddSupportCommand request, CancellationToken cancellationToken)
         {
-            var superAdmin = SuperAdmin.Create(
+            var password = _passwordService.Hash(request.Password);
+            var supportAdmin = SuperAdmin.Create(
                   email: request.Email,
-                  password: request.Password,
+                  password: password,
                   phoneNumber: request.PhoneNumber ?? string.Empty
               );
 
-            await _superAdminRepository.AddAsync(superAdmin, cancellationToken);
+            await _superAdminRepository.AddAsync(supportAdmin, cancellationToken);
+            supportAdmin.UpdateRole(new Guid("a27ac10b-58cc-4372-a567-0e02b2c3d479"));
             await _superAdminRepository.SaveChangesAsync(cancellationToken);
             _emailSender.SendAsync(
                                new EmailMessage(

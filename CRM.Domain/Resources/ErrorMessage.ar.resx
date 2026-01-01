@@ -126,6 +126,24 @@
   <data name="Account_Sites_Required" xml:space="preserve">
     <value>قائمة المواقع مطلوبة.</value>
   </data>
+  <data name="ChangePassword_NewPassword_Invalid" xml:space="preserve">
+    <value>كلمة المرور الجديدة لا تحقق شروط الأمان المطلوبة.</value>
+  </data>
+  <data name="ChangePassword_NewPassword_MaxLength" xml:space="preserve">
+    <value>كلمة المرور الجديدة يجب ألا تزيد عن 128 حرفًا.</value>
+  </data>
+  <data name="ChangePassword_NewPassword_MinLength" xml:space="preserve">
+    <value>كلمة المرور الجديدة يجب ألا تقل عن 8 أحرف.</value>
+  </data>
+  <data name="ChangePassword_NewPassword_Required" xml:space="preserve">
+    <value>كلمة المرور الجديدة مطلوبة.</value>
+  </data>
+  <data name="ChangePassword_NewPassword_SameAsOld" xml:space="preserve">
+    <value>كلمة المرور الجديدة يجب أن تكون مختلفة عن القديمة.</value>
+  </data>
+  <data name="ChangePassword_OldPassword_Required" xml:space="preserve">
+    <value>كلمة المرور القديمة مطلوبة.</value>
+  </data>
   <data name="Email_Exist" xml:space="preserve">
     <value>هذا الايميل موجود بالفعل!</value>
   </data>

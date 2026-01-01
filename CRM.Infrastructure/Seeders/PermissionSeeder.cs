@@ -38,6 +38,12 @@ namespace CRM.Infrastructure.Seeders
 
         public static readonly Guid ReadPlatformSitePermissionId = new("2d1b71bb-707f-4b1e-9df9-7d58b1f2b202");
 
+        // Support (NEW)
+        public static readonly Guid CreateSupportPermissionId = new("7e0f2b65-4b13-4b1a-a3aa-5f3e6c3c0a11");
+
+        public static readonly Guid ReadSupportTicketPermissionId = new("7e0f2b65-4b13-4b1a-a3aa-5f3e6c3c0a12");
+        public static readonly Guid WriteSupportTicketPermissionId = new("7e0f2b65-4b13-4b1a-a3aa-5f3e6c3c0a13");
+
         public PermissionSeeder(IGenericRepository<Permission> permissionRepo, ILogger<PermissionSeeder> logger)
         {
             _permissionRepo = permissionRepo ?? throw new ArgumentNullException(nameof(permissionRepo));
@@ -60,11 +66,13 @@ namespace CRM.Infrastructure.Seeders
                 toInsert.Add(Permission.CreateWithID(id, name, nameAr, desc));
             }
 
-            // Center - CRUD
+            // Platform - CRUD
             await AddIfNotExists(CreateCenterPermissionId, "Platform:Centers:Create", "إضافة", "For Creating");
             await AddIfNotExists(ReadCenterPermissionId, "Platform:Centers:Read", "قراءة", "For Reading");
             await AddIfNotExists(UpdateCenterPermissionId, "Platform:Centers:Update", "تعديل", "For Updating");
             await AddIfNotExists(DeleteCenterPermissionId, "Platform:Centers:Delete", "حذف", "For Deleting");
+            await AddIfNotExists(ReadPlatformSitePermissionId, "Platform:Site:Read  ", "قراءة", "For Reading Sites (Platform)");
+            await AddIfNotExists(CreateSupportPermissionId, "Platform:Support:Create", "إضافة", "For Creating Support");
 
             // Product - CRUD
             await AddIfNotExists(CreateProductPermissionId, "Platform:Products:Create", "إضافة", "For Creating");
@@ -80,7 +88,12 @@ namespace CRM.Infrastructure.Seeders
             await AddIfNotExists(UpdateTicketBySuperAdminPermissionId, "Platform:Tickets:Update", "تعديل", "For Update");
             // Site - Read (NEW)
             await AddIfNotExists(ReadAccountSitePermissionId, "Account:Site:Read", "قراءة", "For Reading Sites (Account)");
-            await AddIfNotExists(ReadPlatformSitePermissionId, "Platform:Site:Read", "قراءة", "For Reading Sites (Platform)");
+
+            // Support (NEW)
+
+            await AddIfNotExists(ReadSupportTicketPermissionId, "Support:Ticket:Read", "قراءة", "For Reading Support Tickets");
+
+            await AddIfNotExists(WriteSupportTicketPermissionId, "Support:Ticket:Write", "تعديل", "For Writing/Updating Support Tickets");
 
             if (toInsert.Count == 0)
             {

@@ -126,6 +126,24 @@
   <data name="Account_Sites_Required" xml:space="preserve">
     <value>Sites list is required.</value>
   </data>
+  <data name="ChangePassword_NewPassword_Invalid" xml:space="preserve">
+    <value>New password does not meet the required complexity.</value>
+  </data>
+  <data name="ChangePassword_NewPassword_MaxLength" xml:space="preserve">
+    <value>New password must not exceed 128 characters.</value>
+  </data>
+  <data name="ChangePassword_NewPassword_MinLength" xml:space="preserve">
+    <value>New password must be at least 8 characters.</value>
+  </data>
+  <data name="ChangePassword_NewPassword_Required" xml:space="preserve">
+    <value>New password is required.</value>
+  </data>
+  <data name="ChangePassword_NewPassword_SameAsOld" xml:space="preserve">
+    <value>New password must be different from old password.</value>
+  </data>
+  <data name="ChangePassword_OldPassword_Required" xml:space="preserve">
+    <value>Old password is required.</value>
+  </data>
   <data name="Email_Exist" xml:space="preserve">
     <value>Email is already in use</value>
   </data>

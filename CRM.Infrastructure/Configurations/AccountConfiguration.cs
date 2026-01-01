@@ -13,6 +13,7 @@ namespace CRM.Infrastructure.Configurations
             builder.Property(x => x.Id).IsRequired().ValueGeneratedOnAdd();
             builder.Property(x => x.Email).IsRequired().HasMaxLength(100);
             builder.Property(x => x.Password).IsRequired().HasMaxLength(100);
+            builder.Property(x => x.IsFirstLogin).IsRequired(false).HasDefaultValue(true);
             builder.Property(x => x.NameEn).IsRequired().HasMaxLength(100);
             builder.Property(x => x.NameAr).IsRequired(false).HasMaxLength(100);
             builder.HasOne(x => x.Role).WithMany()

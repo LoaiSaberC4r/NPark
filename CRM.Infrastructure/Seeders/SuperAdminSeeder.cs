@@ -61,7 +61,7 @@ namespace CRM.Infrastructure.Seeders
                 email: email,
                 password: hashedPassword,
                 phoneNumber: phone,
-                false
+                true
                );
 
             user.UpdateRole(roleId);

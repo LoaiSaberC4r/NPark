@@ -3,7 +3,6 @@ using BuildingBlock.Application.Abstraction.Encryption;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
 using CRM.Application.Abstraction.Security;
-using CRM.Application.Shared.Dto;
 using CRM.Application.Specification.AccountSpecification;
 using CRM.Application.Specification.AuthSpecification;
 using CRM.Domain.Entities;
@@ -12,7 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CRM.Application.Feature.AuthManagement.Command.Login
 {
-    internal sealed class LoginCommandHandler : ICommandHandler<LoginCommand, UserTokenDto>
+    internal sealed class LoginCommandHandler : ICommandHandler<LoginCommand, LoginResponseCommand>
     {
         private readonly IGenericRepository<SuperAdmin> _superAdminRepository;
         private readonly IGenericRepository<Account> _accountRepository;
@@ -30,10 +29,10 @@ namespace CRM.Application.Feature.AuthManagement.Command.Login
             _accountRepository = accountRepository ?? throw new ArgumentNullException(nameof(accountRepository));
         }
 
-        public async Task<Result<UserTokenDto>> Handle(LoginCommand request, CancellationToken cancellationToken)
+        public async Task<Result<LoginResponseCommand>> Handle(LoginCommand request, CancellationToken cancellationToken)
         {
             //1- Get User by Email
-            var spec = new LoginSpec(request);
+            var spec = new LoginSpec(request.Email);
             var user = await _superAdminRepository.FirstOrDefaultWithSpecAsync(spec, cancellationToken);
             if (user is null)
             {
@@ -42,7 +41,7 @@ namespace CRM.Application.Feature.AuthManagement.Command.Login
                 var account = await _accountRepository.FirstOrDefaultWithSpecAsync(accountSpec, cancellationToken);
                 if (account is null)
                 {
-                    return Result<UserTokenDto>.Fail(new Error(
+                    return Result<LoginResponseCommand>.Fail(new Error(
                             Code: "user.NotFound",
                             Message: ErrorMessage.WrongLoginCredintial,
                             Type: ErrorType.Security
@@ -55,14 +54,14 @@ namespace CRM.Application.Feature.AuthManagement.Command.Login
                     {
                         _logger.LogInformation("User {Email} found in database", account.Email);
 
-                        return Result<UserTokenDto>.Fail(new Error(
+                        return Result<LoginResponseCommand>.Fail(new Error(
                             Code: "user.NotFound",
                             Message: ErrorMessage.WrongLoginCredintial,
                             Type: ErrorType.Security
                             ));
                     }
                     var accounttoken = await _jwtProvider.GenerateAccount(account, cancellationToken);
-                    return Result<UserTokenDto>.Ok(accounttoken);
+                    return Result<LoginResponseCommand>.Ok(new LoginResponseCommand { TokenInfo = accounttoken, IsFirstLogin = account.IsFirstLogin ?? true });
                 }
             }
 
@@ -72,7 +71,7 @@ namespace CRM.Application.Feature.AuthManagement.Command.Login
             {
                 _logger.LogInformation("User {Email} found in database", user.Email);
 
-                return Result<UserTokenDto>.Fail(new Error(
+                return Result<LoginResponseCommand>.Fail(new Error(
                     Code: "user.NotFound",
                     Message: ErrorMessage.WrongLoginCredintial,
                     Type: ErrorType.Security
@@ -82,7 +81,7 @@ namespace CRM.Application.Feature.AuthManagement.Command.Login
             //3- Generate Token
             var token = await _jwtProvider.Generate(user, cancellationToken);
             _logger.LogInformation("Login by {Email} is  Success", user.Email);
-            return Result<UserTokenDto>.Ok(token);
+            return Result<LoginResponseCommand>.Ok(new LoginResponseCommand { TokenInfo = token, IsFirstLogin = user.IsFirstLogin });
         }
     }
 }

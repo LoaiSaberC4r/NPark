@@ -13,6 +13,7 @@ namespace CRM.Infrastructure.Seeders
 
         public static readonly Guid SuperAdminRoleId = new Guid("f47ac10b-58cc-4372-a567-0e02b2c3d479");
         public static readonly Guid AccountRoleId = new Guid("f37ac10b-58cc-4372-a567-0e02b2c3d479");
+        public static readonly Guid SupportRoleId = new Guid("a27ac10b-58cc-4372-a567-0e02b2c3d479");
 
         public RoleSeeder(IGenericRepository<Role> roleRepo, ILogger<RoleSeeder> logger)
         {
@@ -44,7 +45,14 @@ namespace CRM.Infrastructure.Seeders
                 await _roleRepo.AddAsync(role, default);
                 _logger.LogInformation("Account role created.");
             }
-
+            // Support
+            var support = await _roleRepo.GetByIdAsync(SupportRoleId, default);
+            if (support is null)
+            {
+                var role = Role.CreateWithID(SupportRoleId, "Support", "الدعم", "For Support Team");
+                await _roleRepo.AddAsync(role, default);
+                _logger.LogInformation("Support role created.");
+            }
             await _roleRepo.SaveChangesAsync();
             _logger.LogInformation("Roles Seeded Successfully.");
         }

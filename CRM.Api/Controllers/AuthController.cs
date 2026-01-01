@@ -1,7 +1,9 @@
 ﻿using BuildingBlock.Api;
 using BuildingBlock.Api.ControllerTemplate;
+using CRM.Application.Feature.AuthManagement.Command.ChangePassword;
 using CRM.Application.Feature.AuthManagement.Command.Login;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CRM.Api.Controllers
@@ -15,6 +17,14 @@ namespace CRM.Api.Controllers
 
         [HttpPost(nameof(Login))]
         public async Task<IActionResult> Login([FromBody] LoginCommand command, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(command, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [Authorize]
+        [HttpPost(nameof(ChangePassword))]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordCommand command, CancellationToken cancellationToken)
         {
             var result = await sender.Send(command, cancellationToken);
             return result.ToIActionResult();
