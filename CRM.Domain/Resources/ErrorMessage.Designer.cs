@@ -142,6 +142,24 @@ namespace CRM.Domain.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Description cannot be empty..
+        /// </summary>
+        public static string CloseTicket_Description_Empty {
+            get {
+                return ResourceManager.GetString("CloseTicket_Description_Empty", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Description must not exceed 2000 characters..
+        /// </summary>
+        public static string CloseTicket_Description_MaxLength {
+            get {
+                return ResourceManager.GetString("CloseTicket_Description_MaxLength", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Email is already in use.
         /// </summary>
         public static string Email_Exist {
@@ -327,6 +345,15 @@ namespace CRM.Domain.Resources {
         public static string Support_Password_Invalid {
             get {
                 return ResourceManager.GetString("Support_Password_Invalid", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Must Choose one supporter.
+        /// </summary>
+        public static string Supporter_Require {
+            get {
+                return ResourceManager.GetString("Supporter_Require", resourceCulture);
             }
         }
         

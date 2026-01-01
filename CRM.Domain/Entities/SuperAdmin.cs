@@ -32,5 +32,7 @@ namespace CRM.Domain.Entities
         public void UpdatePhoneNumber(string phoneNumber) => PhoneNumber = phoneNumber;
 
         public void UpdateRole(Guid roleId) => RoleId = roleId;
+
+        public void UpdateIsFirstLogin(bool isFirstLogin) => IsFirstLogin = isFirstLogin;
     }
 }

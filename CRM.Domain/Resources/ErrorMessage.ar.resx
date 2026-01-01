@@ -144,6 +144,12 @@
   <data name="ChangePassword_OldPassword_Required" xml:space="preserve">
     <value>كلمة المرور القديمة مطلوبة.</value>
   </data>
+  <data name="CloseTicket_Description_Empty" xml:space="preserve">
+    <value>الوصف لا يمكن أن يكون فارغًا.</value>
+  </data>
+  <data name="CloseTicket_Description_MaxLength" xml:space="preserve">
+    <value>الوصف يجب ألا يزيد عن 2000 حرف.</value>
+  </data>
   <data name="Email_Exist" xml:space="preserve">
     <value>هذا الايميل موجود بالفعل!</value>
   </data>
@@ -203,6 +209,9 @@
   </data>
   <data name="Site_Products_Empty" xml:space="preserve">
     <value>قائمة المنتجات لا يجب أن تكون فارغة عند إرسالها.</value>
+  </data>
+  <data name="Supporter_Require" xml:space="preserve">
+    <value>يجب ان تختار مسئول دعم فنى</value>
   </data>
   <data name="Support_Password_Invalid" xml:space="preserve">
     <value>كلمة المرور لا تحقق شروط الأمان المطلوبة.</value>

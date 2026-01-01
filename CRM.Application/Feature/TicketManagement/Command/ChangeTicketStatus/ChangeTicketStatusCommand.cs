@@ -7,7 +7,7 @@ namespace CRM.Application.Feature.TicketManagement.Command.ChangeTicketStatus
     {
         public Guid Id { get; init; }
         public string? Description { get; init; }
-        public TicketStatus Status { get; init; }
         public TicketSeverity Severity { get; init; }
+        public Guid SupportId { get; init; }
     }
 }

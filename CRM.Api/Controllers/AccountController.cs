@@ -3,12 +3,15 @@ using BuildingBlock.Api.ControllerTemplate;
 using CRM.Api.Attribute;
 using CRM.Application.Feature.AccountManagement.Command.Add;
 using CRM.Application.Feature.AccountManagement.Query.GetAll;
+using CRM.Application.Feature.AccountManagement.Query.GetSupporters;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CRM.Api.Controllers
 {
     [Route("api/[controller]")]
+    [Authorize]
     public class AccountController : ControllerTemplate
     {
         public AccountController(ISender sender) : base(sender)
@@ -26,6 +29,13 @@ namespace CRM.Api.Controllers
         [Permission("Platform:Centers:Read")]
         [HttpGet(nameof(GetAll))]
         public async Task<IActionResult> GetAll([FromQuery] GetAllAccountQuery query, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(query, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [HttpGet(nameof(GetSupporters))]
+        public async Task<IActionResult> GetSupporters([FromQuery] GetSupportersQuery query, CancellationToken cancellationToken)
         {
             var result = await sender.Send(query, cancellationToken);
             return result.ToIActionResult();

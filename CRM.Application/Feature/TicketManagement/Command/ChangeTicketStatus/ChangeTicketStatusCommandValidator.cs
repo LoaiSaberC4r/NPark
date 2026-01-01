@@ -11,9 +11,6 @@ namespace CRM.Application.Feature.TicketManagement.Command.ChangeTicketStatus
             RuleFor(x => x.Id)
                 .NotEmpty().WithMessage(ErrorMessage.Ticket_Id_Required);
 
-            RuleFor(x => x.Status)
-                .IsInEnum().WithMessage(ErrorMessage.Ticket_Status_Invalid);
-
             RuleFor(x => x.Severity)
                 .IsInEnum().WithMessage(ErrorMessage.Ticket_Severity_Invalid);
 
@@ -27,6 +24,8 @@ namespace CRM.Application.Feature.TicketManagement.Command.ChangeTicketStatus
                 RuleFor(x => x.Description!)
                     .MaximumLength(2000)
                     .WithMessage(ErrorMessage.Ticket_Description_MaxLength);
+                RuleFor(x => x.SupportId)
+                    .NotEmpty().WithMessage(ErrorMessage.Supporter_Require);
             });
         }
     }

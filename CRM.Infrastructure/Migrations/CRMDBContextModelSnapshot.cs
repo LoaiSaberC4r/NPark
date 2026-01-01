@@ -484,12 +484,12 @@ namespace CRM.Infrastructure.Migrations
 
             modelBuilder.Entity("CRM.Domain.Entities.Ticket", b =>
                 {
-                    b.HasOne("CRM.Domain.Entities.Account", "AssignedToUser")
+                    b.HasOne("CRM.Domain.Entities.SuperAdmin", "AssignedToUser")
                         .WithMany()
                         .HasForeignKey("AssignedTo")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("CRM.Domain.Entities.Account", "ClosedByUser")
+                    b.HasOne("CRM.Domain.Entities.SuperAdmin", "ClosedByUser")
                         .WithMany()
                         .HasForeignKey("ClosedBy")
                         .OnDelete(DeleteBehavior.Restrict);

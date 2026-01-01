@@ -12,9 +12,9 @@ namespace CRM.Application.Feature.AuthManagement.Command.ChangePassword
     internal sealed record ChangePasswordCommandHandler : ICommandHandler<ChangePasswordCommand>
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly ITokenReader _tokenReader;
         private readonly IGenericRepository<SuperAdmin> _superAdminRepository;
         private readonly IGenericRepository<Account> _accountRepository;
-        private readonly ITokenReader _tokenReader;
         private readonly IPasswordService _passwordService;
         public ChangePasswordCommandHandler(IHttpContextAccessor httpContextAccessor,
             IGenericRepository<SuperAdmin> superAdminRepository,
@@ -66,6 +66,7 @@ namespace CRM.Application.Feature.AuthManagement.Command.ChangePassword
                     }
                     var newPassword = _passwordService.Hash(request.NewPassword);
                     account.ChangePassword(newPassword);
+                    account.UpdateLoginStatus(false);
                     await _accountRepository.SaveChangesAsync(cancellationToken);
                     return Result.Ok();
                 }
@@ -84,6 +85,7 @@ namespace CRM.Application.Feature.AuthManagement.Command.ChangePassword
 
             var newPassword2 = _passwordService.Hash(request.NewPassword);
             user.UpdatePassword(newPassword2);
+            user.UpdateIsFirstLogin(false);
             await _superAdminRepository.SaveChangesAsync(cancellationToken);
 
             return Result.Ok();
