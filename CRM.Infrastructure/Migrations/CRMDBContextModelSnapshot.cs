@@ -319,6 +319,43 @@ namespace CRM.Infrastructure.Migrations
                     b.ToTable("SuperAdmins", (string)null);
                 });
 
+            modelBuilder.Entity("CRM.Domain.Entities.Supporter", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsFirstLogin")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Password")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("PhoneNumber")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoleId");
+
+                    b.ToTable("Supporter");
+                });
+
             modelBuilder.Entity("CRM.Domain.Entities.Ticket", b =>
                 {
                     b.Property<Guid>("Id")
@@ -357,6 +394,12 @@ namespace CRM.Infrastructure.Migrations
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("RejectReason")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("RejectedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("Severity")
                         .HasColumnType("int");
 
@@ -379,6 +422,8 @@ namespace CRM.Infrastructure.Migrations
                     b.HasIndex("Email");
 
                     b.HasIndex("ProductId");
+
+                    b.HasIndex("RejectedByUserId");
 
                     b.HasIndex("SiteId");
 
@@ -482,15 +527,26 @@ namespace CRM.Infrastructure.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("CRM.Domain.Entities.Supporter", b =>
+                {
+                    b.HasOne("CRM.Domain.Entities.Role", "Role")
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+                });
+
             modelBuilder.Entity("CRM.Domain.Entities.Ticket", b =>
                 {
-                    b.HasOne("CRM.Domain.Entities.SuperAdmin", "AssignedToUser")
-                        .WithMany()
+                    b.HasOne("CRM.Domain.Entities.Supporter", "AssignedToUser")
+                        .WithMany("AssignedTickets")
                         .HasForeignKey("AssignedTo")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("CRM.Domain.Entities.SuperAdmin", "ClosedByUser")
-                        .WithMany()
+                    b.HasOne("CRM.Domain.Entities.Supporter", "ClosedByUser")
+                        .WithMany("ClosedTickets")
                         .HasForeignKey("ClosedBy")
                         .OnDelete(DeleteBehavior.Restrict);
 
@@ -499,6 +555,11 @@ namespace CRM.Infrastructure.Migrations
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("CRM.Domain.Entities.Supporter", "RejectedByUser")
+                        .WithMany("RejectedTickets")
+                        .HasForeignKey("RejectedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("CRM.Domain.Entities.Site", "Site")
                         .WithMany("Tickets")
@@ -511,6 +572,8 @@ namespace CRM.Infrastructure.Migrations
                     b.Navigation("ClosedByUser");
 
                     b.Navigation("Product");
+
+                    b.Navigation("RejectedByUser");
 
                     b.Navigation("Site");
                 });
@@ -555,6 +618,15 @@ namespace CRM.Infrastructure.Migrations
                     b.Navigation("SiteProducts");
 
                     b.Navigation("Tickets");
+                });
+
+            modelBuilder.Entity("CRM.Domain.Entities.Supporter", b =>
+                {
+                    b.Navigation("AssignedTickets");
+
+                    b.Navigation("ClosedTickets");
+
+                    b.Navigation("RejectedTickets");
                 });
 
             modelBuilder.Entity("CRM.Domain.Entities.Ticket", b =>

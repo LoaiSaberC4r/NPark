@@ -127,8 +127,7 @@ namespace NPark.Application.Feature.PricingSchemaManagement.Command.Add
 
         private static PricingScheme CreateYearlyScheme(AddPricingSchemaCommand request)
         {
-            // لو عندك TotalDays للسنين ممكن تستخدمه، هنا fallback = 365
-            var totalDays = request.TotalDays ?? 365;
+            var totalDays = 365;
 
             return PricingScheme.Create(
                 name: request.Name,

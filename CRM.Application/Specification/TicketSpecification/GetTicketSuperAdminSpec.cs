@@ -33,9 +33,9 @@ namespace CRM.Application.Specification.TicketSpecification
                 SiteNameAr = x.Site.NameAr,
                 AccountNameEn = x.Site.Account.NameEn,
                 AccountNameAr = x.Site.Account.NameAr,
-                IsInSupport = (DateTime.Now < x.Site.SiteProducts.Where(u => u.SiteId == u.SiteId
+                IsInSupport = (DateTime.Now < x.Site.SiteProducts.Where(u => u.SiteId == x.SiteId
                 && u.ProductId == x.ProductId).First().SupportEndDate) ? true : false,
-                IsInProducts = (x.Site.SiteProducts.Any(u => u.SiteId == u.SiteId && u.ProductId == x.ProductId))
+                IsInProducts = (x.Site.SiteProducts.Any(u => u.SiteId == x.SiteId && u.ProductId == x.ProductId))
             });
             ApplyPaging(req.PageNumber, req.PageSize);
             UseNoTracking();

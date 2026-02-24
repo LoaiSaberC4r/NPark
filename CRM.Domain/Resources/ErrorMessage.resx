@@ -210,11 +210,29 @@
   <data name="Site_Products_Empty" xml:space="preserve">
     <value>Products list cannot be empty when provided</value>
   </data>
+  <data name="SupportActivities_Id_NotFound" xml:space="preserve">
+    <value>Supporter was not found.</value>
+  </data>
+  <data name="SupportActivities_Id_Required" xml:space="preserve">
+    <value>Id is required.</value>
+  </data>
   <data name="Supporter_Require" xml:space="preserve">
     <value>Must Choose one supporter</value>
   </data>
   <data name="Support_Password_Invalid" xml:space="preserve">
     <value>Password does not meet the required complexity.</value>
+  </data>
+  <data name="Support_RejectReason_MaxLength" xml:space="preserve">
+    <value>Reject reason must not exceed 500 characters.</value>
+  </data>
+  <data name="Support_RejectReason_Required" xml:space="preserve">
+    <value>Reject reason is required.</value>
+  </data>
+  <data name="Support_TicketId_NotFound" xml:space="preserve">
+    <value>Ticket was not found.</value>
+  </data>
+  <data name="Support_TicketId_Required" xml:space="preserve">
+    <value>Ticket Id is required.</value>
   </data>
   <data name="Ticket_Description_Empty" xml:space="preserve">
     <value>Description cannot be empty.</value>

@@ -11,6 +11,7 @@ namespace NPark.Application.Specifications.ParkingMembershipSpecification
         {
             Include(x => x.PricingScheme);
             Include(x => x.Attachments);
+            UseSingleQuery();
             if (request.SearchText != null)
             {
                 AddCriteria(x => x.Name.Contains(request.SearchText) ||
@@ -41,6 +42,7 @@ namespace NPark.Application.Specifications.ParkingMembershipSpecification
                 EndTime = x.PricingScheme.EndTime,
                 EndDate = x.EndDate,
                 CardNumber = x.CardNumber,
+                PricingSchemeId = x.PricingSchemeId,
                 VehicleImage = x.Attachments.Select(x => new GetAllParkingAttachment
                 {
                     FilePath = $"Media/{FileNames.ParkingMemberships}/{x.FilePath}",

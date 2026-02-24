@@ -349,6 +349,60 @@ namespace CRM.Domain.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Reject reason must not exceed 500 characters..
+        /// </summary>
+        public static string Support_RejectReason_MaxLength {
+            get {
+                return ResourceManager.GetString("Support_RejectReason_MaxLength", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Reject reason is required..
+        /// </summary>
+        public static string Support_RejectReason_Required {
+            get {
+                return ResourceManager.GetString("Support_RejectReason_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Ticket was not found..
+        /// </summary>
+        public static string Support_TicketId_NotFound {
+            get {
+                return ResourceManager.GetString("Support_TicketId_NotFound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Ticket Id is required..
+        /// </summary>
+        public static string Support_TicketId_Required {
+            get {
+                return ResourceManager.GetString("Support_TicketId_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Supporter was not found..
+        /// </summary>
+        public static string SupportActivities_Id_NotFound {
+            get {
+                return ResourceManager.GetString("SupportActivities_Id_NotFound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Id is required..
+        /// </summary>
+        public static string SupportActivities_Id_Required {
+            get {
+                return ResourceManager.GetString("SupportActivities_Id_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Must Choose one supporter.
         /// </summary>
         public static string Supporter_Require {

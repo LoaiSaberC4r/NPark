@@ -19,12 +19,15 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
         private readonly IGenericRepository<Ticket> _ticketRepository;
         private readonly IGenericRepository<ParkingSystemConfiguration> _parkingSystemConfigurationRepository;
         private readonly IGenericRepository<OrderPricingSchema> _orderPricingSchemaRepository;
+        private readonly IGenericRepository<Sanction> _repo;
+
         private readonly ILogger<CalculateSalaryCommandHandler> _logger;
 
         public CalculateSalaryCommandHandler(
             IGenericRepository<Ticket> ticketRepository,
             IGenericRepository<OrderPricingSchema> orderPricingSchemaRepository,
             IByteVerificationService byteVerificationService,
+            IGenericRepository<Sanction> repo,
             ILogger<CalculateSalaryCommandHandler> logger,
             IGenericRepository<ParkingSystemConfiguration> parkingSystemConfigurationRepository)
         {
@@ -33,6 +36,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
             _byteVerificationService = byteVerificationService ?? throw new ArgumentNullException(nameof(byteVerificationService));
             _parkingSystemConfigurationRepository = parkingSystemConfigurationRepository ?? throw new ArgumentNullException(nameof(parkingSystemConfigurationRepository));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _repo = repo ?? throw new ArgumentNullException(nameof(repo));
         }
 
         public async Task<Result<CalculateSalaryCommandResponse>> Handle(
@@ -118,7 +122,8 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
                 // ---------------------------
                 // 4) Calculate Total Salary
                 // ---------------------------
-                var duration = DateTime.Now - ticketEntity.StartDate;
+                var now = DateTime.Now;
+                var duration = now - ticketEntity.StartDate;
                 decimal totalSalary;
 
                 if (configuration.PriceType == PriceType.Enter)
@@ -127,7 +132,29 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
                 }
                 else
                 {
-                    totalSalary = await CalculateTotalSalaryAsync(duration, cancellationToken);
+                    if (IsWithinGracePeriod(duration, configuration.GracePeriod))
+                    {
+                        totalSalary = 0m;
+                    }
+                    else
+                    {
+                        totalSalary = await CalculateTotalSalaryAsync(duration, cancellationToken);
+                        if (request.SanctionIds is not null && request.SanctionIds is { Count: > 0 })
+                        {
+                            foreach (var sanction in request.SanctionIds.Distinct())
+                            {
+                                var entity = await _repo.GetByIdAsync(sanction, cancellationToken);
+                                if (entity is null)
+                                {
+                                    return Result<CalculateSalaryCommandResponse>.Fail(new Error(
+                                        Code: "Sanction.NotFound",
+                                        Message: ErrorMessage.Sanction_NotFound,
+                                        Type: ErrorType.NotFound));
+                                }
+                                totalSalary -= entity.Amount;
+                            }
+                        }
+                    }
                 }
 
                 // ---------------------------
@@ -280,6 +307,17 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
             totalSalary += lastSlotsCount * lastSalary;
 
             return totalSalary;
+        }
+
+        private static bool IsWithinGracePeriod(TimeSpan duration, TimeSpan? gracePeriod)
+        {
+            // لو مفيش GracePeriod اعتبره مفيش إعفاء
+            if (gracePeriod is null) return false;
+
+            // لو StartDate في المستقبل لأي سبب، متحسبش فلوس
+            if (duration <= TimeSpan.Zero) return true;
+
+            return duration <= gracePeriod.Value;
         }
     }
 }

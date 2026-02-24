@@ -8,4 +8,6 @@ public interface IJwtProvider
     Task<UserTokenDto> Generate(SuperAdmin user, CancellationToken cancellationToken = default);
 
     Task<UserTokenDto> GenerateAccount(Account user, CancellationToken cancellationToken = default);
+
+    Task<UserTokenDto> GenerateSupporter(Supporter user, CancellationToken cancellationToken = default);
 }

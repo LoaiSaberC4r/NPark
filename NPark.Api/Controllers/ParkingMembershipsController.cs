@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using NPark.Api.Attribute;
 using NPark.Application.Feature.ParkingMembershipsManagement.Command.Add;
+using NPark.Application.Feature.ParkingMembershipsManagement.Command.Update;
 using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetActiveMembership;
 using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetAll;
 using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetInactiveMembership;
@@ -60,6 +61,13 @@ namespace NPark.Api.Controllers
         public async Task<IActionResult> GetMembershipExpireNextSevenDays([FromQuery] GetMembershipExpireNextSevenDaysQuery query, CancellationToken cancellationToken)
         {
             var result = await sender.Send(query, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [HttpPut]
+        public async Task<IActionResult> Update([FromForm] UpdateParkingMembershipCommand command, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(command, cancellationToken);
             return result.ToIActionResult();
         }
     }

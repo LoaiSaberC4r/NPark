@@ -12,7 +12,7 @@ namespace NPark.Domain.Entities
 
         public int ExitGatesCount { get; private set; } = 1;    // عدد بوابات الخروج
         public int? AllowedParkingSlots { get; private set; } = 100; // عدد الباكيات المسموح
-        public TimeSpan? GracePeriod { get; private set; } = null!;
+        public TimeSpan? GracePeriod { get; private set; }
 
         // ===== Behavior Enums =====
         public PriceType PriceType { get; private set; } = PriceType.Exit;

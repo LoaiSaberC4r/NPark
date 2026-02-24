@@ -421,6 +421,15 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Parking membership not found.
+        /// </summary>
+        public static string Membership_NotFound {
+            get {
+                return ResourceManager.GetString("Membership_NotFound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Phone number is already used by another membership.
         /// </summary>
         public static string MembershipPhoneExists {
@@ -547,6 +556,42 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Cannot delete pricing schema because it is referenced by other data..
+        /// </summary>
+        public static string PricingScheme_Delete_ForeignKeyConflict {
+            get {
+                return ResourceManager.GetString("PricingScheme_Delete_ForeignKeyConflict", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Cannot delete pricing scheme because it is used by order pricing schema.
+        /// </summary>
+        public static string PricingScheme_Delete_Referenced {
+            get {
+                return ResourceManager.GetString("PricingScheme_Delete_Referenced", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Cannot delete pricing schema because it is referenced by memberships..
+        /// </summary>
+        public static string PricingScheme_Delete_ReferencedByMemberships {
+            get {
+                return ResourceManager.GetString("PricingScheme_Delete_ReferencedByMemberships", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Cannot delete pricing schema because it is referenced by orders..
+        /// </summary>
+        public static string PricingScheme_Delete_ReferencedByOrders {
+            get {
+                return ResourceManager.GetString("PricingScheme_Delete_ReferencedByOrders", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Unexpected error occurred while adding pricing scheme, please try again later.
         /// </summary>
         public static string PricingSchemeAddUnexpected {
@@ -606,6 +651,51 @@ namespace NPark.Domain.Resource {
         public static string SalaryCalculate_Unexpected {
             get {
                 return ResourceManager.GetString("SalaryCalculate_Unexpected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Sanction not found..
+        /// </summary>
+        public static string Sanction_NotFound {
+            get {
+                return ResourceManager.GetString("Sanction_NotFound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Sanction amount must be greater than zero..
+        /// </summary>
+        public static string SanctionAmount_Invalid {
+            get {
+                return ResourceManager.GetString("SanctionAmount_Invalid", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to SanctionAmount_Required.
+        /// </summary>
+        public static string SanctionAmount_Required {
+            get {
+                return ResourceManager.GetString("SanctionAmount_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Sanction id is required..
+        /// </summary>
+        public static string SanctionId_Required {
+            get {
+                return ResourceManager.GetString("SanctionId_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Sanction name is required..
+        /// </summary>
+        public static string SanctionName_Required {
+            get {
+                return ResourceManager.GetString("SanctionName_Required", resourceCulture);
             }
         }
         

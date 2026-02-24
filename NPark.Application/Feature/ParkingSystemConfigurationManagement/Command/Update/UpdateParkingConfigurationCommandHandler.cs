@@ -286,11 +286,9 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             {
                 if (!existingGateById.TryGetValue(gateInfo.GateId!.Value, out var gate))
                 {
-                    continue; // أو ممكن تعتبرها Error حسب البيزنس
+                    continue;
                 }
 
-                // بافترض إن عندك Domain method لتحديث بيانات الجيت
-                // لو مفيش، ممكن تعمل Setters أو Method زي UpdateGateInfo
                 gate.UpdateGateInfo(
                     gateNumber: gateInfo.GateNumber,
                     gateType: gateType,

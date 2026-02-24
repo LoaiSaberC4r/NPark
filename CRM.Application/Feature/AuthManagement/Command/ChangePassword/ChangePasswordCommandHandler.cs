@@ -15,18 +15,22 @@ namespace CRM.Application.Feature.AuthManagement.Command.ChangePassword
         private readonly ITokenReader _tokenReader;
         private readonly IGenericRepository<SuperAdmin> _superAdminRepository;
         private readonly IGenericRepository<Account> _accountRepository;
+        private readonly IGenericRepository<Supporter> _supportrepository;
+
         private readonly IPasswordService _passwordService;
         public ChangePasswordCommandHandler(IHttpContextAccessor httpContextAccessor,
             IGenericRepository<SuperAdmin> superAdminRepository,
             IGenericRepository<Account> accountRepository,
             ITokenReader tokenReader,
-            IPasswordService passwordService)
+            IPasswordService passwordService,
+            IGenericRepository<Supporter> supportrepository)
         {
             _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
             _superAdminRepository = superAdminRepository ?? throw new ArgumentNullException(nameof(superAdminRepository));
             _accountRepository = accountRepository ?? throw new ArgumentNullException(nameof(accountRepository));
             _tokenReader = tokenReader ?? throw new ArgumentNullException(nameof(tokenReader));
             _passwordService = passwordService ?? throw new ArgumentNullException(nameof(passwordService));
+            _supportrepository = supportrepository ?? throw new ArgumentNullException(nameof(supportrepository));
         }
         public async Task<Result> Handle(ChangePasswordCommand request, CancellationToken cancellationToken)
         {
@@ -47,11 +51,27 @@ namespace CRM.Application.Feature.AuthManagement.Command.ChangePassword
                 var account = await _accountRepository.GetByIdAsync(token.UserId.Value, cancellationToken);
                 if (account is null)
                 {
-                    return Result.Fail(new Error(
+                    //Supporter
+                    var supporter = await _supportrepository.GetByIdAsync(token.UserId.Value, cancellationToken);
+                    if (supporter is null)
+                    {
+                        return Result.Fail(new Error(
                             Code: "user.NotFound",
                             Message: ErrorMessage.WrongLoginCredintial,
                             Type: ErrorType.Security
                             ));
+                    }
+                    var supportresult = _passwordService.Verify(request.OldPassword, supporter.Password);
+                    if (!supportresult)
+                    {
+                        return Result.Fail(new Error(
+                            Code: "user.NotFound",
+                            Message: ErrorMessage.WrongLoginCredintial,
+                            Type: ErrorType.Security
+                            ));
+                    }
+                    supporter.UpdatePassword(_passwordService.Hash(request.NewPassword));
+                    return Result.Ok();
                 }
                 {
                     //2- Check Password

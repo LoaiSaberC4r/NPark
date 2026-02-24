@@ -5,32 +5,33 @@ using BuildingBlock.Domain.Results;
 using CRM.Application.Abstraction;
 using CRM.Application.Shared.Dto;
 using CRM.Domain.Entities;
+using CRM.Domain.FileName;
 
 namespace CRM.Application.Feature.SupportManagement.Command.Add
 {
     internal sealed record AddSupportCommandHandler : ICommandHandler<AddSupportCommand>
     {
-        private readonly IGenericRepository<SuperAdmin> _superAdminRepository;
+        private readonly IGenericRepository<Supporter> _supporterRepository;
         private readonly IEmailSender _emailSender;
         private readonly IPasswordService _passwordService;
-        public AddSupportCommandHandler(IGenericRepository<SuperAdmin> superAdminRepository, IEmailSender emailSender, IPasswordService passwordService)
+        public AddSupportCommandHandler(IGenericRepository<Supporter> superAdminRepository, IEmailSender emailSender, IPasswordService passwordService)
         {
-            _superAdminRepository = superAdminRepository ?? throw new ArgumentNullException(nameof(superAdminRepository));
+            _supporterRepository = superAdminRepository ?? throw new ArgumentNullException(nameof(superAdminRepository));
             _emailSender = emailSender ?? throw new ArgumentNullException(nameof(emailSender));
             _passwordService = passwordService ?? throw new ArgumentNullException(nameof(passwordService));
         }
         public async Task<Result> Handle(AddSupportCommand request, CancellationToken cancellationToken)
         {
             var password = _passwordService.Hash(request.Password);
-            var supportAdmin = SuperAdmin.Create(
+            var supportAdmin = Supporter.Create(
                   email: request.Email,
                   password: password,
                   phoneNumber: request.PhoneNumber ?? string.Empty
               );
 
-            await _superAdminRepository.AddAsync(supportAdmin, cancellationToken);
-            supportAdmin.UpdateRole(new Guid("a27ac10b-58cc-4372-a567-0e02b2c3d479"));
-            await _superAdminRepository.SaveChangesAsync(cancellationToken);
+            await _supporterRepository.AddAsync(supportAdmin, cancellationToken);
+            supportAdmin.UpdateRole(RoleName.SupportRoleId);
+            await _supporterRepository.SaveChangesAsync(cancellationToken);
             _emailSender.SendAsync(
                                new EmailMessage(
                                    To: request.Email,

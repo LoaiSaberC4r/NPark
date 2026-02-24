@@ -210,11 +210,29 @@
   <data name="Site_Products_Empty" xml:space="preserve">
     <value>قائمة المنتجات لا يجب أن تكون فارغة عند إرسالها.</value>
   </data>
+  <data name="SupportActivities_Id_NotFound" xml:space="preserve">
+    <value>الداعم غير موجود</value>
+  </data>
+  <data name="SupportActivities_Id_Required" xml:space="preserve">
+    <value>الـ Id مطلوب.</value>
+  </data>
   <data name="Supporter_Require" xml:space="preserve">
     <value>يجب ان تختار مسئول دعم فنى</value>
   </data>
   <data name="Support_Password_Invalid" xml:space="preserve">
     <value>كلمة المرور لا تحقق شروط الأمان المطلوبة.</value>
+  </data>
+  <data name="Support_RejectReason_MaxLength" xml:space="preserve">
+    <value>سبب الرفض لازم مايزيدش عن 500 حرف.</value>
+  </data>
+  <data name="Support_RejectReason_Required" xml:space="preserve">
+    <value>سبب الرفض مطلوب.</value>
+  </data>
+  <data name="Support_TicketId_NotFound" xml:space="preserve">
+    <value>التذكرة غير موجودة.</value>
+  </data>
+  <data name="Support_TicketId_Required" xml:space="preserve">
+    <value>رقم التذكرة مطلوب.</value>
   </data>
   <data name="Ticket_Description_Empty" xml:space="preserve">
     <value>الوصف لا يمكن أن يكون فارغًا.</value>

@@ -11,6 +11,7 @@ namespace CRM.Domain.Entities
         public string Email { get; private set; } = string.Empty;
         public string Subject { get; private set; } = string.Empty;
         public string? PhoneNumber { get; private set; } = string.Empty;
+        public string? RejectReason { get; private set; } = string.Empty;
         public TicketStatus Status { get; private set; }
         public TicketSeverity Severity { get; private set; }
         public Guid SiteId { get; private set; }
@@ -19,11 +20,14 @@ namespace CRM.Domain.Entities
         public Product Product { get; private set; }
         public IReadOnlyList<TicketAttachment> Attachments => _attachments;
         public Guid? AssignedTo { get; private set; }
-        public SuperAdmin? AssignedToUser { get; private set; }
+        public Supporter? AssignedToUser { get; private set; }
         public Guid? ClosedBy { get; private set; }
-        public SuperAdmin? ClosedByUser { get; private set; }
+        public Supporter? ClosedByUser { get; private set; }
         public DateTime? ClosedDateUtc { get; private set; }
         public TimeSpan? TimeTakenToClose => ClosedDateUtc.HasValue ? CreatedOnUtc.Subtract(ClosedDateUtc.Value) : null;
+
+        public Guid? RejectedByUserId { get; private set; }
+        public Supporter? RejectedByUser { get; private set; }
 
         private Ticket()
         { }
@@ -60,6 +64,12 @@ namespace CRM.Domain.Entities
             UpdateStatus(TicketStatus.Closed);
             ClosedBy = userId;
             ClosedDateUtc = DateTime.UtcNow;
+        }
+
+        public void RejectTicket(string rejectReason)
+        {
+            UpdateStatus(TicketStatus.Rejected);
+            RejectReason = rejectReason;
         }
     }
 }

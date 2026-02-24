@@ -362,4 +362,34 @@
   <data name="TicketAlreadyExited" xml:space="preserve">
     <value>تم خروج التذكرة بالفعل</value>
   </data>
+  <data name="PricingScheme_Delete_Referenced" xml:space="preserve">
+    <value>مينفعش تمسح التسعير ده لأنه مستخدم في Order Pricing Schema.</value>
+  </data>
+  <data name="PricingScheme_Delete_ReferencedByOrders" xml:space="preserve">
+    <value>لا يمكن حذف مخطط التسعير لأنه مرتبط بطلبات.</value>
+  </data>
+  <data name="PricingScheme_Delete_ReferencedByMemberships" xml:space="preserve">
+    <value>لا يمكن حذف مخطط التسعير لأنه مرتبط باشتراكات/عضويات.</value>
+  </data>
+  <data name="PricingScheme_Delete_ForeignKeyConflict" xml:space="preserve">
+    <value>لا يمكن حذف مخطط التسعير لأنه مرتبط ببيانات أخرى.</value>
+  </data>
+  <data name="Membership_NotFound" xml:space="preserve">
+    <value>الاشتراك غير موجود</value>
+  </data>
+  <data name="SanctionId_Required" xml:space="preserve">
+    <value>معرّف المخالفة مطلوب.</value>
+  </data>
+  <data name="SanctionName_Required" xml:space="preserve">
+    <value>اسم المخالفة مطلوب.</value>
+  </data>
+  <data name="SanctionAmount_Required" xml:space="preserve">
+    <value>قيمة المخالفة مطلوبة.</value>
+  </data>
+  <data name="SanctionAmount_Invalid" xml:space="preserve">
+    <value>قيمة المخالفة لازم تكون أكبر من صفر.</value>
+  </data>
+  <data name="Sanction_NotFound" xml:space="preserve">
+    <value>المخالفة غير موجودة.</value>
+  </data>
 </root>

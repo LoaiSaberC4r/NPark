@@ -5,5 +5,6 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
     public sealed record CalculateSalaryCommand : ICommand<CalculateSalaryCommandResponse>
     {
         public string QrCode { get; init; } = string.Empty;
+        public IReadOnlyCollection<Guid>? SanctionIds { get; init; }
     }
 }

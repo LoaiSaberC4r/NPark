@@ -56,7 +56,7 @@ namespace CRM.Application.Feature.SupportManagement.Command.CloseTicket
               HtmlBody: $"<p>Ticket closed  With Subject {ticket.Subject} has been closed and the description : {request.Description ?? string.Empty}" +
               $" has been sent to you.</p><p><b>Id:</b> {ticket.Subject} .</p><p><b>Description:</b  : {request.Description ?? string.Empty}</p>"),
           cancellationToken);
-            throw new NotImplementedException();
+            return Result.Ok();
         }
     }
 }

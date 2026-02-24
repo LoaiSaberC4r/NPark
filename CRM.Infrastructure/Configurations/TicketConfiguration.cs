@@ -20,8 +20,22 @@ namespace CRM.Infrastructure.Configurations
             builder.HasMany(x => x.Attachments).WithOne(x => x.Ticket).HasForeignKey(x => x.TicketId).OnDelete(DeleteBehavior.Cascade);
             builder.HasOne(x => x.Site).WithMany(x => x.Tickets).HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.Cascade);
             builder.HasOne(x => x.Product).WithMany(x => x.Tickets).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
-            builder.HasOne(x => x.AssignedToUser).WithMany().HasForeignKey(x => x.AssignedTo).OnDelete(DeleteBehavior.Restrict).IsRequired(false);
-            builder.HasOne(x => x.ClosedByUser).WithMany().HasForeignKey(x => x.ClosedBy).OnDelete(DeleteBehavior.Restrict).IsRequired(false);
+            builder.HasOne(x => x.AssignedToUser)
+                .WithMany(s => s.AssignedTickets)
+                .HasForeignKey(x => x.AssignedTo)
+                .OnDelete(DeleteBehavior.Restrict).IsRequired(false);
+
+            builder.HasOne(x => x.RejectedByUser)
+        .WithMany(s => s.RejectedTickets)
+        .HasForeignKey(x => x.RejectedByUserId)
+        .OnDelete(DeleteBehavior.Restrict).IsRequired(false);
+
+            builder.HasOne(x => x.ClosedByUser)
+                .WithMany(s => s.ClosedTickets)
+                .HasForeignKey(x => x.ClosedBy)
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired(false);
+
             builder.HasIndex(x => x.Email);
         }
     }

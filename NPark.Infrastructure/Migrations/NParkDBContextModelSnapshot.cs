@@ -431,6 +431,33 @@ namespace NPark.Infrastructure.Migrations
                     b.ToTable("RolePermission");
                 });
 
+            modelBuilder.Entity("NPark.Domain.Entities.Sanction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ModifiedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Sanctions", (string)null);
+                });
+
             modelBuilder.Entity("NPark.Domain.Entities.Ticket", b =>
                 {
                     b.Property<Guid>("Id")
