@@ -9,12 +9,14 @@ using NPark.Application.Feature.TicketsManagement.Command.CalculateSalaryForSubs
 using NPark.Application.Feature.TicketsManagement.Command.CollectDailyTicket;
 using NPark.Application.Feature.TicketsManagement.Command.ColletByCachier;
 using NPark.Application.Feature.TicketsManagement.Command.ExitTicket;
+using NPark.Application.Feature.TicketsManagement.Command.ScanQrCode;
 using NPark.Application.Feature.TicketsManagement.Command.SearchTicket;
 using NPark.Application.Feature.TicketsManagement.Query.GetEntryTicketForAdmin;
 using NPark.Application.Feature.TicketsManagement.Query.GetExitTicketForAdmin;
 using NPark.Application.Feature.TicketsManagement.Query.GetTicketForEntryGate;
 using NPark.Application.Feature.TicketsManagement.Query.GetTicketForExitGate;
 using NPark.Application.Feature.TicketsManagement.Query.GetTicketInsidePark;
+using NPark.Application.Feature.TicketsManagement.Query.ReportTickets;
 
 namespace NPark.Api.Controllers
 {
@@ -109,6 +111,20 @@ namespace NPark.Api.Controllers
 
         [HttpGet(nameof(TicketsInsidePark))]
         public async Task<IActionResult> TicketsInsidePark([FromQuery] GetTicketInsideParkQuery query, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(query, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [HttpPost(nameof(ScanTicket))]
+        public async Task<IActionResult> ScanTicket([FromBody] ScanQrCodeCommand command, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(command, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [HttpGet(nameof(Report))]
+        public async Task<IActionResult> Report([FromQuery] ReportTicketsQuery query, CancellationToken cancellationToken)
         {
             var result = await sender.Send(query, cancellationToken);
             return result.ToIActionResult();

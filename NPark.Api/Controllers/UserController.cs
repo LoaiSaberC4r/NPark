@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using NPark.Api.Attribute;
 using NPark.Application.Feature.UserManagement.Command.Add;
+using NPark.Application.Feature.UserManagement.Command.Delete;
 using NPark.Application.Feature.UserManagement.Command.Update;
 using NPark.Application.Feature.UserManagement.Query.GetUsers;
 
@@ -35,6 +36,14 @@ namespace NPark.Api.Controllers
         [Permission("Create")]
         [HttpPost(nameof(Create))]
         public async Task<IActionResult> Create([FromBody] AddUserCommand command, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(command, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [Permission("Delete")]
+        [HttpDelete]
+        public async Task<IActionResult> Delete([FromQuery] DeleteSystemUserCommand command, CancellationToken cancellationToken)
         {
             var result = await sender.Send(command, cancellationToken);
             return result.ToIActionResult();

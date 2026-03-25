@@ -544,6 +544,92 @@ namespace NPark.Infrastructure.Migrations
                     b.ToTable("Tickets", (string)null);
                 });
 
+            modelBuilder.Entity("NPark.Domain.Entities.TicketArchive", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CardNumber")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("CollectedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CollectedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("EndDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("ExceedPrice")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<Guid>("ExitGateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("GateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsCashierCollected")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsCollected")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsSubscriber")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("ModifiedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("StartDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("SubscriberNationalId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UniqueCode")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<byte[]>("UniqueGuidPart")
+                        .IsRequired()
+                        .HasColumnType("BINARY(4)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("VehicleNumber")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CollectedBy");
+
+                    b.HasIndex("GateId");
+
+                    b.HasIndex("UniqueGuidPart")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("TicketArchive");
+                });
+
             modelBuilder.Entity("NPark.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -677,6 +763,32 @@ namespace NPark.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("NPark.Domain.Entities.Ticket", b =>
+                {
+                    b.HasOne("NPark.Domain.Entities.User", "UserCollector")
+                        .WithMany()
+                        .HasForeignKey("CollectedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("NPark.Domain.Entities.ParkingGate", "ParkingGate")
+                        .WithMany()
+                        .HasForeignKey("GateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NPark.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ParkingGate");
+
+                    b.Navigation("User");
+
+                    b.Navigation("UserCollector");
+                });
+
+            modelBuilder.Entity("NPark.Domain.Entities.TicketArchive", b =>
                 {
                     b.HasOne("NPark.Domain.Entities.User", "UserCollector")
                         .WithMany()

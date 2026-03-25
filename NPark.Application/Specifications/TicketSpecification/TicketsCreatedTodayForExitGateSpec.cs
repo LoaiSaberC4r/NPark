@@ -4,7 +4,7 @@ using NPark.Domain.Entities;
 
 namespace NPark.Application.Specifications.TicketSpecification
 {
-    internal class TicketsCreatedTodayForExitGateSpec : Specification<Ticket, GetTicketInfo>
+    internal class TicketsCreatedTodayForExitGateSpec : Specification<TicketArchive, GetTicketInfo>
     {
         public TicketsCreatedTodayForExitGateSpec()
         {
@@ -12,7 +12,7 @@ namespace NPark.Application.Specifications.TicketSpecification
             var start = date;
             var end = date.AddDays(1);
             AddCriteria(t => t.CreatedOnUtc >= start && t.CreatedOnUtc < end);
-            AddCriteria(x => x.EndDate != null && x.EndDate.HasValue && !x.IsCollected);
+            AddCriteria(x => !x.IsCollected);
             UseNoTracking();
             Select(x => new GetTicketInfo
             {

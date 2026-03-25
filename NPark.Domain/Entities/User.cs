@@ -33,5 +33,7 @@ namespace NPark.Domain.Entities
         public void UpdateNationalId(string nationalId) => NationalId = nationalId;
 
         public void SetRole(Guid roleId) => RoleId = roleId;
+
+        public void UpdatePassword(string passwordHash) => PasswordHash = passwordHash;
     }
 }

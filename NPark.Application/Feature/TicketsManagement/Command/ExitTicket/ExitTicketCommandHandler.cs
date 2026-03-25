@@ -15,6 +15,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ExitTicket
     public sealed class ExitTicketCommandHandler : ICommandHandler<ExitTicketCommand>
     {
         private readonly IGenericRepository<Ticket> _ticketRepository;
+        private readonly IGenericRepository<TicketArchive> _ticketArchiveRepository;
         private readonly ITokenReader _tokenReader;
         private readonly IGenericRepository<ParkingGate> _parkingGateRepository;
 
@@ -24,6 +25,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ExitTicket
 
         public ExitTicketCommandHandler(IGenericRepository<Ticket> ticketRepository,
             IHttpContextAccessor httpContextAccessor, ITokenReader tokenReader,
+            IGenericRepository<TicketArchive> ticketArchiveRepository,
             IRealtimeNotifier realTimeNotifier, ILogger<ExitTicketCommandHandler> logger, IGenericRepository<ParkingGate> parkingGateRepository)
         {
             _ticketRepository = ticketRepository;
@@ -32,6 +34,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ExitTicket
             _realtimeNotifier = realTimeNotifier;
             _logger = logger;
             _parkingGateRepository = parkingGateRepository;
+            _ticketArchiveRepository = ticketArchiveRepository;
         }
 
         public async Task<Result> Handle(ExitTicketCommand request, CancellationToken cancellationToken)
@@ -74,19 +77,34 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ExitTicket
                         Message: ErrorMessage.Ticket_NotFound,
                         Type: ErrorType.NotFound));
             }
+            if (!ticketEntity.IsCashierCollected)
+            {
+                return Result.Fail(
+                    new Error(
+                        Code: "Ticket.NotCollected",
+                        Message: ErrorMessage.Ticket_CashierCollected_Required,
+                        Type: ErrorType.Conflict));
+            }
             if (ticketEntity.EndDate.HasValue)
             {
                 return Result.Fail(
                     new Error(
                         Code: "Ticket.AlreadyExited",
                         Message: ErrorMessage.TicketAlreadyExited,
-                        Type: ErrorType.Domain));
+                        Type: ErrorType.Conflict));
             }
             ticketEntity.SetExitGate(gateId);
             ticketEntity.SetExitDate();
 
             await _ticketRepository.SaveChangesAsync(cancellationToken);
             await NotifyDashboardTicketExitedAsync(ticketEntity, gateId, userId, gateInfo, cancellationToken);
+            var ticketArchive = TicketArchive.CreateFromTicket(ticketEntity);
+
+            await _ticketArchiveRepository.AddAsync(ticketArchive, cancellationToken);
+            await _ticketArchiveRepository.SaveChangesAsync(cancellationToken);
+            _ticketRepository.Delete(ticketEntity);
+            await _ticketRepository.SaveChangesAsync(cancellationToken);
+
             return Result.Ok();
         }
 

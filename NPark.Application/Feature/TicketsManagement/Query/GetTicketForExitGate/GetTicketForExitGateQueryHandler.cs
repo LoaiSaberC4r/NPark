@@ -8,9 +8,9 @@ namespace NPark.Application.Feature.TicketsManagement.Query.GetTicketForExitGate
 {
     public sealed class GetTicketForExitGateQueryHandler : IQueryHandler<GetTicketForExitGateQuery, GetTicketForExitGateQueryResponse>
     {
-        private readonly IGenericRepository<Ticket> _repo;
+        private readonly IGenericRepository<TicketArchive> _repo;
 
-        public GetTicketForExitGateQueryHandler(IGenericRepository<Ticket> repository)
+        public GetTicketForExitGateQueryHandler(IGenericRepository<TicketArchive> repository)
         {
             _repo = repository ?? throw new ArgumentNullException(nameof(repository));
         }

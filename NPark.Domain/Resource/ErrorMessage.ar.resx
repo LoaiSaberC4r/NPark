@@ -392,4 +392,28 @@
   <data name="Sanction_NotFound" xml:space="preserve">
     <value>المخالفة غير موجودة.</value>
   </data>
+  <data name="UserManagement_RoleId_AdminImmutable" xml:space="preserve">
+    <value>لا يمكن تغيير دور الأدمن.</value>
+  </data>
+  <data name="UserManagement_Id_NotFound" xml:space="preserve">
+    <value>المستخدم غير موجود.</value>
+  </data>
+  <data name="UserManagement_Password_Invalid" xml:space="preserve">
+    <value>كلمة المرور يجب أن تكون من 8 إلى 128 حرف وتحتوي على حرف كبير وصغير ورقم ورمز خاص.</value>
+  </data>
+  <data name="Ticket_CashierCollected_Required" xml:space="preserve">
+    <value>يجب تحصيل التذكرة من الكاشير أولاً</value>
+  </data>
+  <data name="ReportTickets_FromDate_Required" xml:space="preserve">
+    <value>تاريخ البداية مطلوب</value>
+  </data>
+  <data name="ReportTickets_ToDate_Required" xml:space="preserve">
+    <value>تاريخ النهاية مطلوب</value>
+  </data>
+  <data name="ReportTickets_ToDate_GreaterThanOrEqualFromDate" xml:space="preserve">
+    <value>تاريخ النهاية لازم يكون أكبر من أو يساوي تاريخ البداية</value>
+  </data>
+  <data name="ReportTickets_SearchTerm_MaxLength" xml:space="preserve">
+    <value>كلمة البحث لا يجب أن تتجاوز الحد المسموح</value>
+  </data>
 </root>

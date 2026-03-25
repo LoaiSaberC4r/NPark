@@ -628,6 +628,42 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to From date is required.
+        /// </summary>
+        public static string ReportTickets_FromDate_Required {
+            get {
+                return ResourceManager.GetString("ReportTickets_FromDate_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Search term must not exceed the allowed length.
+        /// </summary>
+        public static string ReportTickets_SearchTerm_MaxLength {
+            get {
+                return ResourceManager.GetString("ReportTickets_SearchTerm_MaxLength", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to To date must be greater than or equal to from date.
+        /// </summary>
+        public static string ReportTickets_ToDate_GreaterThanOrEqualFromDate {
+            get {
+                return ResourceManager.GetString("ReportTickets_ToDate_GreaterThanOrEqualFromDate", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to To date is required.
+        /// </summary>
+        public static string ReportTickets_ToDate_Required {
+            get {
+                return ResourceManager.GetString("ReportTickets_ToDate_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Role does not exist..
         /// </summary>
         public static string Role_Exist {
@@ -723,6 +759,15 @@ namespace NPark.Domain.Resource {
         public static string Ticket_AlreadyCollected {
             get {
                 return ResourceManager.GetString("Ticket_AlreadyCollected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Ticket must be collected by cashier first..
+        /// </summary>
+        public static string Ticket_CashierCollected_Required {
+            get {
+                return ResourceManager.GetString("Ticket_CashierCollected_Required", resourceCulture);
             }
         }
         
@@ -831,6 +876,33 @@ namespace NPark.Domain.Resource {
         public static string Unique_Phone {
             get {
                 return ResourceManager.GetString("Unique_Phone", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to User was not found..
+        /// </summary>
+        public static string UserManagement_Id_NotFound {
+            get {
+                return ResourceManager.GetString("UserManagement_Id_NotFound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Password must be 8–128 characters and include uppercase, lowercase, number, and special character..
+        /// </summary>
+        public static string UserManagement_Password_Invalid {
+            get {
+                return ResourceManager.GetString("UserManagement_Password_Invalid", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Admin role cannot be changed..
+        /// </summary>
+        public static string UserManagement_RoleId_AdminImmutable {
+            get {
+                return ResourceManager.GetString("UserManagement_RoleId_AdminImmutable", resourceCulture);
             }
         }
         

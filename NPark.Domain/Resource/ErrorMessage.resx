@@ -390,4 +390,28 @@
   <data name="Sanction_NotFound" xml:space="preserve">
     <value>Sanction not found.</value>
   </data>
+  <data name="UserManagement_RoleId_AdminImmutable" xml:space="preserve">
+    <value>Admin role cannot be changed.</value>
+  </data>
+  <data name="UserManagement_Id_NotFound" xml:space="preserve">
+    <value>User was not found.</value>
+  </data>
+  <data name="UserManagement_Password_Invalid" xml:space="preserve">
+    <value>Password must be 8–128 characters and include uppercase, lowercase, number, and special character.</value>
+  </data>
+  <data name="Ticket_CashierCollected_Required" xml:space="preserve">
+    <value>Ticket must be collected by cashier first.</value>
+  </data>
+  <data name="ReportTickets_FromDate_Required" xml:space="preserve">
+    <value>From date is required</value>
+  </data>
+  <data name="ReportTickets_ToDate_Required" xml:space="preserve">
+    <value>To date is required</value>
+  </data>
+  <data name="ReportTickets_ToDate_GreaterThanOrEqualFromDate" xml:space="preserve">
+    <value>To date must be greater than or equal to from date</value>
+  </data>
+  <data name="ReportTickets_SearchTerm_MaxLength" xml:space="preserve">
+    <value>Search term must not exceed the allowed length</value>
+  </data>
 </root>

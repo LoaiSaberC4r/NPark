@@ -2,10 +2,8 @@
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
 using Microsoft.Extensions.Logging;
-using NPark.Application.Abstraction.Security;
 using NPark.Application.Specifications.OrderPriceSchemaSpecification;
 using NPark.Application.Specifications.ParkingSystemConfigurationSpec;
-using NPark.Application.Specifications.TicketSpecification;
 using NPark.Domain.Entities;
 using NPark.Domain.Enums;
 using NPark.Domain.Resource;
@@ -15,7 +13,6 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
     public sealed class CalculateSalaryCommandHandler
        : ICommandHandler<CalculateSalaryCommand, CalculateSalaryCommandResponse>
     {
-        private readonly IByteVerificationService _byteVerificationService;
         private readonly IGenericRepository<Ticket> _ticketRepository;
         private readonly IGenericRepository<ParkingSystemConfiguration> _parkingSystemConfigurationRepository;
         private readonly IGenericRepository<OrderPricingSchema> _orderPricingSchemaRepository;
@@ -26,14 +23,12 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
         public CalculateSalaryCommandHandler(
             IGenericRepository<Ticket> ticketRepository,
             IGenericRepository<OrderPricingSchema> orderPricingSchemaRepository,
-            IByteVerificationService byteVerificationService,
             IGenericRepository<Sanction> repo,
             ILogger<CalculateSalaryCommandHandler> logger,
             IGenericRepository<ParkingSystemConfiguration> parkingSystemConfigurationRepository)
         {
             _ticketRepository = ticketRepository ?? throw new ArgumentNullException(nameof(ticketRepository));
             _orderPricingSchemaRepository = orderPricingSchemaRepository ?? throw new ArgumentNullException(nameof(orderPricingSchemaRepository));
-            _byteVerificationService = byteVerificationService ?? throw new ArgumentNullException(nameof(byteVerificationService));
             _parkingSystemConfigurationRepository = parkingSystemConfigurationRepository ?? throw new ArgumentNullException(nameof(parkingSystemConfigurationRepository));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _repo = repo ?? throw new ArgumentNullException(nameof(repo));
@@ -48,51 +43,10 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
             try
             {
                 // ---------------------------
-                // 1) Decode & validate QR code
-                // ---------------------------
-                byte[] bytes;
-                try
-                {
-                    bytes = _byteVerificationService.DecodeBase64ToBytes(request.QrCode);
-                }
-                catch (FormatException ex)
-                {
-                    _logger.LogWarning(ex, "Invalid QR code format: {QrCode}", request.QrCode);
-
-                    return Result<CalculateSalaryCommandResponse>.Fail(
-                        new Error(
-                            Code: "QrCode.InvalidFormat",
-                            Message: ErrorMessage.QrInvalid,
-                            Type: ErrorType.Validation));
-                }
-
-                if (bytes is null || bytes.Length < 5)
-                {
-                    _logger.LogWarning("QR code bytes length is invalid. Length: {Length}", bytes?.Length);
-
-                    return Result<CalculateSalaryCommandResponse>.Fail(
-                        new Error(
-                            Code: "QrCode.InvalidBytes",
-                            Message: ErrorMessage.QrInvalid,
-                            Type: ErrorType.Validation));
-                }
-
-                if (!_byteVerificationService.VerifyByte5(bytes))
-                {
-                    _logger.LogWarning("QR code checksum (byte5) verification failed for QR: {QrCode}", request.QrCode);
-
-                    return Result<CalculateSalaryCommandResponse>.Fail(
-                        new Error(
-                            Code: "QrCode.InvalidChecksum",
-                            Message: ErrorMessage.QrInvalid,
-                            Type: ErrorType.Validation));
-                }
-
-                // ---------------------------
                 // 2) Retrieve Ticket
                 // Unique part = first 4 bytes of QR
                 // ---------------------------
-                var ticketEntity = await GetTicketEntity(bytes, cancellationToken);
+                var ticketEntity = await _ticketRepository.GetByIdAsync(request.TicketId, cancellationToken);
                 if (ticketEntity is null)
                 {
                     _logger.LogWarning("Ticket not found for QR bytes.");
@@ -151,7 +105,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
                                         Message: ErrorMessage.Sanction_NotFound,
                                         Type: ErrorType.NotFound));
                                 }
-                                totalSalary -= entity.Amount;
+                                totalSalary += entity.Amount;
                             }
                         }
                     }
@@ -191,17 +145,6 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
                         Message: ErrorMessage.SalaryCalculate_Unexpected,
                         Type: ErrorType.Infrastructure));
             }
-        }
-
-        // --------------------------------------------------------
-        // Helper: Get ticket by QR unique part
-        // --------------------------------------------------------
-        private async Task<Ticket?> GetTicketEntity(byte[] qrBytes, CancellationToken cancellationToken)
-        {
-            // أول 4 Bytes هي الـ UniqueGuidPart المستخدمة في الـ Ticket
-            var uniquePart = qrBytes[..4];
-            var spec = new TicketByUniquePartSpecification(uniquePart);
-            return await _ticketRepository.FirstOrDefaultWithSpecAsync(spec, cancellationToken);
         }
 
         // --------------------------------------------------------

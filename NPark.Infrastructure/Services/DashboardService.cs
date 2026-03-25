@@ -24,355 +24,340 @@ namespace NPark.Infrastructure.Services
             DateTime? date = null,
             CancellationToken cancellationToken = default)
         {
-            /*
-             * ---------------------------------------------------------
-             * 1) NORMALIZE DATE + BUILD [start, end)
-             * ---------------------------------------------------------
-             * We convert the input date (if any) to a DateOnly that
-             * represents the dashboard day (local-based).
-             */
-
             var targetDate = date.HasValue
                 ? DateOnly.FromDateTime(date.Value)
                 : DateOnly.FromDateTime(DateTime.Now);
 
-            var start = targetDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Local);
+            var start = targetDate.ToDateTime(TimeOnly.MinValue);
             var end = start.AddDays(1);
 
-            /*
-             * ---------------------------------------------------------
-             * 2) BASE QUERY FOR TODAY'S TICKETS
-             * ---------------------------------------------------------
-             * All tickets created within the selected day.
-             * ASSUMPTION: Ticket has CreatedOnUtc (from base Entity).
-             */
+            // =========================================================
+            // 1) BASE QUERIES
+            // =========================================================
+            var liveTicketsQuery = _context.Set<Ticket>().AsNoTracking();
+            var archivedTicketsQuery = _context.Set<TicketArchive>().AsNoTracking();
 
-            var todayTicketsQuery = _context.Set<Ticket>()
-                .Where(t => t.CreatedOnUtc >= start && t.CreatedOnUtc < end);
+            // دخلت في اليوم
+            var archivedEnteredTodayQuery = archivedTicketsQuery
+                .Where(t => t.StartDate >= start && t.StartDate < end);
 
-            var enterTicketsQuery = todayTicketsQuery
-                .Where(t => t.ExitGateId == null);
+            // خرجت في اليوم
+            var archivedExitedTodayQuery = archivedTicketsQuery
+                .Where(t => t.EndDate >= start && t.EndDate < end);
 
-            var exitTicketsQuery = todayTicketsQuery
-                .Where(t => t.ExitGateId != null);
+            // Dataset الدخول الجديد حسب الـ business:
+            // - كل التذاكر الموجودة حاليا في Ticket table
+            // - + TicketArchive اللي StartDate بتاعها في اليوم
+            var entryLiveTicketsCount = await liveTicketsQuery.CountAsync(cancellationToken);
+            var entryArchivedTicketsCount = await archivedEnteredTodayQuery.CountAsync(cancellationToken);
+            var enterTicketsCount = entryLiveTicketsCount + entryArchivedTicketsCount;
 
-            /*
-             * ---------------------------------------------------------
-             * 2.1) ACTIVE TICKETS & OCCUPANCY (NOT LIMITED TO DATE)
-             * ---------------------------------------------------------
-             * We calculate:
-             * - ActiveTicketsCount: tickets that have not exited and not collected yet.
-             * - CurrentVehiclesInside: same as ActiveTicketsCount (cars currently inside).
-             * - OccupancyPercentage and EstimatedFreeSlots based on total parking slots.
-             *
-             * ASSUMPTION:
-             * ParkingSystemConfiguration has AllowedParkingSlots (int?).
-             */
+            // Dataset الخروج الجديد حسب الـ business:
+            // - TicketArchive اللي EndDate بتاعها في اليوم
+            var exitTicketsCount = await archivedExitedTodayQuery.CountAsync(cancellationToken);
 
-            var activeTicketsQuery = _context.Set<Ticket>()
-                .Where(t => t.ExitGateId == null && !t.IsCollected);
+            // =========================================================
+            // 2) CURRENT VEHICLES INSIDE + OCCUPANCY
+            // =========================================================
+            // حسب البيزنس الجديد:
+            // "All ticket is still in ticket Table only"
+            var currentVehiclesInside = entryLiveTicketsCount;
+            var activeTicketsCount = currentVehiclesInside;
 
             var parkingConfig = await _context.Set<ParkingSystemConfiguration>()
+                .AsNoTracking()
                 .OrderByDescending(c => c.Id)
                 .FirstOrDefaultAsync(cancellationToken);
 
             var totalParkingSlots = parkingConfig?.AllowedParkingSlots ?? 0;
 
-            var activeTicketsCount = await activeTicketsQuery
-                .CountAsync(cancellationToken);
-
-            var currentVehiclesInside = activeTicketsCount;
-
-            decimal occupancyPercentage = 0;
+            decimal occupancyPercentage = 0m;
             int estimatedFreeSlots = 0;
 
             if (totalParkingSlots > 0)
             {
-                occupancyPercentage =
-                    (decimal)currentVehiclesInside / totalParkingSlots * 100m;
-
-                estimatedFreeSlots =
-                    Math.Max(0, totalParkingSlots - currentVehiclesInside);
+                occupancyPercentage = (decimal)currentVehiclesInside / totalParkingSlots * 100m;
+                estimatedFreeSlots = Math.Max(0, totalParkingSlots - currentVehiclesInside);
             }
 
-            /*
-             * ---------------------------------------------------------
-             * 3) BASIC COUNTS (SEQUENTIAL, BUT ASYNC)
-             * ---------------------------------------------------------
-             */
+            // =========================================================
+            // 3) DAILY REVENUE DATASET
+            // =========================================================
+            // حسب البيزنس:
+            // الإيراد = كل التذاكر من Ticket + TicketArchive
+            // على أساس اليوم اللي دخلت فيه (StartDate)
+            var liveEnteredTodayQuery = liveTicketsQuery
+                .Where(t => t.StartDate >= start && t.StartDate < end);
+
+            var revenueLiveRows = await liveEnteredTodayQuery
+                .Select(t => new RevenueRow
+                {
+                    IsCollected = t.IsCollected,
+                    IsSubscriber = t.IsSubscriber,
+                    TotalPrice = t.TotalPrice,
+                    ExceedPrice = t.ExceedPrice,
+                    CollectedBy = t.CollectedBy,
+                    CollectorName = t.UserCollector != null ? t.UserCollector.Name : null,
+                    CollectedDate = t.CollectedDate
+                })
+                .ToListAsync(cancellationToken);
+
+            var revenueArchiveRows = await archivedEnteredTodayQuery
+                .Select(t => new RevenueRow
+                {
+                    IsCollected = t.IsCollected,
+                    IsSubscriber = t.IsSubscriber,
+                    TotalPrice = t.TotalPrice,
+                    ExceedPrice = t.ExceedPrice,
+                    CollectedBy = t.CollectedBy,
+                    CollectorName = t.UserCollector != null ? t.UserCollector.Name : null,
+                    CollectedDate = t.CollectedDate
+                })
+                .ToListAsync(cancellationToken);
+
+            var revenueRows = revenueLiveRows
+                .Concat(revenueArchiveRows)
+                .ToList();
+
+            var totalRevenue = revenueRows.Sum(x => x.TotalPrice);
+            var collectedRevenue = revenueRows
+                .Where(x => x.IsCollected)
+                .Sum(x => x.TotalPrice);
+            var pendingRevenue = revenueRows
+                .Where(x => !x.IsCollected)
+                .Sum(x => x.TotalPrice);
+
+            // =========================================================
+            // 4) MEMBERSHIP / WALK-IN
+            // =========================================================
+            var membershipTicketsCount = revenueRows.Count(x => x.IsSubscriber);
+            var walkInTicketsCount = revenueRows.Count(x => !x.IsSubscriber);
+
+            var membershipRelatedRevenue = revenueRows
+                .Where(x => x.IsSubscriber)
+                .Sum(x => x.TotalPrice);
+
+            var walkInRevenue = revenueRows
+                .Where(x => !x.IsSubscriber)
+                .Sum(x => x.TotalPrice);
+
+            // =========================================================
+            // 5) SUBSCRIPTIONS SNAPSHOT
+            // =========================================================
+            var now = DateTime.Now;
 
             var subscriptionCount = await _context.Set<ParkingMemberships>()
-                .CountAsync(cancellationToken);
-            var ActiveSubscriptionCount = await _context.Set<ParkingMemberships>()
-                .Where(m => m.EndDate >= DateTime.Now)
-                .CountAsync(cancellationToken);
-            var InactiveSubscriptionCount = await _context.Set<ParkingMemberships>()
-                .Where(m => m.EndDate < DateTime.Now)
+                .AsNoTracking()
                 .CountAsync(cancellationToken);
 
-            var enterTicketsCount = await enterTicketsQuery
+            var activeSubscriptionCount = await _context.Set<ParkingMemberships>()
+                .AsNoTracking()
+                .Where(m => m.EndDate >= now)
                 .CountAsync(cancellationToken);
 
-            var exitTicketsCount = await exitTicketsQuery
+            var inactiveSubscriptionCount = await _context.Set<ParkingMemberships>()
+                .AsNoTracking()
+                .Where(m => m.EndDate < now)
                 .CountAsync(cancellationToken);
-
-            /*
-             * ---------------------------------------------------------
-             * 4) MEMBERSHIP INSIGHTS (TODAY)
-             * ---------------------------------------------------------
-             * We use Ticket.IsSubscriber to distinguish between
-             * membership tickets and walk-in tickets.
-             */
-
-            var membershipTicketsQuery = todayTicketsQuery
-                .Where(t => t.IsSubscriber);
-
-            var membershipTicketsCount = await membershipTicketsQuery
-                .CountAsync(cancellationToken);
-
-            var membershipRelatedRevenue = membershipTicketsCount > 0
-                ? await membershipTicketsQuery.SumAsync(t => t.TotalPrice, cancellationToken)
-                : 0m;
-
-            var walkInTicketsQuery = todayTicketsQuery
-                .Where(t => !t.IsSubscriber);
-
-            var walkInTicketsCount = await walkInTicketsQuery
-                .CountAsync(cancellationToken);
-
-            /*
-             * Memberships expiring in the next 7 days.
-             * We use ParkingMemberships.EndDate as the expiry date.
-             */
-
-            var now = DateTime.Now;
-            var sevenDaysLater = now.AddDays(7);
 
             var membershipsExpiringNext7Days = await _context.Set<ParkingMemberships>()
-                .CountAsync(m =>
-                    m.EndDate >= now &&
-                    m.EndDate <= sevenDaysLater,
-                    cancellationToken);
+                .AsNoTracking()
+                .CountAsync(m => m.EndDate >= now && m.EndDate <= now.AddDays(7), cancellationToken);
 
-            /*
-             * ---------------------------------------------------------
-             * 5) PARKING DURATION (EXITED TICKETS TODAY)
-             * ---------------------------------------------------------
-             * ASSUMPTION:
-             * Ticket has StartDate (enter time) and EndDate (exit time).
-             */
-
-            var exitedTicketsForDuration = await exitTicketsQuery
-                .Where(t => t.StartDate != default && t.EndDate != null)
-                .Select(t => new { t.StartDate, t.EndDate })
+            // =========================================================
+            // 6) PARKING DURATION
+            // =========================================================
+            // حسب البيزنس:
+            // Calculate from ticketArchive table
+            // الأفضل نحسب من اللي خرجوا في اليوم
+            var exitedDurations = await archivedExitedTodayQuery
+                .Select(t => EF.Functions.DateDiffMinute(t.StartDate, t.EndDate))
                 .ToListAsync(cancellationToken);
 
             int averageDurationMinutes = 0;
             int maxDurationMinutes = 0;
 
-            if (exitedTicketsForDuration.Count > 0)
+            if (exitedDurations.Count > 0)
             {
-                var durations = exitedTicketsForDuration
-                    .Select(t => (t.EndDate!.Value - t.StartDate).TotalMinutes)
-                    .ToList();
-
-                averageDurationMinutes = (int)Math.Round(durations.Average());
-                maxDurationMinutes = (int)Math.Round(durations.Max());
+                averageDurationMinutes = (int)Math.Round(exitedDurations.Average());
+                maxDurationMinutes = exitedDurations.Max();
             }
 
-            /*
-             * Exceed usage: tickets with ExceedPrice > 0
-             */
+            // =========================================================
+            // 7) EXCEED METRICS
+            // =========================================================
+            var exceededRows = revenueRows
+                .Where(x => x.ExceedPrice > 0)
+                .ToList();
 
-            var exceededTickets = await todayTicketsQuery
-                .Where(t => t.ExceedPrice > 0)
-                .Select(t => t.ExceedPrice)
-                .ToListAsync(cancellationToken);
-
-            var exceededTicketsCount = exceededTickets.Count;
-            decimal totalExceedRevenue = exceededTicketsCount > 0
-                ? exceededTickets.Sum()
-                : 0m;
-
-            decimal averageExceedPerTicket = exceededTicketsCount > 0
+            var exceededTicketsCount = exceededRows.Count;
+            var totalExceedRevenue = exceededRows.Sum(x => x.ExceedPrice);
+            var averageExceedPerTicket = exceededTicketsCount > 0
                 ? totalExceedRevenue / exceededTicketsCount
                 : 0m;
 
-            /*
-             * ---------------------------------------------------------
-             * 6) ENTRY GATES STATISTICS (per GateId)
-             * ---------------------------------------------------------
-             */
-
-            var entryGateStatsQuery =
-                from t in enterTicketsQuery
-                group t by t.GateId into g
-                select new
+            // =========================================================
+            // 8) ENTRY GATES STATS
+            // =========================================================
+            // حسب البيزنس:
+            // بوابة الدخول = Ticket table + TicketArchive entered today
+            var entryGateLiveRows = await liveTicketsQuery
+                .Select(t => new GateRow
                 {
-                    GateId = g.Key, // GateId is Guid (non-nullable)
-
-                    TicketsCount = g.Count(),
-                    TotalPrice = g.Sum(t => t.Price),
-
-                    CollectedPrice = g
-                        .Where(t => t.IsCollected)
-                        .Sum(t => t.Price),
-
-                    SupervisorName = g
-                        .Where(t => t.IsCollected && t.UserCollector != null)
-                        .OrderByDescending(t => t.CollectedDate)
-                        .Select(t => t.UserCollector!.Name)
-                        .FirstOrDefault()
-                };
-
-            var entryGates = await
-                (from s in entryGateStatsQuery
-                 join gate in _context.Set<ParkingGate>()
-                     on s.GateId equals gate.Id
-                 select new GateTicketsSummaryDto
-                 {
-                     GateId = gate.Id,
-                     GateNumber = gate.GateNumber,
-                     TicketsCount = s.TicketsCount,
-                     TotalPrice = s.TotalPrice,
-                     CollectedPrice = s.CollectedPrice,
-                     SupervisorName = s.SupervisorName
-                 })
-                .OrderBy(x => x.GateNumber)
+                    GateId = t.GateId,
+                    TotalPrice = t.TotalPrice,
+                    IsCollected = t.IsCollected,
+                    CollectorName = t.UserCollector != null ? t.UserCollector.Name : null,
+                    CollectedDate = t.CollectedDate
+                })
                 .ToListAsync(cancellationToken);
 
-            /*
-             * ---------------------------------------------------------
-             * 7) EXIT GATES STATISTICS (per ExitGateId)
-             * ---------------------------------------------------------
-             */
-
-            var exitGateStatsQuery =
-                from t in exitTicketsQuery
-                where t.ExitGateId != null
-                group t by t.ExitGateId into g
-                select new
+            var entryGateArchiveRows = await archivedEnteredTodayQuery
+                .Select(t => new GateRow
                 {
-                    GateId = g.Key!.Value, // ExitGateId is Guid?
-
-                    TicketsCount = g.Count(),
-                    TotalPrice = g.Sum(t => t.Price),
-
-                    CollectedPrice = g
-                        .Where(t => t.IsCollected)
-                        .Sum(t => t.Price),
-
-                    SupervisorName = g
-                        .Where(t => t.IsCollected && t.UserCollector != null)
-                        .OrderByDescending(t => t.CollectedDate)
-                        .Select(t => t.UserCollector!.Name)
-                        .FirstOrDefault()
-                };
-
-            var exitGates = await
-                (from s in exitGateStatsQuery
-                 join gate in _context.Set<ParkingGate>()
-                     on s.GateId equals gate.Id
-                 select new GateTicketsSummaryDto
-                 {
-                     GateId = gate.Id,
-                     GateNumber = gate.GateNumber,
-                     TicketsCount = s.TicketsCount,
-                     TotalPrice = s.TotalPrice,
-                     CollectedPrice = s.CollectedPrice,
-                     SupervisorName = s.SupervisorName
-                 })
-                .OrderBy(x => x.GateNumber)
+                    GateId = t.GateId,
+                    TotalPrice = t.TotalPrice,
+                    IsCollected = t.IsCollected,
+                    CollectorName = t.UserCollector != null ? t.UserCollector.Name : null,
+                    CollectedDate = t.CollectedDate
+                })
                 .ToListAsync(cancellationToken);
 
-            /*
-             * ---------------------------------------------------------
-             * 8) FINAL AGGREGATIONS (REVENUE)
-             * ---------------------------------------------------------
-             */
+            var entryGateRows = entryGateLiveRows
+                .Concat(entryGateArchiveRows)
+                .ToList();
 
-            var totalRevenue =
-                entryGates.Sum(x => x.TotalPrice) +
-                exitGates.Sum(x => x.TotalPrice);
+            var entryGateIds = entryGateRows
+                .Select(x => x.GateId)
+                .Distinct()
+                .ToList();
 
-            var collectedRevenue =
-                entryGates.Sum(x => x.CollectedPrice) +
-                exitGates.Sum(x => x.CollectedPrice);
+            var entryGatesLookup = await _context.Set<ParkingGate>()
+                .AsNoTracking()
+                .Where(g => entryGateIds.Contains(g.Id))
+                .ToDictionaryAsync(g => g.Id, cancellationToken);
 
-            var pendingRevenue = totalRevenue - collectedRevenue;
+            var entryGates = entryGateRows
+                .GroupBy(x => x.GateId)
+                .Select(g =>
+                {
+                    entryGatesLookup.TryGetValue(g.Key, out var gate);
 
-            // Walk-in revenue = total - membership-related
-            var walkInRevenue = totalRevenue - membershipRelatedRevenue;
+                    var latestCollectorName = g
+                        .Where(x => x.IsCollected && !string.IsNullOrWhiteSpace(x.CollectorName))
+                        .OrderByDescending(x => x.CollectedDate)
+                        .Select(x => x.CollectorName)
+                        .FirstOrDefault();
 
-            /*
-             * ---------------------------------------------------------
-             * 9) BUSIEST GATE (ENTRY OR EXIT)
-             * ---------------------------------------------------------
-             */
+                    return new GateTicketsSummaryDto
+                    {
+                        GateId = g.Key,
+                        GateNumber = gate?.GateNumber ?? 0,
+                        TicketsCount = g.Count(),
+                        TotalPrice = g.Sum(x => x.TotalPrice),
+                        CollectedPrice = g.Where(x => x.IsCollected).Sum(x => x.TotalPrice),
+                        SupervisorName = latestCollectorName
+                    };
+                })
+                .OrderBy(x => x.GateNumber)
+                .ToList();
 
-            int busiestGateNumber = 0;
-            int busiestGateTicketsCount = 0;
+            // =========================================================
+            // 9) EXIT GATES STATS
+            // =========================================================
+            // حسب البيزنس:
+            // بوابة الخروج = TicketArchive exited today only
+            var exitGateRows = await archivedExitedTodayQuery
+                .Select(t => new GateRow
+                {
+                    GateId = t.ExitGateId,
+                    TotalPrice = t.TotalPrice,
+                    IsCollected = t.IsCollected,
+                    CollectorName = t.UserCollector != null ? t.UserCollector.Name : null,
+                    CollectedDate = t.CollectedDate
+                })
+                .ToListAsync(cancellationToken);
 
-            var allGateStats = entryGates
-                .Select(g => new { g.GateNumber, g.TicketsCount })
-                .Concat(
-                    exitGates.Select(g => new { g.GateNumber, g.TicketsCount })
-                );
+            var exitGateIds = exitGateRows
+                .Select(x => x.GateId)
+                .Distinct()
+                .ToList();
 
-            var busiest = allGateStats
+            var exitGatesLookup = await _context.Set<ParkingGate>()
+                .AsNoTracking()
+                .Where(g => exitGateIds.Contains(g.Id))
+                .ToDictionaryAsync(g => g.Id, cancellationToken);
+
+            var exitGates = exitGateRows
+                .GroupBy(x => x.GateId)
+                .Select(g =>
+                {
+                    exitGatesLookup.TryGetValue(g.Key, out var gate);
+
+                    var latestCollectorName = g
+                        .Where(x => x.IsCollected && !string.IsNullOrWhiteSpace(x.CollectorName))
+                        .OrderByDescending(x => x.CollectedDate)
+                        .Select(x => x.CollectorName)
+                        .FirstOrDefault();
+
+                    return new GateTicketsSummaryDto
+                    {
+                        GateId = g.Key,
+                        GateNumber = gate?.GateNumber ?? 0,
+                        TicketsCount = g.Count(),
+                        TotalPrice = g.Sum(x => x.TotalPrice),
+                        CollectedPrice = g.Where(x => x.IsCollected).Sum(x => x.TotalPrice),
+                        SupervisorName = latestCollectorName
+                    };
+                })
+                .OrderBy(x => x.GateNumber)
+                .ToList();
+
+            // =========================================================
+            // 10) BUSIEST GATE
+            // =========================================================
+            var busiestGate = entryGates
+                .Select(x => new { x.GateNumber, x.TicketsCount })
+                .Concat(exitGates.Select(x => new { x.GateNumber, x.TicketsCount }))
                 .OrderByDescending(x => x.TicketsCount)
                 .ThenBy(x => x.GateNumber)
                 .FirstOrDefault();
 
-            if (busiest is not null)
-            {
-                busiestGateNumber = busiest.GateNumber;
-                busiestGateTicketsCount = busiest.TicketsCount;
-            }
+            var busiestGateNumber = busiestGate?.GateNumber ?? 0;
+            var busiestGateTicketsCount = busiestGate?.TicketsCount ?? 0;
 
-            /*
-             * ---------------------------------------------------------
-             * 10) TOP COLLECTOR TODAY
-             * ---------------------------------------------------------
-             * ASSUMPTION:
-             * Ticket has navigation UserCollector with Name.
-             */
-
-            var topCollector = await todayTicketsQuery
-                .Where(t => t.IsCollected && t.UserCollector != null)
-                .GroupBy(t => t.UserCollector!.Name)
+            // =========================================================
+            // 11) TOP COLLECTOR
+            // =========================================================
+            // حسب البيزنس:
+            // from Ticket + TicketArchive
+            var topCollector = revenueRows
+                .Where(x => x.IsCollected && x.CollectedBy.HasValue && !string.IsNullOrWhiteSpace(x.CollectorName))
+                .GroupBy(x => new { x.CollectedBy, x.CollectorName })
                 .Select(g => new
                 {
-                    CollectorName = g.Key,
+                    CollectorName = g.Key.CollectorName!,
                     TicketsCount = g.Count(),
-                    TotalAmount = g.Sum(t => t.Price)
+                    TotalAmount = g.Sum(x => x.TotalPrice)
                 })
                 .OrderByDescending(x => x.TotalAmount)
                 .ThenByDescending(x => x.TicketsCount)
-                .FirstOrDefaultAsync(cancellationToken);
+                .FirstOrDefault();
 
-            string? topCollectorName = null;
-            decimal topCollectorAmount = 0m;
-            int topCollectorTicketsCount = 0;
+            var topCollectorName = topCollector?.CollectorName;
+            var topCollectorAmount = topCollector?.TotalAmount ?? 0m;
+            var topCollectorTicketsCount = topCollector?.TicketsCount ?? 0;
 
-            if (topCollector is not null)
-            {
-                topCollectorName = topCollector.CollectorName;
-                topCollectorAmount = topCollector.TotalAmount;
-                topCollectorTicketsCount = topCollector.TicketsCount;
-            }
-
-            /*
-             * ---------------------------------------------------------
-             * 11) BUILD FINAL DASHBOARD DTO
-             * ---------------------------------------------------------
-             */
-
+            // =========================================================
+            // 12) BUILD DTO
+            // =========================================================
             var dto = new DashboardDto
             {
                 Date = targetDate,
 
                 SubscriptionCount = subscriptionCount,
+                ActiveSubscriptionCount = activeSubscriptionCount,
+                InactiveSubscriptionCount = inactiveSubscriptionCount,
 
                 EnterTicketsCount = enterTicketsCount,
                 ExitTicketsCount = exitTicketsCount,
@@ -382,9 +367,9 @@ namespace NPark.Infrastructure.Services
                 PendingRevenue = pendingRevenue,
 
                 CurrentVehiclesInside = currentVehiclesInside,
+                ActiveTicketsCount = activeTicketsCount,
                 OccupancyPercentage = occupancyPercentage,
                 EstimatedFreeSlots = estimatedFreeSlots,
-                ActiveTicketsCount = activeTicketsCount,
 
                 MembershipTicketsCount = membershipTicketsCount,
                 WalkInTicketsCount = walkInTicketsCount,
@@ -394,23 +379,43 @@ namespace NPark.Infrastructure.Services
 
                 AverageDurationMinutes = averageDurationMinutes,
                 MaxDurationMinutes = maxDurationMinutes,
+
                 ExceededTicketsCount = exceededTicketsCount,
                 TotalExceedRevenue = totalExceedRevenue,
                 AverageExceedPerTicket = averageExceedPerTicket,
 
                 BusiestGateNumber = busiestGateNumber,
                 BusiestGateTicketsCount = busiestGateTicketsCount,
+
                 TopCollectorName = topCollectorName,
                 TopCollectorAmount = topCollectorAmount,
                 TopCollectorTicketsCount = topCollectorTicketsCount,
 
                 EntryGates = entryGates,
-                ExitGates = exitGates,
-                ActiveSubscriptionCount = ActiveSubscriptionCount,
-                InactiveSubscriptionCount = InactiveSubscriptionCount
+                ExitGates = exitGates
             };
 
             return dto;
+        }
+
+        private sealed class RevenueRow
+        {
+            public bool IsCollected { get; init; }
+            public bool IsSubscriber { get; init; }
+            public decimal TotalPrice { get; init; }
+            public decimal ExceedPrice { get; init; }
+            public Guid? CollectedBy { get; init; }
+            public string? CollectorName { get; init; }
+            public DateTime? CollectedDate { get; init; }
+        }
+
+        private sealed class GateRow
+        {
+            public Guid GateId { get; init; }
+            public decimal TotalPrice { get; init; }
+            public bool IsCollected { get; init; }
+            public string? CollectorName { get; init; }
+            public DateTime? CollectedDate { get; init; }
         }
     }
 }

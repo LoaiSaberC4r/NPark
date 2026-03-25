@@ -1,10 +1,11 @@
 ﻿using BuildingBlock.Domain.EntitiesHelper;
+using NPark.Domain.DomainEvent;
 using System.Buffers.Binary;
 using System.Globalization;
 
 namespace NPark.Domain.Entities
 {
-    public sealed class Ticket : Entity<Guid>
+    public sealed class Ticket : AggregateRoot<Guid>
     {
         public DateTime StartDate { get; private set; }
         public DateTime? EndDate { get; private set; } = null;
@@ -96,5 +97,7 @@ namespace NPark.Domain.Entities
             // "63729C54" -> byte[4]
             return Convert.FromHexString(code);
         }
+
+        public void Archive() => RaiseDomainEvent(new ExitTicketDomainEvent(this));
     }
 }

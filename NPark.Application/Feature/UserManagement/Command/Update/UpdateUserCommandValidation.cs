@@ -9,8 +9,16 @@ namespace NPark.Application.Feature.UserManagement.Command.Update
     {
         private readonly IGenericRepository<Role> _roleRepository;
 
+        private const string PasswordRegex =
+    @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,128}$";
+
         public UpdateUserCommandValidation(IGenericRepository<User> userRepository, IGenericRepository<Role> roleRepository)
         {
+            RuleFor(x => x.Password)
+                .Matches(PasswordRegex)
+                .WithMessage(ErrorMessage.UserManagement_Password_Invalid)
+                .When(x => !string.IsNullOrWhiteSpace(x.Password));
+
             _roleRepository = roleRepository ?? throw new ArgumentNullException(nameof(roleRepository));
             // 🔹 التحقق من Id (لازم يكون موجود)
             RuleFor(x => x.Id)

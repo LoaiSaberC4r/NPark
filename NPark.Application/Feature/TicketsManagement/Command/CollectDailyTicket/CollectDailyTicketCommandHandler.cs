@@ -18,6 +18,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectDailyTicket
         : ICommandHandler<CollectDailyTicketCommand, CollectDailyTicketResponse>
     {
         private readonly IGenericRepository<Ticket> _ticketRepository;
+        private readonly IGenericRepository<TicketArchive> _ticketArchiveRepository;
         private readonly ITokenReader _tokenReader;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IAuditLogger _auditLogger;
@@ -27,6 +28,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectDailyTicket
 
         public CollectDailyTicketCommandHandler(
             IGenericRepository<Ticket> ticketRepository,
+            IGenericRepository<TicketArchive> ticketArchiveRepository,
             IGenericRepository<ParkingSystemConfiguration> parkingSystemConfigurationRepository,
             IGenericRepository<ParkingGate> parkingGateRepository,
             ITokenReader tokenReader,
@@ -35,6 +37,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectDailyTicket
             ILogger<CollectDailyTicketCommandHandler> logger)
         {
             _ticketRepository = ticketRepository ?? throw new ArgumentNullException(nameof(ticketRepository));
+            _ticketArchiveRepository = ticketArchiveRepository ?? throw new ArgumentNullException(nameof(ticketArchiveRepository));
             _tokenReader = tokenReader ?? throw new ArgumentNullException(nameof(tokenReader));
             _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
             _auditLogger = auditLogger ?? throw new ArgumentNullException(nameof(auditLogger));
@@ -55,8 +58,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectDailyTicket
 
                 if (tokenInfo is null || !tokenInfo.GateId.HasValue || !tokenInfo.UserId.HasValue)
                 {
-                    _logger.LogWarning(
-                        "Token info is missing GateId/UserId while collecting daily tickets.");
+                    _logger.LogWarning("Token info is missing GateId/UserId while collecting daily tickets.");
 
                     return Result<CollectDailyTicketResponse>.Fail(
                         new Error(
@@ -93,65 +95,110 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectDailyTicket
 
                 if (configurationEntity.PriceType == PriceType.Enter && gate.GateType == GateType.Exit)
                 {
-                    return Result<CollectDailyTicketResponse>.Fail(new Error(
-                        Code: "Gate.InvalidForCollect.EnterPricing",
-                        Message: ErrorMessage.GateInvalidForCollectExitPricing,
-                        Type: ErrorType.Conflict));
+                    return Result<CollectDailyTicketResponse>.Fail(
+                        new Error(
+                            Code: "Gate.InvalidForCollect.EnterPricing",
+                            Message: ErrorMessage.GateInvalidForCollectExitPricing,
+                            Type: ErrorType.Conflict));
                 }
 
                 if (configurationEntity.PriceType == PriceType.Exit && gate.GateType == GateType.Entrance)
                 {
-                    return Result<CollectDailyTicketResponse>.Fail(new Error(
-                        Code: "Gate.InvalidForCollect.ExitPricing",
-                        Message: ErrorMessage.GateInvalidForCollectEnterPricing,
-                        Type: ErrorType.Conflict));
-                }
-
-                Specification<Ticket> spec = configurationEntity.PriceType == PriceType.Enter
-            ? new TotalTicketsForTodaySpec(gateId)
-            : new TotalTicketsForTodayForExitSpec(gateId);
-
-                var tickets = await _ticketRepository.ListWithSpecAsync(spec, cancellationToken);
-                var ticketList = tickets?.ToList() ?? new List<Ticket>();
-
-                if (ticketList.Count == 0)
-                {
-                    _logger.LogWarning(
-                        "No tickets found to collect for gate {GateId}.", gateId);
-
                     return Result<CollectDailyTicketResponse>.Fail(
                         new Error(
-                            Code: "Tickets.NoneToCollect",
-                            Message: ErrorMessage.Tickets_NoneToCollect,
+                            Code: "Gate.InvalidForCollect.ExitPricing",
+                            Message: ErrorMessage.GateInvalidForCollectEnterPricing,
                             Type: ErrorType.Conflict));
                 }
 
-                foreach (var ticket in ticketList)
+                if (configurationEntity.PriceType == PriceType.Enter)
                 {
-                    ticket.SetCollected(userId);
+                    Specification<Ticket> spec = new TotalTicketsForTodaySpec(gateId);
+
+                    var tickets = await _ticketRepository.ListWithSpecAsync(spec, cancellationToken);
+                    var ticketList = tickets?.ToList() ?? new List<Ticket>();
+
+                    if (ticketList.Count == 0)
+                    {
+                        _logger.LogWarning("No tickets found to collect for gate {GateId}.", gateId);
+
+                        return Result<CollectDailyTicketResponse>.Fail(
+                            new Error(
+                                Code: "Tickets.NoneToCollect",
+                                Message: ErrorMessage.Tickets_NoneToCollect,
+                                Type: ErrorType.Conflict));
+                    }
+
+                    foreach (var ticket in ticketList)
+                    {
+                        ticket.SetCollected(userId);
+                    }
+
+                    var fallbackCollectedAt = DateTime.Now;
+
+                    var response = new CollectDailyTicketResponse
+                    {
+                        TotalTicketsCollected = ticketList.Count,
+                        TotalPriceCollected = ticketList.Sum(x => x.Price),
+                        TicketCollectDetails = ticketList
+                            .Select(x => new TicketCollectDetails
+                            {
+                                CollectedAt = x.CollectedDate ?? fallbackCollectedAt,
+                                TicketNumber = x.Id,
+                                Price = x.Price
+                            })
+                            .ToList()
+                    };
+
+                    await _ticketRepository.SaveChangesAsync(cancellationToken);
+                    await SafeAuditAsync(response, userId, cancellationToken);
+
+                    return Result<CollectDailyTicketResponse>.Ok(response);
                 }
-
-                var fallbackCollectedAt = DateTime.Now;
-
-                var response = new CollectDailyTicketResponse
+                else
                 {
-                    TotalTicketsCollected = ticketList.Count,
-                    TotalPriceCollected = ticketList.Sum(x => x.Price),
-                    TicketCollectDetails = ticketList
-                        .Select(x => new TicketCollectDetails
-                        {
-                            CollectedAt = x.CollectedDate ?? fallbackCollectedAt,
-                            TicketNumber = x.Id,
-                            Price = x.Price
-                        })
-                        .ToList()
-                };
+                    Specification<TicketArchive> spec = new TotalArchivedTicketsForTodayForExitSpec(gateId);
 
-                await _ticketRepository.SaveChangesAsync(cancellationToken);
+                    var archivedTickets = await _ticketArchiveRepository.ListWithSpecAsync(spec, cancellationToken);
+                    var ticketArchiveList = archivedTickets?.ToList() ?? new List<TicketArchive>();
 
-                await SafeAuditAsync(response, userId, cancellationToken);
+                    if (ticketArchiveList.Count == 0)
+                    {
+                        _logger.LogWarning("No archived tickets found to collect for gate {GateId}.", gateId);
 
-                return Result<CollectDailyTicketResponse>.Ok(response);
+                        return Result<CollectDailyTicketResponse>.Fail(
+                            new Error(
+                                Code: "Tickets.NoneToCollect",
+                                Message: ErrorMessage.Tickets_NoneToCollect,
+                                Type: ErrorType.Conflict));
+                    }
+
+                    foreach (var ticket in ticketArchiveList)
+                    {
+                        ticket.SetCollected(userId);
+                    }
+
+                    var fallbackCollectedAt = DateTime.Now;
+
+                    var response = new CollectDailyTicketResponse
+                    {
+                        TotalTicketsCollected = ticketArchiveList.Count,
+                        TotalPriceCollected = ticketArchiveList.Sum(x => x.Price),
+                        TicketCollectDetails = ticketArchiveList
+                            .Select(x => new TicketCollectDetails
+                            {
+                                CollectedAt = x.CollectedDate,
+                                TicketNumber = x.Id,
+                                Price = x.Price
+                            })
+                            .ToList()
+                    };
+
+                    await _ticketArchiveRepository.SaveChangesAsync(cancellationToken);
+                    await SafeAuditAsync(response, userId, cancellationToken);
+
+                    return Result<CollectDailyTicketResponse>.Ok(response);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -161,6 +208,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectDailyTicket
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error while collecting daily tickets.");
+
                 return Result<CollectDailyTicketResponse>.Fail(
                     new Error(
                         Code: "Tickets.CollectDaily.Unexpected",

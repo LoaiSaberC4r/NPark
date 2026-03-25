@@ -10,6 +10,11 @@ namespace NPark.Application.Specifications.TicketSpecification
     {
         public SearchTicketSpecification(SearchParameters searchParameters)
         {
+            var date = DateTime.Now.Date;
+            var start = date;
+            var end = date.AddDays(1);
+            AddCriteria(t => t.CreatedOnUtc >= start && t.CreatedOnUtc < end);
+
             if (!string.IsNullOrEmpty(searchParameters.SearchText))
                 AddCriteria(t => (t.VehicleNumber != null && t.VehicleNumber.Contains(searchParameters.SearchText)) ||
                 t.UniqueCode.Contains(searchParameters.SearchText) ||
