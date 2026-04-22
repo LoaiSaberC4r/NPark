@@ -8,7 +8,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CRM.Application.Feature.ProductManagement.Query.GetAll
 {
-    internal sealed class GetAllProductQueryHandler : IQueryHandler<GetAllProductQuery, Pagination<GetAllProductQueryResponse>>
+    internal sealed class GetAllProductQueryHandler : IQueryHandler<GetAllProductQuery,
+        Pagination<GetAllProductQueryResponse>>
     {
         private readonly IGenericRepository<Product> _productRepository;
 

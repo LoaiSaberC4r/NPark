@@ -6,9 +6,9 @@ namespace NPark.Application.Specifications.ParkingMembershipSpecification
 {
     public sealed class GetCardSummaryByIdSpec : Specification<ParkingMemberships, GetCardSummaryByIdQueryResponse>
     {
-        public GetCardSummaryByIdSpec(string cardNumber)
+        public GetCardSummaryByIdSpec(string cardNumber, string vehicleNumber)
         {
-            AddCriteria(x => x.CardNumber == cardNumber);
+            AddCriteria(x => x.CardNumber == cardNumber || x.VehicleNumber.Trim() == vehicleNumber.Trim());
             Include(x => x.PricingScheme);
             Select(x => new GetCardSummaryByIdQueryResponse
             {

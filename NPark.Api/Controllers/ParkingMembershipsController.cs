@@ -10,6 +10,7 @@ using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetAll;
 using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetInactiveMembership;
 using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetMembershipExpireNextSevenDays;
 using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetSummaryById;
+using NPark.Application.Feature.ParkingMembershipsManagement.Query.MemberShipExistByVehicleNumber;
 
 namespace NPark.Api.Controllers
 {
@@ -68,6 +69,13 @@ namespace NPark.Api.Controllers
         public async Task<IActionResult> Update([FromForm] UpdateParkingMembershipCommand command, CancellationToken cancellationToken)
         {
             var result = await sender.Send(command, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [HttpGet(nameof(IsMemberShip))]
+        public async Task<IActionResult> IsMemberShip([FromQuery] MemberShipExistByVehicleNumberQuery query, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(query, cancellationToken);
             return result.ToIActionResult();
         }
     }

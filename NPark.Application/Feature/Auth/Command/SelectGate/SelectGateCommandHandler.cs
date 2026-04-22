@@ -154,7 +154,15 @@ namespace NPark.Application.Feature.Auth.Command.SelectGate
                             Message: ErrorMessage.GateOccupied,
                             Type: ErrorType.Conflict));
                 }
-
+                if (gateEntity.IsAssigned)
+                {
+                    if (gateEntity.AssignedTo.HasValue && gateEntity.AssignedTo.Value != userId)
+                        return Result<UserTokenDto>.Fail(
+                            new Error(
+                                Code: "Gate.Assigned",
+                                Message: "Gate is assigned to another user",
+                                Type: ErrorType.Conflict));
+                }
                 // ---------------------------
                 // 6) Mark gate as occupied by this user
                 // ---------------------------

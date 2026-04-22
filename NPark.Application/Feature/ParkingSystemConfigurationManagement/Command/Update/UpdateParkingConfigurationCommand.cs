@@ -28,5 +28,7 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
         public int GateNumber { get; set; }
         public string? LprIp { get; set; } = string.Empty;
         public string? PcIp { get; set; } = string.Empty;
+        public bool IsAssigned { get; set; }
+        public Guid? AssignedTo { get; set; }
     }
 }

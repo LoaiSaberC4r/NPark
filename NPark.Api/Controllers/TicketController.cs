@@ -29,7 +29,7 @@ namespace NPark.Api.Controllers
 
         [Permission("GenerateTicket")]
         [HttpPost(nameof(AddTicket))]
-        public async Task<IActionResult> AddTicket(AddTicketCommand command, CancellationToken cancellationToken)
+        public async Task<IActionResult> AddTicket([FromForm] AddTicketCommand command, CancellationToken cancellationToken)
         {
             var result = await sender.Send(command, cancellationToken);
             return result.ToIActionResult();

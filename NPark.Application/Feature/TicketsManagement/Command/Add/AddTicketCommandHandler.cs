@@ -1,4 +1,5 @@
 ﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction.Media;
 using BuildingBlock.Application.Abstraction.QrCode;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
@@ -11,6 +12,7 @@ using NPark.Application.Specifications.ParkingMembershipSpecification;
 using NPark.Application.Specifications.ParkingSystemConfigurationSpec;
 using NPark.Domain.Entities;
 using NPark.Domain.Enums;
+using NPark.Domain.FileNames;
 using NPark.Domain.Resource;
 
 namespace NPark.Application.Feature.TicketsManagement.Command.Add
@@ -27,6 +29,8 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
         private readonly IByteVerificationService _byteVerificationService;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly ITokenReader _tokenReader;
+        private readonly IMediaService _mediaService;
+
         private readonly ILogger<AddTicketCommandHandler> _logger;
         private readonly IRealtimeNotifier _realtimeNotifier;
 
@@ -38,6 +42,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             IByteVerificationService byteVerificationService,
             ITokenReader tokenReader,
             IGenericRepository<PricingScheme> pricingSchemaRepository,
+            IMediaService mediaService,
             ILogger<AddTicketCommandHandler> logger,
             IRealtimeNotifier realtimeNotifier,
             IGenericRepository<ParkingSystemConfiguration> parkingSystemConfigurationRepository,
@@ -55,6 +60,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
 
             _realtimeNotifier = realtimeNotifier ?? throw new ArgumentNullException(nameof(realtimeNotifier));
             _parkingGateRepository = parkingGateRepository ?? throw new ArgumentNullException(nameof(parkingGateRepository));
+            _mediaService = mediaService ?? throw new ArgumentNullException(nameof(mediaService));
         }
 
         public async Task<Result<AddTicketCommandResponse>> Handle(
@@ -158,7 +164,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             CancellationToken cancellationToken)
         {
             // 1) Get subscriber by card number
-            var cardSpec = new GetCardSummaryByIdSpec(request.CardNumber);
+            var cardSpec = new GetCardSummaryByIdSpec(request.CardNumber ?? string.Empty, request.VehicleNumber ?? string.Empty);
             var subscriber = await _parkingMembershipsRepository
                 .FirstOrDefaultWithSpecAsync(cardSpec, cancellationToken);
 
@@ -249,6 +255,20 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                     price: pricingScheme.Salary,
                     gateId: gateId,
                     userId: userId);
+
+                // ---------------------------
+                // 6) Save vehicle images (if any)
+                // ---------------------------
+                if (request.TicketsImages is { Count: > 0 })
+                {
+                    foreach (var file in request.TicketsImages)
+                    {
+                        var filePath = await _mediaService
+                            .SaveAsync(file, FileNames.TicketAttachments);
+
+                        ticketEntity.AddAttachment(filePath);
+                    }
+                }
             }
             else
             {

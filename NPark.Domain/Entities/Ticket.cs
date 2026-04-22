@@ -7,6 +7,7 @@ namespace NPark.Domain.Entities
 {
     public sealed class Ticket : AggregateRoot<Guid>
     {
+        private readonly List<TicketAttachment> _ticketAttachments = new();
         public DateTime StartDate { get; private set; }
         public DateTime? EndDate { get; private set; } = null;
         public decimal Price { get; private set; }
@@ -28,6 +29,7 @@ namespace NPark.Domain.Entities
         public bool IsSubscriber { get; private set; } = false;
         public string? SubscriberNationalId { get; private set; }
         public string? CardNumber { get; private set; } = null;
+        public IReadOnlyCollection<TicketAttachment> TicketAttachments => _ticketAttachments;
 
         private Ticket()
         { }
@@ -99,5 +101,11 @@ namespace NPark.Domain.Entities
         }
 
         public void Archive() => RaiseDomainEvent(new ExitTicketDomainEvent(this));
+
+        public void AddAttachment(string filePath)
+        {
+            var attachment = TicketAttachment.Create(Id, filePath);
+            _ticketAttachments.Add(attachment);
+        }
     }
 }

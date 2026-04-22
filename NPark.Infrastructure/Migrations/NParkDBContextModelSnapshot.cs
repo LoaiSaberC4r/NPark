@@ -125,6 +125,9 @@ namespace NPark.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("AssignedTo")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTime>("CreatedOnUtc")
                         .HasColumnType("datetime2");
 
@@ -133,6 +136,9 @@ namespace NPark.Infrastructure.Migrations
 
                     b.Property<int>("GateType")
                         .HasColumnType("int");
+
+                    b.Property<bool>("IsAssigned")
+                        .HasColumnType("bit");
 
                     b.Property<bool?>("IsOccupied")
                         .HasColumnType("bit");
@@ -159,6 +165,10 @@ namespace NPark.Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AssignedTo")
+                        .IsUnique()
+                        .HasFilter("[AssignedTo] IS NOT NULL");
 
                     b.HasIndex("ParkingSystemConfigurationId");
 
@@ -630,6 +640,32 @@ namespace NPark.Infrastructure.Migrations
                     b.ToTable("TicketArchive");
                 });
 
+            modelBuilder.Entity("NPark.Domain.Entities.TicketAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ModifiedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("TicketId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketId");
+
+                    b.ToTable("TicketAttachments", (string)null);
+                });
+
             modelBuilder.Entity("NPark.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -703,10 +739,16 @@ namespace NPark.Infrastructure.Migrations
 
             modelBuilder.Entity("NPark.Domain.Entities.ParkingGate", b =>
                 {
+                    b.HasOne("NPark.Domain.Entities.User", "AssignedToUser")
+                        .WithOne()
+                        .HasForeignKey("NPark.Domain.Entities.ParkingGate", "AssignedTo");
+
                     b.HasOne("NPark.Domain.Entities.ParkingSystemConfiguration", "ParkingSystemConfiguration")
                         .WithMany("ParkingGates")
                         .HasForeignKey("ParkingSystemConfigurationId")
                         .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("AssignedToUser");
 
                     b.Navigation("ParkingSystemConfiguration");
                 });
@@ -814,6 +856,17 @@ namespace NPark.Infrastructure.Migrations
                     b.Navigation("UserCollector");
                 });
 
+            modelBuilder.Entity("NPark.Domain.Entities.TicketAttachment", b =>
+                {
+                    b.HasOne("NPark.Domain.Entities.Ticket", "Ticket")
+                        .WithMany("TicketAttachments")
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Ticket");
+                });
+
             modelBuilder.Entity("NPark.Domain.Entities.User", b =>
                 {
                     b.HasOne("NPark.Domain.Entities.Role", "Role")
@@ -847,6 +900,11 @@ namespace NPark.Infrastructure.Migrations
             modelBuilder.Entity("NPark.Domain.Entities.Role", b =>
                 {
                     b.Navigation("GetPermissions");
+                });
+
+            modelBuilder.Entity("NPark.Domain.Entities.Ticket", b =>
+                {
+                    b.Navigation("TicketAttachments");
                 });
 #pragma warning restore 612, 618
         }

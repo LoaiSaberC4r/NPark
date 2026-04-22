@@ -44,6 +44,10 @@ namespace NPark.Infrastructure.Configuration
                 .WithMany()
                 .HasForeignKey(x => x.CollectedBy)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasMany(x => x.TicketAttachments)
+                .WithOne(x => x.Ticket)
+                .HasForeignKey(x => x.TicketId);
         }
     }
 }

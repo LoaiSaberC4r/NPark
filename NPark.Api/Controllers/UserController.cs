@@ -6,6 +6,7 @@ using NPark.Api.Attribute;
 using NPark.Application.Feature.UserManagement.Command.Add;
 using NPark.Application.Feature.UserManagement.Command.Delete;
 using NPark.Application.Feature.UserManagement.Command.Update;
+using NPark.Application.Feature.UserManagement.Query.GetCashier;
 using NPark.Application.Feature.UserManagement.Query.GetUsers;
 
 namespace NPark.Api.Controllers
@@ -46,6 +47,13 @@ namespace NPark.Api.Controllers
         public async Task<IActionResult> Delete([FromQuery] DeleteSystemUserCommand command, CancellationToken cancellationToken)
         {
             var result = await sender.Send(command, cancellationToken);
+            return result.ToIActionResult();
+        }
+
+        [HttpGet(nameof(GetCashier))]
+        public async Task<IActionResult> GetCashier([FromQuery] GetCashierQuery query, CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(query, cancellationToken);
             return result.ToIActionResult();
         }
     }

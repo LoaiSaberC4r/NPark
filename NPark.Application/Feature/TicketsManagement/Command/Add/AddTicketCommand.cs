@@ -1,4 +1,5 @@
 ﻿using BuildingBlock.Application.Abstraction;
+using Microsoft.AspNetCore.Http;
 
 namespace NPark.Application.Feature.TicketsManagement.Command.Add
 {
@@ -12,5 +13,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
 
         // CardNumber is only required when IsSubscriber == true.
         public string? CardNumber { get; init; }
+
+        public List<IFormFile>? TicketsImages { get; init; }
     }
 }

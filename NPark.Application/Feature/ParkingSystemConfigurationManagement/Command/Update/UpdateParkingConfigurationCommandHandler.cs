@@ -8,25 +8,28 @@ using NPark.Application.Specifications.ParkingGateSpec;
 using NPark.Application.Specifications.ParkingSystemConfigurationSpec;
 using NPark.Domain.Entities;
 using NPark.Domain.Enums;
+using NPark.Domain.FileNames;
 using NPark.Domain.Resource;
 
 namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command.Update
 {
     public sealed class UpdateParkingConfigurationCommandHandler
-    : ICommandHandler<UpdateParkingConfigurationCommand>
+        : ICommandHandler<UpdateParkingConfigurationCommand>
     {
         private readonly IGenericRepository<ParkingSystemConfiguration> _parkingSystemConfigurationRepository;
         private readonly IGenericRepository<ParkingGate> _parkingGateRepository;
         private readonly IGenericRepository<Ticket> _ticketRepository;
         private readonly IAuditLogger _auditLogger;
         private readonly ILogger<UpdateParkingConfigurationCommandHandler> _logger;
+        private readonly IGenericRepository<User> _userRepository;
 
         public UpdateParkingConfigurationCommandHandler(
             IGenericRepository<ParkingSystemConfiguration> parkingSystemConfigurationRepository,
             IGenericRepository<ParkingGate> parkingGateRepository,
             IGenericRepository<Ticket> ticketRepository,
             IAuditLogger auditLogger,
-            ILogger<UpdateParkingConfigurationCommandHandler> logger)
+            ILogger<UpdateParkingConfigurationCommandHandler> logger,
+            IGenericRepository<User> userRepository)
         {
             _parkingSystemConfigurationRepository = parkingSystemConfigurationRepository
                 ?? throw new ArgumentNullException(nameof(parkingSystemConfigurationRepository));
@@ -38,6 +41,8 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 ?? throw new ArgumentNullException(nameof(auditLogger));
             _logger = logger
                 ?? throw new ArgumentNullException(nameof(logger));
+            _userRepository = userRepository
+                ?? throw new ArgumentNullException(nameof(userRepository));
         }
 
         public async Task<Result> Handle(
@@ -104,25 +109,59 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 gracePeriod: gracePeriod);
 
             // Entry gates
-            foreach (var gate in request.EntryGates)
+            foreach (var gateInfo in request.EntryGates)
             {
-                configuration.AddParkingGate(
-                    ParkingGate.Create(
-                        gateNumber: gate.GateNumber,
-                        gateType: GateType.Entrance,
-                        lprIp: gate.LprIp,
-                        pcIp: gate.PcIp));
+                var validationResult = await ValidateAssignedUserAsync(
+                    gateInfo,
+                    GateType.Entrance,
+                    cancellationToken);
+
+                if (validationResult.IsFailure)
+                    return validationResult;
+
+                var parkingGate = ParkingGate.Create(
+                    gateNumber: gateInfo.GateNumber,
+                    gateType: GateType.Entrance,
+                    lprIp: gateInfo.LprIp,
+                    pcIp: gateInfo.PcIp);
+
+                parkingGate.UpdateGateInfo(
+                    gateNumber: gateInfo.GateNumber,
+                    gateType: GateType.Entrance,
+                    lprIp: gateInfo.LprIp,
+                    pcIp: gateInfo.PcIp,
+                    assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
+                    isAssigned: gateInfo.IsAssigned);
+
+                configuration.AddParkingGate(parkingGate);
             }
 
             // Exit gates
-            foreach (var gate in request.ExitGates)
+            foreach (var gateInfo in request.ExitGates)
             {
-                configuration.AddParkingGate(
-                    ParkingGate.Create(
-                        gateNumber: gate.GateNumber,
-                        gateType: GateType.Exit,
-                        lprIp: gate.LprIp,
-                        pcIp: gate.PcIp));
+                var validationResult = await ValidateAssignedUserAsync(
+                    gateInfo,
+                    GateType.Exit,
+                    cancellationToken);
+
+                if (validationResult.IsFailure)
+                    return validationResult;
+
+                var parkingGate = ParkingGate.Create(
+                    gateNumber: gateInfo.GateNumber,
+                    gateType: GateType.Exit,
+                    lprIp: gateInfo.LprIp,
+                    pcIp: gateInfo.PcIp);
+
+                parkingGate.UpdateGateInfo(
+                    gateNumber: gateInfo.GateNumber,
+                    gateType: GateType.Exit,
+                    lprIp: gateInfo.LprIp,
+                    pcIp: gateInfo.PcIp,
+                    assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
+                    isAssigned: gateInfo.IsAssigned);
+
+                configuration.AddParkingGate(parkingGate);
             }
 
             await _parkingSystemConfigurationRepository.AddAsync(configuration, cancellationToken);
@@ -177,7 +216,8 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             // 2) Load existing gates for this configuration
             var gateSpec = new GetParkingGateBySystemConfiguration(configuration.Id);
             var existingGates = (await _parkingGateRepository
-                .ListWithSpecAsync(gateSpec, cancellationToken)).ToList();
+                .ListWithSpecAsync(gateSpec, cancellationToken))
+                .ToList();
 
             // 3) Build maps
             var existingGateById = existingGates
@@ -194,8 +234,25 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 .ToHashSet();
 
             // 4) Update existing gates that appear in request
-            UpdateExistingGates(existingGateById, requestedEntryGates, GateType.Entrance);
-            UpdateExistingGates(existingGateById, requestedExitGates, GateType.Exit);
+            var updateEntryResult = await UpdateExistingGatesAsync(
+                existingGateById,
+                requestedEntryGates,
+                GateType.Entrance,
+                cancellationToken);
+
+            if (updateEntryResult.IsFailure)
+                return updateEntryResult;
+
+            var updateExitResult = await UpdateExistingGatesAsync(
+                existingGateById,
+                requestedExitGates,
+                GateType.Exit,
+                cancellationToken);
+
+            if (updateExitResult.IsFailure)
+                return updateExitResult;
+
+            await _parkingGateRepository.SaveChangesAsync(cancellationToken);
 
             // 5) Delete gates that exist in DB but not in request (after checking tickets)
             var gatesToDelete = existingGates
@@ -204,7 +261,6 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
 
             if (gatesToDelete.Count > 0)
             {
-                // Check tickets
                 foreach (var gate in gatesToDelete)
                 {
                     var hasTickets = await _ticketRepository
@@ -214,7 +270,8 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                     {
                         _logger.LogWarning(
                             "Cannot delete gate with tickets. GateId: {GateId}, GateNumber: {GateNumber}",
-                            gate.Id, gate.GateNumber);
+                            gate.Id,
+                            gate.GateNumber);
 
                         return Result.Fail(
                             new Error(
@@ -231,26 +288,59 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             // 6) Add new gates (GateId == null in request)
             var newGates = new List<ParkingGate>();
 
-            foreach (var gate in requestedEntryGates.Where(g => !g.GateId.HasValue))
+            foreach (var gateInfo in requestedEntryGates.Where(g => !g.GateId.HasValue))
             {
-                newGates.Add(
-                    ParkingGate.Create(
-                        gateNumber: gate.GateNumber,
-                        gateType: GateType.Entrance,
-                        lprIp: gate.LprIp,
-                        pcIp: gate.PcIp,
-                        id: configuration.Id));
+                var validationResult = await ValidateAssignedUserAsync(
+                    gateInfo,
+                    GateType.Entrance,
+                    cancellationToken);
+
+                if (validationResult.IsFailure)
+                    return validationResult;
+
+                var parkingGate = ParkingGate.Create(
+                    gateNumber: gateInfo.GateNumber,
+                    gateType: GateType.Entrance,
+                    lprIp: gateInfo.LprIp,
+                    pcIp: gateInfo.PcIp,
+                    id: configuration.Id);
+
+                parkingGate.UpdateGateInfo(
+                    gateNumber: gateInfo.GateNumber,
+                    gateType: GateType.Entrance,
+                    lprIp: gateInfo.LprIp,
+                    pcIp: gateInfo.PcIp,
+                    assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
+                    isAssigned: gateInfo.IsAssigned);
+
+                newGates.Add(parkingGate);
             }
 
-            foreach (var gate in requestedExitGates.Where(g => !g.GateId.HasValue))
+            foreach (var gateInfo in requestedExitGates.Where(g => !g.GateId.HasValue))
             {
-                newGates.Add(
-                    ParkingGate.Create(
-                        gateNumber: gate.GateNumber,
-                        gateType: GateType.Exit,
-                        lprIp: gate.LprIp,
-                        pcIp: gate.PcIp,
-                        id: configuration.Id));
+                var validationResult = await ValidateAssignedUserAsync(
+                    gateInfo,
+                    GateType.Exit,
+                    cancellationToken);
+
+                if (validationResult.IsFailure)
+                    return validationResult;
+
+                var parkingGate = ParkingGate.Create(
+                    gateNumber: gateInfo.GateNumber,
+                    gateType: GateType.Exit,
+                    lprIp: gateInfo.LprIp,
+                    pcIp: gateInfo.PcIp,
+                    id: configuration.Id);
+
+                parkingGate.UpdateGateInfo(
+                    gateNumber: gateInfo.GateNumber,
+                    gateType: GateType.Exit,
+                    lprIp: gateInfo.LprIp,
+                    pcIp: gateInfo.PcIp,
+                    assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null, isAssigned: gateInfo.IsAssigned);
+
+                newGates.Add(parkingGate);
             }
 
             if (newGates.Count > 0)
@@ -277,10 +367,11 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
         // --------------------------------------------------------
         // Helper: update existing gates from GateInfo
         // --------------------------------------------------------
-        private static void UpdateExistingGates(
+        private async Task<Result> UpdateExistingGatesAsync(
             IDictionary<Guid, ParkingGate> existingGateById,
             IEnumerable<GateInfo> gateInfos,
-            GateType gateType)
+            GateType gateType,
+            CancellationToken cancellationToken)
         {
             foreach (var gateInfo in gateInfos.Where(g => g.GateId.HasValue))
             {
@@ -289,12 +380,62 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                     continue;
                 }
 
+                var validationResult = await ValidateAssignedUserAsync(
+                    gateInfo,
+                    gateType,
+                    cancellationToken);
+
+                if (validationResult.IsFailure)
+                    return validationResult;
+
                 gate.UpdateGateInfo(
                     gateNumber: gateInfo.GateNumber,
                     gateType: gateType,
                     lprIp: gateInfo.LprIp,
-                    pcIp: gateInfo.PcIp);
+                    pcIp: gateInfo.PcIp,
+                    assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
+                    isAssigned: gateInfo.IsAssigned);
             }
+
+            return Result.Ok();
+        }
+
+        // --------------------------------------------------------
+        // Helper: validate assigned user by gate type
+        // --------------------------------------------------------
+        private async Task<Result> ValidateAssignedUserAsync(
+     GateInfo gateInfo,
+     GateType gateType,
+     CancellationToken cancellationToken)
+        {
+            if (!gateInfo.IsAssigned)
+                return Result.Ok();
+
+            if (gateInfo.AssignedTo is null)
+            {
+                return Result.Fail(
+                    new Error(
+                        Code: "Gate.AssignedTo.Required",
+                        Message: $"Gate {gateInfo.GateNumber} must have an assigned user.",
+                        Type: ErrorType.Validation));
+            }
+
+            var assignedUser = await _userRepository.GetByIdAsync(gateInfo.AssignedTo.Value, cancellationToken);
+
+            var expectedRoleId = gateType == GateType.Entrance
+                ? SystemRoles.EntranceCashierRoleId
+                : SystemRoles.ExitCashierRoleId;
+
+            if (assignedUser is null || assignedUser.RoleId != expectedRoleId)
+            {
+                return Result.Fail(
+                    new Error(
+                        Code: "Gate.AssignedToInvalidUser",
+                        Message: $"Gate {gateInfo.GateNumber} is assigned to an invalid user.",
+                        Type: ErrorType.Validation));
+            }
+
+            return Result.Ok();
         }
 
         // --------------------------------------------------------
@@ -336,7 +477,8 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 _logger.LogWarning(
                     ex,
                     "Audit logging failed for {EventName}. ConfigurationId: {ConfigurationId}",
-                    eventName, configurationId);
+                    eventName,
+                    configurationId);
             }
         }
     }

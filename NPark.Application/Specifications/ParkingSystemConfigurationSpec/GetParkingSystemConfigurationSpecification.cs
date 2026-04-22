@@ -33,7 +33,9 @@ namespace NPark.Application.Specifications.ParkingSystemConfigurationSpec
                     GateNumber = x.GateNumber,
                     LprIp = x.LprIp,
                     PcIp = x.PcIp,
-                    GateId = x.Id
+                    GateId = x.Id,
+                    AssignedTo = x.AssignedTo,
+                    IsAssigned = x.IsAssigned
                 }).ToList(),
                 EntryGates = x.ParkingGates.Where(x => x.GateType == GateType.Entrance)
                 .Select(x => new GateInfo
@@ -41,7 +43,9 @@ namespace NPark.Application.Specifications.ParkingSystemConfigurationSpec
                     GateNumber = x.GateNumber,
                     LprIp = x.LprIp,
                     PcIp = x.PcIp,
-                    GateId = x.Id
+                    GateId = x.Id,
+                    AssignedTo = x.AssignedTo,
+                    IsAssigned = x.IsAssigned
                 }).ToList()
             });
         }

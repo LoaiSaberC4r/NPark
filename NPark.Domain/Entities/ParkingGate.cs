@@ -15,6 +15,9 @@ namespace NPark.Domain.Entities
         public bool HasPc => !string.IsNullOrEmpty(PcIp);
         public string? LprIp { get; private set; } = string.Empty;
         public Guid? LastLoginUserId { get; private set; }
+        public bool IsAssigned { get; private set; }
+        public Guid? AssignedTo { get; private set; }
+        public User? AssignedToUser { get; private set; }
 
         public int? ParkingSystemConfigurationId { get; private set; }
         public ParkingSystemConfiguration? ParkingSystemConfiguration { get; private set; }
@@ -40,12 +43,14 @@ namespace NPark.Domain.Entities
 
         public void SetPcIp(string pcIp) => PcIp = pcIp;
 
-        public void UpdateGateInfo(int gateNumber, GateType gateType, string? lprIp, string? pcIp)
+        public void UpdateGateInfo(int gateNumber, GateType gateType, string? lprIp, string? pcIp, bool isAssigned, Guid? assignedTo)
         {
             GateNumber = gateNumber;
             GateType = gateType;
             LprIp = lprIp;
             PcIp = pcIp;
+            IsAssigned = isAssigned;
+            AssignedTo = assignedTo;
         }
 
         public void SetLastLoginUserId(Guid userId) => LastLoginUserId = userId;
