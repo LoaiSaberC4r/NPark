@@ -40,7 +40,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalaryFor
                 // ---------------------------
                 // 1) Get subscriber by card number
                 // ---------------------------
-                var cardSpec = new GetCardSummaryByIdSpec(request.CardNumber);
+                var cardSpec = new GetCardSummaryByIdSpec(request.CardNumber, string.Empty);
                 var subscriber = await _parkingMembershipsRepository
                     .FirstOrDefaultWithSpecAsync(cardSpec, cancellationToken);
 

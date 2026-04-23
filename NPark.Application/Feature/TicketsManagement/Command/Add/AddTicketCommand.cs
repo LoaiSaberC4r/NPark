@@ -15,5 +15,6 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
         public string? CardNumber { get; init; }
 
         public List<IFormFile>? TicketsImages { get; init; }
+        public Guid? PricingSchemaId { get; init; }
     }
 }

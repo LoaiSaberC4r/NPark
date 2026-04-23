@@ -45,7 +45,7 @@ namespace NPark.Api.Controllers
             return result.ToIActionResult();
         }
 
-        [Permission("Read")]
+        // [Permission("Read")]
         [HttpGet(nameof(GetWithoudPagination))]
         public async Task<IActionResult> GetWithoudPagination([FromQuery] GetPricingSchemaQuery query, CancellationToken cancellationToken)
         {

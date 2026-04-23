@@ -11,12 +11,14 @@ using NPark.Application.Feature.TicketsManagement.Command.ColletByCachier;
 using NPark.Application.Feature.TicketsManagement.Command.ExitTicket;
 using NPark.Application.Feature.TicketsManagement.Command.ScanQrCode;
 using NPark.Application.Feature.TicketsManagement.Command.SearchTicket;
+using NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText;
 using NPark.Application.Feature.TicketsManagement.Query.GetEntryTicketForAdmin;
 using NPark.Application.Feature.TicketsManagement.Query.GetExitTicketForAdmin;
 using NPark.Application.Feature.TicketsManagement.Query.GetTicketForEntryGate;
 using NPark.Application.Feature.TicketsManagement.Query.GetTicketForExitGate;
 using NPark.Application.Feature.TicketsManagement.Query.GetTicketInsidePark;
 using NPark.Application.Feature.TicketsManagement.Query.ReportTickets;
+using NPark.Application.Feature.TicketsManagement.Query.ValidateExitByVehicleNumber;
 
 namespace NPark.Api.Controllers
 {
@@ -128,6 +130,28 @@ namespace NPark.Api.Controllers
         {
             var result = await sender.Send(query, cancellationToken);
             return result.ToIActionResult();
+        }
+
+        [HttpGet("validate-exit-by-vehicle-number")]
+        public async Task<IActionResult> ValidateExitByVehicleNumber(
+           [FromQuery] string vehicleNumber,
+           CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(
+                new ValidateExitByVehicleNumberQuery(vehicleNumber),
+                cancellationToken);
+
+            return result.ToIActionResult();
+        }
+
+        [HttpPost("validate-exit-by-text")]
+        public async Task<IActionResult> ValidateExitByText(
+        [FromBody] ValidateExitByTextCommand command,
+        CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(command, cancellationToken);
+            return result.ToIActionResult();
+
         }
     }
 }

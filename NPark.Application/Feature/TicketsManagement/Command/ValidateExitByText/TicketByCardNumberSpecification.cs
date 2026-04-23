@@ -1,0 +1,14 @@
+﻿using BuildingBlock.Domain.Specification;
+using NPark.Domain.Entities;
+
+namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
+{
+    public sealed class TicketByCardNumberSpecification : Specification<Ticket>
+    {
+        public TicketByCardNumberSpecification(string cardNumber)
+        {
+            AddCriteria(t => t.CardNumber != null && t.CardNumber == cardNumber);
+            AddOrderByDescending(t => t.StartDate);
+        }
+    }
+}

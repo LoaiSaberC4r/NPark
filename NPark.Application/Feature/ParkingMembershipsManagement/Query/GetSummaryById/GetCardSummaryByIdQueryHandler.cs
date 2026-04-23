@@ -17,7 +17,7 @@ namespace NPark.Application.Feature.ParkingMembershipsManagement.Query.GetSummar
 
         public async Task<Result<GetCardSummaryByIdQueryResponse>> Handle(GetCardSummaryByIdQuery request, CancellationToken cancellationToken)
         {
-            var spec = new GetCardSummaryByIdSpec(request.CardNumber);
+            var spec = new GetCardSummaryByIdSpec(request.CardNumber, string.Empty);
             var result = await _parkingMembershipsRepository.FirstOrDefaultWithSpecAsync(spec, cancellationToken);
             if (result == null)
             {

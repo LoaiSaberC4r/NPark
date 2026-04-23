@@ -225,7 +225,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             // PriceType = Enter → نحسب السعر وقت الدخول
             if (configuration.PriceType == PriceType.Enter)
             {
-                if (!configuration.PricingSchemaId.HasValue)
+                if (request.PricingSchemaId is null)
                 {
                     _logger.LogWarning("Configuration has PriceType=Enter but no PricingSchemaId.");
                     return Result<AddTicketCommandResponse>.Fail(
@@ -236,12 +236,12 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                 }
 
                 var pricingScheme = await _pricingSchemaRepository
-                    .GetByIdAsync(configuration.PricingSchemaId.Value, cancellationToken);
+                    .GetByIdAsync(request.PricingSchemaId.Value, cancellationToken);
 
                 if (pricingScheme is null)
                 {
                     _logger.LogWarning("Pricing scheme not found. Id: {PricingSchemaId}",
-                        configuration.PricingSchemaId.Value);
+                        request.PricingSchemaId.Value);
 
                     return Result<AddTicketCommandResponse>.Fail(
                         new Error(
