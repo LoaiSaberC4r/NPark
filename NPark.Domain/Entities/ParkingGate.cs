@@ -18,6 +18,7 @@ namespace NPark.Domain.Entities
         public bool IsAssigned { get; private set; }
         public Guid? AssignedTo { get; private set; }
         public User? AssignedToUser { get; private set; }
+        public string? ControlIp { get; private set; }
 
         public int? ParkingSystemConfigurationId { get; private set; }
         public ParkingSystemConfiguration? ParkingSystemConfiguration { get; private set; }
@@ -54,5 +55,7 @@ namespace NPark.Domain.Entities
         }
 
         public void SetLastLoginUserId(Guid userId) => LastLoginUserId = userId;
+
+        public void SetControlIp(string controlIp) => ControlIp = controlIp;
     }
 }

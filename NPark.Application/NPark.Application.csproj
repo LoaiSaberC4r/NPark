@@ -19,7 +19,6 @@
 
   <ItemGroup>
     <Folder Include="Feature\GateConfig\Query\" />
-    <Folder Include="Feature\GateManagement\Command\" />
     <Folder Include="Feature\RoleManagement\Command\" />
   </ItemGroup>
 

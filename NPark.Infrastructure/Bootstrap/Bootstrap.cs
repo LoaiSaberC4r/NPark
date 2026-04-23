@@ -19,6 +19,7 @@ using NPark.Application.Options;
 using NPark.Infrastructure.Authorization;
 using NPark.Infrastructure.Options;
 using NPark.Infrastructure.Services;
+using NPark.Infrastructure.Services.Mqtt;
 using NPark.Infrastructure.Services.Seeders;
 using NPark.Infrastructure.Services.Token;
 using System.Text;
@@ -52,6 +53,12 @@ namespace NPark.Infrastructure.Bootstrap
 
             services.AddScoped<ISendProtocol, SendProtocol>();
             services.AddScoped<ITokenReader, JwtReader>();
+
+            services.Configure<MqttOptions>(configuration.GetSection("Mqtt"));
+            services.Configure<MqttHeartbeatOptions>(configuration.GetSection("MqttHeartbeat"));
+            services.AddHostedService<MqttNetworkHeartbeatService>();
+
+            services.AddSingleton<IMqttPublisher, MqttPublisher>();
 
             return services;
         }

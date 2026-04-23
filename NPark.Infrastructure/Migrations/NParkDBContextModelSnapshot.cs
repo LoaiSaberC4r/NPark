@@ -128,6 +128,9 @@ namespace NPark.Infrastructure.Migrations
                     b.Property<Guid?>("AssignedTo")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("ControlIp")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime>("CreatedOnUtc")
                         .HasColumnType("datetime2");
 
