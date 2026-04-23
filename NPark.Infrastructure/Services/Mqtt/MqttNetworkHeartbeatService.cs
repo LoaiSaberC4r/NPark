@@ -45,9 +45,10 @@ namespace NPark.Infrastructure.Services.Mqtt
             }
 
             var payload = NormalizePayload(_options.Payload);
+            var hexPayload = StringToHexBytes(payload);
 
             _logger.LogInformation(
-                "MQTT heartbeat background service started. IntervalSeconds={IntervalSeconds}, Payload={Payload}",
+                "MQTT heartbeat background service started. IntervalSeconds={IntervalSeconds}, Payload={Payload} (hex)",
                 _options.IntervalSeconds,
                 payload);
 
@@ -72,16 +73,16 @@ namespace NPark.Infrastructure.Services.Mqtt
                         {
                             var topic = BuildTopic(_options.TopicPrefix, controlIp);
 
-                            await _mqttPublisher.PublishStringAsync(
+                            await _mqttPublisher.PublishBytesAsync(
                                 topic,
-                                payload,
+                                hexPayload,
                                 new MqttPublishOptions(_options.Qos, _options.Retain),
                                 stoppingToken);
 
                             _logger.LogInformation(
-                                "MQTT heartbeat published successfully. Topic={Topic}, Payload={Payload}",
+                                "MQTT heartbeat published successfully. Topic={Topic}, PayloadHex={PayloadHex}",
                                 topic,
-                                payload);
+                                BitConverter.ToString(hexPayload.ToArray()).Replace("-", ""));
                         }
                     }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -112,6 +113,25 @@ namespace NPark.Infrastructure.Services.Mqtt
         private static string NormalizePayload(string payload)
         {
             return (payload ?? string.Empty).Trim();
+        }
+
+        private static ReadOnlyMemory<byte> StringToHexBytes(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return Array.Empty<byte>();
+
+            // إزالة المسافات والفواصل لو موجودة
+            input = input.Replace(" ", "").Replace("-", "");
+
+            if (input.Length % 2 != 0)
+                input = "0" + input; // إضافة صفر إذا الطول فردي
+
+            var bytes = new byte[input.Length / 2];
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                bytes[i] = Convert.ToByte(input.Substring(i * 2, 2), 16);
+            }
+            return bytes;
         }
     }
 }

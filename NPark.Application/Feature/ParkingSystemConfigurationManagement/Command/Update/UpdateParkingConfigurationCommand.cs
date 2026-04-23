@@ -18,6 +18,7 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
         public bool TicketIdFlag { get; set; }
         public bool FeesFlag { get; set; }
         public Guid? PricingSchemaId { get; set; }
+
         public List<GateInfo> EntryGates { get; set; } = new();
         public List<GateInfo> ExitGates { get; set; } = new();
     }
@@ -28,7 +29,21 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
         public int GateNumber { get; set; }
         public string? LprIp { get; set; } = string.Empty;
         public string? PcIp { get; set; } = string.Empty;
+
+        // Required
+        public string ControlIp { get; set; } = string.Empty;
+
+        // Optional DTO
+        public ONVIFCameraSettingDto? ONVIFCameraSetting { get; set; }
+
         public bool IsAssigned { get; set; }
         public Guid? AssignedTo { get; set; }
+    }
+
+    public record ONVIFCameraSettingDto
+    {
+        public string UrlRequest { get; set; } = string.Empty;
+        public string UserName { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
     }
 }

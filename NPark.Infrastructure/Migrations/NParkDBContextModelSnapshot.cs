@@ -94,6 +94,38 @@ namespace NPark.Infrastructure.Migrations
                     b.ToTable("AuditLogs", (string)null);
                 });
 
+            modelBuilder.Entity("NPark.Domain.Entities.ONVIFCameraSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ModifiedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Password")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("UrlRequest")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ONVIFCameraSettings", (string)null);
+                });
+
             modelBuilder.Entity("NPark.Domain.Entities.OrderPricingSchema", b =>
                 {
                     b.Property<Guid>("Id")
@@ -155,6 +187,9 @@ namespace NPark.Infrastructure.Migrations
                     b.Property<DateTime?>("ModifiedOnUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid?>("ONVIFCameraSettingId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid?>("OccupiedBy")
                         .HasColumnType("uniqueidentifier");
 
@@ -172,6 +207,8 @@ namespace NPark.Infrastructure.Migrations
                     b.HasIndex("AssignedTo")
                         .IsUnique()
                         .HasFilter("[AssignedTo] IS NOT NULL");
+
+                    b.HasIndex("ONVIFCameraSettingId");
 
                     b.HasIndex("ParkingSystemConfigurationId");
 
@@ -746,12 +783,18 @@ namespace NPark.Infrastructure.Migrations
                         .WithOne()
                         .HasForeignKey("NPark.Domain.Entities.ParkingGate", "AssignedTo");
 
+                    b.HasOne("NPark.Domain.Entities.ONVIFCameraSetting", "ONVIFCameraSetting")
+                        .WithMany()
+                        .HasForeignKey("ONVIFCameraSettingId");
+
                     b.HasOne("NPark.Domain.Entities.ParkingSystemConfiguration", "ParkingSystemConfiguration")
                         .WithMany("ParkingGates")
                         .HasForeignKey("ParkingSystemConfigurationId")
                         .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("AssignedToUser");
+
+                    b.Navigation("ONVIFCameraSetting");
 
                     b.Navigation("ParkingSystemConfiguration");
                 });

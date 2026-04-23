@@ -22,6 +22,7 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
         private readonly IAuditLogger _auditLogger;
         private readonly ILogger<UpdateParkingConfigurationCommandHandler> _logger;
         private readonly IGenericRepository<User> _userRepository;
+        private readonly IGenericRepository<ONVIFCameraSetting> _onvifCameraSettingRepository;
 
         public UpdateParkingConfigurationCommandHandler(
             IGenericRepository<ParkingSystemConfiguration> parkingSystemConfigurationRepository,
@@ -29,7 +30,8 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             IGenericRepository<Ticket> ticketRepository,
             IAuditLogger auditLogger,
             ILogger<UpdateParkingConfigurationCommandHandler> logger,
-            IGenericRepository<User> userRepository)
+            IGenericRepository<User> userRepository,
+            IGenericRepository<ONVIFCameraSetting> onvifCameraSettingRepository)
         {
             _parkingSystemConfigurationRepository = parkingSystemConfigurationRepository
                 ?? throw new ArgumentNullException(nameof(parkingSystemConfigurationRepository));
@@ -43,6 +45,8 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 ?? throw new ArgumentNullException(nameof(logger));
             _userRepository = userRepository
                 ?? throw new ArgumentNullException(nameof(userRepository));
+            _onvifCameraSettingRepository = onvifCameraSettingRepository
+                ?? throw new ArgumentNullException(nameof(onvifCameraSettingRepository));
         }
 
         public async Task<Result> Handle(
@@ -81,9 +85,6 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             }
         }
 
-        // --------------------------------------------------------
-        // Create configuration + gates from scratch
-        // --------------------------------------------------------
         private async Task<Result> CreateConfigurationAsync(
             UpdateParkingConfigurationCommand request,
             CancellationToken cancellationToken)
@@ -108,10 +109,9 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 pricingSchemaId: pricingSchemaId,
                 gracePeriod: gracePeriod);
 
-            // Entry gates
             foreach (var gateInfo in request.EntryGates)
             {
-                var validationResult = await ValidateAssignedUserAsync(
+                var validationResult = await ValidateGateInfoAsync(
                     gateInfo,
                     GateType.Entrance,
                     cancellationToken);
@@ -119,27 +119,35 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 if (validationResult.IsFailure)
                     return validationResult;
 
+                var onvifCameraSettingId = await CreateOrUpdateOnvifCameraSettingAsync(
+                    gateInfo.ONVIFCameraSetting,
+                    existingCameraSettingId: null,
+                    cancellationToken);
+
                 var parkingGate = ParkingGate.Create(
                     gateNumber: gateInfo.GateNumber,
                     gateType: GateType.Entrance,
                     lprIp: gateInfo.LprIp,
-                    pcIp: gateInfo.PcIp);
+                    pcIp: gateInfo.PcIp,
+                    controlIp: gateInfo.ControlIp,
+                    onvifCameraSettingId: onvifCameraSettingId);
 
                 parkingGate.UpdateGateInfo(
                     gateNumber: gateInfo.GateNumber,
                     gateType: GateType.Entrance,
                     lprIp: gateInfo.LprIp,
                     pcIp: gateInfo.PcIp,
+                    controlIp: gateInfo.ControlIp,
+                    onvifCameraSettingId: onvifCameraSettingId,
                     assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
                     isAssigned: gateInfo.IsAssigned);
 
                 configuration.AddParkingGate(parkingGate);
             }
 
-            // Exit gates
             foreach (var gateInfo in request.ExitGates)
             {
-                var validationResult = await ValidateAssignedUserAsync(
+                var validationResult = await ValidateGateInfoAsync(
                     gateInfo,
                     GateType.Exit,
                     cancellationToken);
@@ -147,17 +155,26 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 if (validationResult.IsFailure)
                     return validationResult;
 
+                var onvifCameraSettingId = await CreateOrUpdateOnvifCameraSettingAsync(
+                    gateInfo.ONVIFCameraSetting,
+                    existingCameraSettingId: null,
+                    cancellationToken);
+
                 var parkingGate = ParkingGate.Create(
                     gateNumber: gateInfo.GateNumber,
                     gateType: GateType.Exit,
                     lprIp: gateInfo.LprIp,
-                    pcIp: gateInfo.PcIp);
+                    pcIp: gateInfo.PcIp,
+                    controlIp: gateInfo.ControlIp,
+                    onvifCameraSettingId: onvifCameraSettingId);
 
                 parkingGate.UpdateGateInfo(
                     gateNumber: gateInfo.GateNumber,
                     gateType: GateType.Exit,
                     lprIp: gateInfo.LprIp,
                     pcIp: gateInfo.PcIp,
+                    controlIp: gateInfo.ControlIp,
+                    onvifCameraSettingId: onvifCameraSettingId,
                     assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
                     isAssigned: gateInfo.IsAssigned);
 
@@ -181,9 +198,6 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             return Result.Ok();
         }
 
-        // --------------------------------------------------------
-        // Update existing configuration + sync gates
-        // --------------------------------------------------------
         private async Task<Result> UpdateConfigurationAsync(
             ParkingSystemConfiguration configuration,
             UpdateParkingConfigurationCommand request,
@@ -196,7 +210,6 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 ? TimeSpan.FromMinutes(request.gracePeriodMinutes.Value)
                 : (TimeSpan?)null;
 
-            // 1) Update configuration data
             configuration.Update(
                 configuration,
                 request.EntryGatesCount,
@@ -213,13 +226,11 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
 
             await _parkingSystemConfigurationRepository.SaveChangesAsync(cancellationToken);
 
-            // 2) Load existing gates for this configuration
             var gateSpec = new GetParkingGateBySystemConfiguration(configuration.Id);
             var existingGates = (await _parkingGateRepository
                 .ListWithSpecAsync(gateSpec, cancellationToken))
                 .ToList();
 
-            // 3) Build maps
             var existingGateById = existingGates
                 .Where(g => g.Id != Guid.Empty)
                 .ToDictionary(g => g.Id, g => g);
@@ -233,7 +244,6 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 .Select(g => g.GateId!.Value)
                 .ToHashSet();
 
-            // 4) Update existing gates that appear in request
             var updateEntryResult = await UpdateExistingGatesAsync(
                 existingGateById,
                 requestedEntryGates,
@@ -254,7 +264,6 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
 
             await _parkingGateRepository.SaveChangesAsync(cancellationToken);
 
-            // 5) Delete gates that exist in DB but not in request (after checking tickets)
             var gatesToDelete = existingGates
                 .Where(g => !requestedGateIds.Contains(g.Id))
                 .ToList();
@@ -285,12 +294,11 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 await _parkingGateRepository.SaveChangesAsync(cancellationToken);
             }
 
-            // 6) Add new gates (GateId == null in request)
             var newGates = new List<ParkingGate>();
 
             foreach (var gateInfo in requestedEntryGates.Where(g => !g.GateId.HasValue))
             {
-                var validationResult = await ValidateAssignedUserAsync(
+                var validationResult = await ValidateGateInfoAsync(
                     gateInfo,
                     GateType.Entrance,
                     cancellationToken);
@@ -298,11 +306,18 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 if (validationResult.IsFailure)
                     return validationResult;
 
+                var onvifCameraSettingId = await CreateOrUpdateOnvifCameraSettingAsync(
+                    gateInfo.ONVIFCameraSetting,
+                    existingCameraSettingId: null,
+                    cancellationToken);
+
                 var parkingGate = ParkingGate.Create(
                     gateNumber: gateInfo.GateNumber,
                     gateType: GateType.Entrance,
                     lprIp: gateInfo.LprIp,
                     pcIp: gateInfo.PcIp,
+                    controlIp: gateInfo.ControlIp,
+                    onvifCameraSettingId: onvifCameraSettingId,
                     id: configuration.Id);
 
                 parkingGate.UpdateGateInfo(
@@ -310,6 +325,8 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                     gateType: GateType.Entrance,
                     lprIp: gateInfo.LprIp,
                     pcIp: gateInfo.PcIp,
+                    controlIp: gateInfo.ControlIp,
+                    onvifCameraSettingId: onvifCameraSettingId,
                     assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
                     isAssigned: gateInfo.IsAssigned);
 
@@ -318,7 +335,7 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
 
             foreach (var gateInfo in requestedExitGates.Where(g => !g.GateId.HasValue))
             {
-                var validationResult = await ValidateAssignedUserAsync(
+                var validationResult = await ValidateGateInfoAsync(
                     gateInfo,
                     GateType.Exit,
                     cancellationToken);
@@ -326,11 +343,18 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 if (validationResult.IsFailure)
                     return validationResult;
 
+                var onvifCameraSettingId = await CreateOrUpdateOnvifCameraSettingAsync(
+                    gateInfo.ONVIFCameraSetting,
+                    existingCameraSettingId: null,
+                    cancellationToken);
+
                 var parkingGate = ParkingGate.Create(
                     gateNumber: gateInfo.GateNumber,
                     gateType: GateType.Exit,
                     lprIp: gateInfo.LprIp,
                     pcIp: gateInfo.PcIp,
+                    controlIp: gateInfo.ControlIp,
+                    onvifCameraSettingId: onvifCameraSettingId,
                     id: configuration.Id);
 
                 parkingGate.UpdateGateInfo(
@@ -338,7 +362,10 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                     gateType: GateType.Exit,
                     lprIp: gateInfo.LprIp,
                     pcIp: gateInfo.PcIp,
-                    assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null, isAssigned: gateInfo.IsAssigned);
+                    controlIp: gateInfo.ControlIp,
+                    onvifCameraSettingId: onvifCameraSettingId,
+                    assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
+                    isAssigned: gateInfo.IsAssigned);
 
                 newGates.Add(parkingGate);
             }
@@ -349,7 +376,6 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 await _parkingGateRepository.SaveChangesAsync(cancellationToken);
             }
 
-            // 7) Audit log
             await SafeAuditAsync(
                 eventName: "UpdateParkingSystemConfiguration",
                 statusCode: 200,
@@ -364,9 +390,6 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             return Result.Ok();
         }
 
-        // --------------------------------------------------------
-        // Helper: update existing gates from GateInfo
-        // --------------------------------------------------------
         private async Task<Result> UpdateExistingGatesAsync(
             IDictionary<Guid, ParkingGate> existingGateById,
             IEnumerable<GateInfo> gateInfos,
@@ -380,7 +403,7 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                     continue;
                 }
 
-                var validationResult = await ValidateAssignedUserAsync(
+                var validationResult = await ValidateGateInfoAsync(
                     gateInfo,
                     gateType,
                     cancellationToken);
@@ -388,11 +411,18 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 if (validationResult.IsFailure)
                     return validationResult;
 
+                var onvifCameraSettingId = await CreateOrUpdateOnvifCameraSettingAsync(
+                    gateInfo.ONVIFCameraSetting,
+                    gate.ONVIFCameraSettingId,
+                    cancellationToken);
+
                 gate.UpdateGateInfo(
                     gateNumber: gateInfo.GateNumber,
                     gateType: gateType,
                     lprIp: gateInfo.LprIp,
                     pcIp: gateInfo.PcIp,
+                    controlIp: gateInfo.ControlIp,
+                    onvifCameraSettingId: onvifCameraSettingId,
                     assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
                     isAssigned: gateInfo.IsAssigned);
             }
@@ -400,14 +430,50 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             return Result.Ok();
         }
 
-        // --------------------------------------------------------
-        // Helper: validate assigned user by gate type
-        // --------------------------------------------------------
-        private async Task<Result> ValidateAssignedUserAsync(
-     GateInfo gateInfo,
-     GateType gateType,
-     CancellationToken cancellationToken)
+        private async Task<Result> ValidateGateInfoAsync(
+            GateInfo gateInfo,
+            GateType gateType,
+            CancellationToken cancellationToken)
         {
+            if (string.IsNullOrWhiteSpace(gateInfo.ControlIp))
+            {
+                return Result.Fail(
+                    new Error(
+                        Code: "Gate.ControlIp.Required",
+                        Message: $"Gate {gateInfo.GateNumber} must have a control IP.",
+                        Type: ErrorType.Validation));
+            }
+
+            if (gateInfo.ONVIFCameraSetting is not null)
+            {
+                if (string.IsNullOrWhiteSpace(gateInfo.ONVIFCameraSetting.UrlRequest))
+                {
+                    return Result.Fail(
+                        new Error(
+                            Code: "Gate.ONVIF.UrlRequest.Required",
+                            Message: $"Gate {gateInfo.GateNumber} ONVIF UrlRequest is required.",
+                            Type: ErrorType.Validation));
+                }
+
+                if (string.IsNullOrWhiteSpace(gateInfo.ONVIFCameraSetting.UserName))
+                {
+                    return Result.Fail(
+                        new Error(
+                            Code: "Gate.ONVIF.UserName.Required",
+                            Message: $"Gate {gateInfo.GateNumber} ONVIF UserName is required.",
+                            Type: ErrorType.Validation));
+                }
+
+                if (string.IsNullOrWhiteSpace(gateInfo.ONVIFCameraSetting.Password))
+                {
+                    return Result.Fail(
+                        new Error(
+                            Code: "Gate.ONVIF.Password.Required",
+                            Message: $"Gate {gateInfo.GateNumber} ONVIF Password is required.",
+                            Type: ErrorType.Validation));
+                }
+            }
+
             if (!gateInfo.IsAssigned)
                 return Result.Ok();
 
@@ -438,9 +504,40 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             return Result.Ok();
         }
 
-        // --------------------------------------------------------
-        // Helper: Safe audit logging
-        // --------------------------------------------------------
+        private async Task<Guid?> CreateOrUpdateOnvifCameraSettingAsync(
+            ONVIFCameraSettingDto? dto,
+            Guid? existingCameraSettingId,
+            CancellationToken cancellationToken)
+        {
+            if (dto is null)
+            {
+                return null;
+            }
+
+            if (existingCameraSettingId.HasValue)
+            {
+                var existing = await _onvifCameraSettingRepository
+                    .GetByIdAsync(existingCameraSettingId.Value, cancellationToken);
+
+                if (existing is not null)
+                {
+                    existing.Update(dto.UrlRequest, dto.UserName, dto.Password);
+                    await _onvifCameraSettingRepository.SaveChangesAsync(cancellationToken);
+                    return existing.Id;
+                }
+            }
+
+            var cameraSetting = ONVIFCameraSetting.Create(
+                dto.UrlRequest,
+                dto.UserName,
+                dto.Password);
+
+            await _onvifCameraSettingRepository.AddAsync(cameraSetting, cancellationToken);
+            await _onvifCameraSettingRepository.SaveChangesAsync(cancellationToken);
+
+            return cameraSetting.Id;
+        }
+
         private async Task SafeAuditAsync(
             string eventName,
             int statusCode,

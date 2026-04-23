@@ -19,6 +19,7 @@ using NPark.Application.Options;
 using NPark.Infrastructure.Authorization;
 using NPark.Infrastructure.Options;
 using NPark.Infrastructure.Services;
+using NPark.Infrastructure.Services.Camera;
 using NPark.Infrastructure.Services.Mqtt;
 using NPark.Infrastructure.Services.Seeders;
 using NPark.Infrastructure.Services.Token;
@@ -59,6 +60,13 @@ namespace NPark.Infrastructure.Bootstrap
             services.AddHostedService<MqttNetworkHeartbeatService>();
 
             services.AddSingleton<IMqttPublisher, MqttPublisher>();
+            services.Configure<CameraOptions>(configuration.GetSection("Camera"));
+
+            services.AddHttpClient<ICameraSnapshotService, OnvifCameraSnapshotService>((sp, client) =>
+            {
+                var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<CameraOptions>>().Value;
+                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds <= 0 ? 15 : options.TimeoutSeconds);
+            });
 
             return services;
         }

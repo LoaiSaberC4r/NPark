@@ -22,6 +22,11 @@ namespace NPark.Infrastructure.Configuration
                 .WithOne()
                 .HasForeignKey<ParkingGate>(x => x.AssignedTo)
                 .IsRequired(false);
+
+            builder.HasOne(x => x.ONVIFCameraSetting)
+                .WithMany()
+                .HasForeignKey(x => x.ONVIFCameraSettingId)
+                .IsRequired(false);
         }
     }
 }

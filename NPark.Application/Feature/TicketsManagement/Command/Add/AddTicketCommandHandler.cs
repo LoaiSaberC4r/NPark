@@ -255,6 +255,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                     price: pricingScheme.Salary,
                     gateId: gateId,
                     userId: userId);
+                ticketEntity.SetIsCashierCollected();
 
                 // ---------------------------
                 // 6) Save vehicle images (if any)

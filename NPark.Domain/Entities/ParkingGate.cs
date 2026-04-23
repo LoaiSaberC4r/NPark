@@ -20,20 +20,33 @@ namespace NPark.Domain.Entities
         public User? AssignedToUser { get; private set; }
         public string? ControlIp { get; private set; }
 
+        public Guid? ONVIFCameraSettingId { get; private set; }
+        public ONVIFCameraSetting? ONVIFCameraSetting { get; private set; }
+
         public int? ParkingSystemConfigurationId { get; private set; }
         public ParkingSystemConfiguration? ParkingSystemConfiguration { get; private set; }
 
         private ParkingGate()
         { }
 
-        public static ParkingGate Create(int gateNumber, GateType gateType, string? lprIp = null, string? pcIp = null, int? id = null) => new ParkingGate()
-        {
-            GateNumber = gateNumber,
-            GateType = gateType,
-            LprIp = lprIp,
-            ParkingSystemConfigurationId = id,
-            PcIp = pcIp
-        };
+        public static ParkingGate Create(
+            int gateNumber,
+            GateType gateType,
+            string? lprIp = null,
+            string? pcIp = null,
+            string? controlIp = null,
+            Guid? onvifCameraSettingId = null,
+            int? id = null)
+            => new ParkingGate()
+            {
+                GateNumber = gateNumber,
+                GateType = gateType,
+                LprIp = lprIp,
+                ParkingSystemConfigurationId = id,
+                PcIp = pcIp,
+                ControlIp = controlIp,
+                ONVIFCameraSettingId = onvifCameraSettingId
+            };
 
         public void SetIsOccupied(bool isOccupied, Guid? occupiedBy = null, DateTime? occupiedTime = null)
         {
@@ -44,12 +57,22 @@ namespace NPark.Domain.Entities
 
         public void SetPcIp(string pcIp) => PcIp = pcIp;
 
-        public void UpdateGateInfo(int gateNumber, GateType gateType, string? lprIp, string? pcIp, bool isAssigned, Guid? assignedTo)
+        public void UpdateGateInfo(
+            int gateNumber,
+            GateType gateType,
+            string? lprIp,
+            string? pcIp,
+            string? controlIp,
+            Guid? onvifCameraSettingId,
+            bool isAssigned,
+            Guid? assignedTo)
         {
             GateNumber = gateNumber;
             GateType = gateType;
             LprIp = lprIp;
             PcIp = pcIp;
+            ControlIp = controlIp;
+            ONVIFCameraSettingId = onvifCameraSettingId;
             IsAssigned = isAssigned;
             AssignedTo = assignedTo;
         }
@@ -57,5 +80,7 @@ namespace NPark.Domain.Entities
         public void SetLastLoginUserId(Guid userId) => LastLoginUserId = userId;
 
         public void SetControlIp(string controlIp) => ControlIp = controlIp;
+
+        public void SetONVIFCameraSettingId(Guid? id) => ONVIFCameraSettingId = id;
     }
 }
