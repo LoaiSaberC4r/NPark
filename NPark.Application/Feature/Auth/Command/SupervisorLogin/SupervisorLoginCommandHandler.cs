@@ -10,6 +10,7 @@ using NPark.Application.Shared.Dto;
 using NPark.Application.Specifications.ParkingGateSpec;
 using NPark.Application.Specifications.UserSpecification;
 using NPark.Domain.Entities;
+using NPark.Domain.Resource;
 
 namespace NPark.Application.Feature.Auth.Command.SupervisorLogin
 {
@@ -69,7 +70,7 @@ namespace NPark.Application.Feature.Auth.Command.SupervisorLogin
                     return Result<UserTokenDto>.Fail(
                         new Error(
                             Code: "Auth.InvalidCredentials",
-                            Message: "اسم المستخدم أو كلمة المرور غير صحيحة (Invalid username or password).",
+                            Message: ErrorMessage.AuthInvalidCredentials,
                             Type: ErrorType.Security));
                 }
 
@@ -89,7 +90,7 @@ namespace NPark.Application.Feature.Auth.Command.SupervisorLogin
                     return Result<UserTokenDto>.Fail(
                         new Error(
                             Code: "Gate.NotFound",
-                            Message: "لم يتم العثور على البوابة المحددة (Gate not found).",
+                            Message: ErrorMessage.GateNotFound,
                             Type: ErrorType.NotFound));
                 }
 
@@ -136,7 +137,7 @@ namespace NPark.Application.Feature.Auth.Command.SupervisorLogin
                 return Result<UserTokenDto>.Fail(
                     new Error(
                         Code: "Auth.SupervisorLogin.Unexpected",
-                        Message: "حدث خطأ غير متوقع أثناء تسجيل دخول المشرف، برجاء المحاولة لاحقًا (Unexpected error occurred during supervisor login, please try again later).",
+                        Message: ErrorMessage.SupervisorLoginUnexpected,
                         Type: ErrorType.Infrastructure));
             }
         }
@@ -158,7 +159,7 @@ namespace NPark.Application.Feature.Auth.Command.SupervisorLogin
                         IsSuccess: false,
                         StatusCode: StatusCodes.Status401Unauthorized,
                         ErrorCode: "Auth.InvalidCredentials",
-                        ErrorMessage: "اسم المستخدم أو كلمة المرور غير صحيحة (Invalid username or password).",
+                        ErrorMessage: ErrorMessage.AuthInvalidCredentials,
                         UserId: userId,
                         Extra: new
                         {

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using NPark.Api.Contracts;
 using NPark.Application.Feature.GateManagement.Command.OpenGate;
 using NPark.Application.Feature.GateManagement.Query.GetAll;
+using NPark.Application.Feature.GateManagement.Query.GetGateConnectionInfo;
 
 namespace NPark.Api.Controllers
 {
@@ -36,6 +37,18 @@ namespace NPark.Api.Controllers
             };
 
             var result = await sender.Send(command, cancellationToken);
+            return result.ToIActionResult(cancellationToken);
+        }
+
+        [HttpGet("{gateId:guid}/connection-info")]
+        public async Task<IActionResult> GetConnectionInfo(
+           [FromRoute] Guid gateId,
+           CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(
+                new GetGateConnectionInfoQuery(gateId),
+                cancellationToken);
+
             return result.ToIActionResult(cancellationToken);
         }
     }

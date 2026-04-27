@@ -1,4 +1,5 @@
 ﻿using FluentValidation;
+using NPark.Domain.Resource;
 
 namespace NPark.Application.Feature.TicketsManagement.Command.Add
 {
@@ -10,20 +11,24 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             // Common rules
             // ---------------------------
 
-            // VehicleNumber: optional, but if provided must be valid.
             RuleFor(x => x.VehicleNumber)
                 .MaximumLength(50)
-                .WithMessage("Vehicle number must not exceed 50 characters.")
+                .WithMessage(ErrorMessage.VehicleNumberMaxLength)
                 .When(x => !string.IsNullOrWhiteSpace(x.VehicleNumber));
+
+            RuleFor(x => x.CardNumber)
+                .MaximumLength(50)
+                .WithMessage(ErrorMessage.CardNumberMaxLength)
+                .When(x => !string.IsNullOrWhiteSpace(x.CardNumber));
 
             // ---------------------------
             // Subscriber rules
             // ---------------------------
             When(x => x.IsSubscriber, () =>
             {
-                RuleFor(x => x.CardNumber)
-                    .NotEmpty().WithMessage("Card number is required for subscriber tickets.")
-                    .MaximumLength(50).WithMessage("Card number must not exceed 50 characters.");
+                RuleFor(x => x)
+                    .Must(HaveCardNumberOrVehicleNumber)
+                    .WithMessage(ErrorMessage.SubscriberTicketCardOrVehicleNumberRequired);
             });
 
             // ---------------------------
@@ -31,11 +36,16 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             // ---------------------------
             When(x => !x.IsSubscriber, () =>
             {
-                // Optional: you can enforce that CardNumber should be empty for non-subscriber.
                 RuleFor(x => x.CardNumber)
                     .Empty()
-                    .WithMessage("Card number must be empty for non-subscriber tickets.");
+                    .WithMessage(ErrorMessage.NonSubscriberTicketCardNumberMustBeEmpty);
             });
+        }
+
+        private static bool HaveCardNumberOrVehicleNumber(AddTicketCommand command)
+        {
+            return !string.IsNullOrWhiteSpace(command.CardNumber)
+                || !string.IsNullOrWhiteSpace(command.VehicleNumber);
         }
     }
 }

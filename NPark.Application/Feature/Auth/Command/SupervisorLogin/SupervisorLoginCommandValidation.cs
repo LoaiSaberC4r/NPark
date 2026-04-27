@@ -11,7 +11,7 @@ namespace NPark.Application.Feature.Auth.Command.SupervisorLogin
                 .NotEmpty()
                 .WithMessage(ErrorMessage.UserName_Required)
                 .MaximumLength(100)
-                .WithMessage("يجب ألا يزيد اسم المستخدم عن 100 حرف (Username must not exceed 100 characters).");
+                .WithMessage(ErrorMessage.UserNameMaxLength);
 
             RuleFor(x => x.Password)
                 .NotEmpty()
@@ -19,11 +19,11 @@ namespace NPark.Application.Feature.Auth.Command.SupervisorLogin
 
             RuleFor(x => x.GateNumber)
                 .GreaterThan(0)
-                .WithMessage(ErrorMessage.UserName_Required);
+                .WithMessage(ErrorMessage.GateNumberMustBeGreaterThanZero);
 
             RuleFor(x => x.GateType)
                 .IsInEnum()
-                .WithMessage("نوع البوابة غير صالح (Invalid gate type).");
+                .WithMessage(ErrorMessage.GateTypeInvalid);
         }
     }
 }

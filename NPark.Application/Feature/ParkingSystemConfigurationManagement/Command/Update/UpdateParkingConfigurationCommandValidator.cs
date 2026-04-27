@@ -107,8 +107,8 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                         .WithMessage("Control IP is required for exit gates.");
 
                     g.RuleFor(x => x.ControlIp)
-                        .Must(IsValidIp)
-                        .WithMessage("ExitGate Control IP must be a valid IPv4 or IPv6 address.");
+                        .NotNull()
+                        .WithMessage("ExitGate Control IP must be a valid ");
 
                     g.RuleFor(x => x.LprIp)
                         .Must(IsValidIp)

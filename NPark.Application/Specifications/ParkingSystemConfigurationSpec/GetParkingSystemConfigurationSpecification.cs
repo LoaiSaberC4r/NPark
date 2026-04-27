@@ -21,41 +21,23 @@ namespace NPark.Application.Specifications.ParkingSystemConfigurationSpec
                 AllowedParkingSlots = x.AllowedParkingSlots,
                 EntryGatesCount = x.EntryGatesCount,
                 ExitGatesCount = x.ExitGatesCount,
+
                 PriceType = x.PriceType,
                 VehiclePassengerData = x.VehiclePassengerData,
                 PrintType = x.PrintType,
+
                 DateTimeFlag = x.DateTimeFlag,
                 TicketIdFlag = x.TicketIdFlag,
                 FeesFlag = x.FeesFlag,
+
                 gracePeriodMinutes = x.GracePeriod == null
                     ? null
                     : (int)x.GracePeriod.Value.TotalMinutes,
+
                 PricingSchemaId = x.PricingSchemaId,
                 PricingSchemaName = x.PricingScheme == null
                     ? string.Empty
                     : x.PricingScheme.Name,
-
-                ExitGates = x.ParkingGates
-                    .Where(g => g.GateType == GateType.Exit)
-                    .Select(g => new GateInfo
-                    {
-                        GateId = g.Id,
-                        GateNumber = g.GateNumber,
-                        LprIp = g.LprIp,
-                        PcIp = g.PcIp,
-                        ControlIp = g.ControlIp ?? string.Empty,
-                        AssignedTo = g.AssignedTo,
-                        IsAssigned = g.IsAssigned,
-                        ONVIFCameraSetting = g.ONVIFCameraSetting == null
-                            ? null
-                            : new ONVIFCameraSettingDto
-                            {
-                                UrlRequest = g.ONVIFCameraSetting.UrlRequest,
-                                UserName = g.ONVIFCameraSetting.UserName,
-                                Password = g.ONVIFCameraSetting.Password
-                            }
-                    })
-                    .ToList(),
 
                 EntryGates = x.ParkingGates
                     .Where(g => g.GateType == GateType.Entrance)
@@ -63,11 +45,17 @@ namespace NPark.Application.Specifications.ParkingSystemConfigurationSpec
                     {
                         GateId = g.Id,
                         GateNumber = g.GateNumber,
+
                         LprIp = g.LprIp,
                         PcIp = g.PcIp,
                         ControlIp = g.ControlIp ?? string.Empty,
-                        AssignedTo = g.AssignedTo,
+
                         IsAssigned = g.IsAssigned,
+                        AssignedTo = g.AssignedTo,
+
+                        QrPrinterName = g.QrPrinterName,
+                        ReceiptPrinterName = g.ReceiptPrinterName,
+
                         ONVIFCameraSetting = g.ONVIFCameraSetting == null
                             ? null
                             : new ONVIFCameraSettingDto
@@ -77,6 +65,36 @@ namespace NPark.Application.Specifications.ParkingSystemConfigurationSpec
                                 Password = g.ONVIFCameraSetting.Password
                             }
                     })
+                    .OrderBy(g => g.GateNumber)
+                    .ToList(),
+
+                ExitGates = x.ParkingGates
+                    .Where(g => g.GateType == GateType.Exit)
+                    .Select(g => new GateInfo
+                    {
+                        GateId = g.Id,
+                        GateNumber = g.GateNumber,
+
+                        LprIp = g.LprIp,
+                        PcIp = g.PcIp,
+                        ControlIp = g.ControlIp ?? string.Empty,
+
+                        IsAssigned = g.IsAssigned,
+                        AssignedTo = g.AssignedTo,
+
+                        QrPrinterName = g.QrPrinterName,
+                        ReceiptPrinterName = g.ReceiptPrinterName,
+
+                        ONVIFCameraSetting = g.ONVIFCameraSetting == null
+                            ? null
+                            : new ONVIFCameraSettingDto
+                            {
+                                UrlRequest = g.ONVIFCameraSetting.UrlRequest,
+                                UserName = g.ONVIFCameraSetting.UserName,
+                                Password = g.ONVIFCameraSetting.Password
+                            }
+                    })
+                    .OrderBy(g => g.GateNumber)
                     .ToList()
             });
         }

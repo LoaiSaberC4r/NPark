@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using NPark.Api.Attribute;
 using NPark.Application.Feature.ParkingMembershipsManagement.Command.Add;
 using NPark.Application.Feature.ParkingMembershipsManagement.Command.Update;
+using NPark.Application.Feature.ParkingMembershipsManagement.Query.CheckMembershipByCardNumber;
 using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetActiveMembership;
 using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetAll;
 using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetInactiveMembership;
@@ -77,6 +78,18 @@ namespace NPark.Api.Controllers
         {
             var result = await sender.Send(query, cancellationToken);
             return result.ToIActionResult();
+        }
+
+        [HttpGet("check-by-card-number")]
+        public async Task<IActionResult> CheckByCardNumber(
+          [FromQuery] string cardNumber,
+          CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(
+                new CheckMembershipByCardNumberQuery(cardNumber),
+                cancellationToken);
+
+            return result.ToIActionResult(cancellationToken);
         }
     }
 }

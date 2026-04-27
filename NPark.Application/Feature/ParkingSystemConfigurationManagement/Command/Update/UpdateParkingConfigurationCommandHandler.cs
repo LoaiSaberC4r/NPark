@@ -35,16 +35,22 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
         {
             _parkingSystemConfigurationRepository = parkingSystemConfigurationRepository
                 ?? throw new ArgumentNullException(nameof(parkingSystemConfigurationRepository));
+
             _parkingGateRepository = parkingGateRepository
                 ?? throw new ArgumentNullException(nameof(parkingGateRepository));
+
             _ticketRepository = ticketRepository
                 ?? throw new ArgumentNullException(nameof(ticketRepository));
+
             _auditLogger = auditLogger
                 ?? throw new ArgumentNullException(nameof(auditLogger));
+
             _logger = logger
                 ?? throw new ArgumentNullException(nameof(logger));
+
             _userRepository = userRepository
                 ?? throw new ArgumentNullException(nameof(userRepository));
+
             _onvifCameraSettingRepository = onvifCameraSettingRepository
                 ?? throw new ArgumentNullException(nameof(onvifCameraSettingRepository));
         }
@@ -58,6 +64,7 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             try
             {
                 var spec = new GetParkingSystemConfigurationForUpdateSpecification();
+
                 var configuration = await _parkingSystemConfigurationRepository
                     .FirstOrDefaultWithSpecAsync(spec, cancellationToken);
 
@@ -80,7 +87,7 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 return Result.Fail(
                     new Error(
                         Code: "ParkingConfiguration.Update.Unexpected",
-                        Message: ErrorMessage.ParkingConfigurationUpdate_Unexpected,
+                        Message: ex.ToString(),
                         Type: ErrorType.Infrastructure));
             }
         }
@@ -89,8 +96,9 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             UpdateParkingConfigurationCommand request,
             CancellationToken cancellationToken)
         {
-            var pricingSchemaId =
-                request.PricingSchemaId == Guid.Empty ? null : request.PricingSchemaId;
+            var pricingSchemaId = request.PricingSchemaId == Guid.Empty
+                ? null
+                : request.PricingSchemaId;
 
             var gracePeriod = request.gracePeriodMinutes.HasValue
                 ? TimeSpan.FromMinutes(request.gracePeriodMinutes.Value)
@@ -109,80 +117,28 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 pricingSchemaId: pricingSchemaId,
                 gracePeriod: gracePeriod);
 
-            foreach (var gateInfo in request.EntryGates)
-            {
-                var validationResult = await ValidateGateInfoAsync(
-                    gateInfo,
-                    GateType.Entrance,
-                    cancellationToken);
-
-                if (validationResult.IsFailure)
-                    return validationResult;
-
-                var onvifCameraSettingId = await CreateOrUpdateOnvifCameraSettingAsync(
-                    gateInfo.ONVIFCameraSetting,
-                    existingCameraSettingId: null,
-                    cancellationToken);
-
-                var parkingGate = ParkingGate.Create(
-                    gateNumber: gateInfo.GateNumber,
-                    gateType: GateType.Entrance,
-                    lprIp: gateInfo.LprIp,
-                    pcIp: gateInfo.PcIp,
-                    controlIp: gateInfo.ControlIp,
-                    onvifCameraSettingId: onvifCameraSettingId);
-
-                parkingGate.UpdateGateInfo(
-                    gateNumber: gateInfo.GateNumber,
-                    gateType: GateType.Entrance,
-                    lprIp: gateInfo.LprIp,
-                    pcIp: gateInfo.PcIp,
-                    controlIp: gateInfo.ControlIp,
-                    onvifCameraSettingId: onvifCameraSettingId,
-                    assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
-                    isAssigned: gateInfo.IsAssigned);
-
-                configuration.AddParkingGate(parkingGate);
-            }
-
-            foreach (var gateInfo in request.ExitGates)
-            {
-                var validationResult = await ValidateGateInfoAsync(
-                    gateInfo,
-                    GateType.Exit,
-                    cancellationToken);
-
-                if (validationResult.IsFailure)
-                    return validationResult;
-
-                var onvifCameraSettingId = await CreateOrUpdateOnvifCameraSettingAsync(
-                    gateInfo.ONVIFCameraSetting,
-                    existingCameraSettingId: null,
-                    cancellationToken);
-
-                var parkingGate = ParkingGate.Create(
-                    gateNumber: gateInfo.GateNumber,
-                    gateType: GateType.Exit,
-                    lprIp: gateInfo.LprIp,
-                    pcIp: gateInfo.PcIp,
-                    controlIp: gateInfo.ControlIp,
-                    onvifCameraSettingId: onvifCameraSettingId);
-
-                parkingGate.UpdateGateInfo(
-                    gateNumber: gateInfo.GateNumber,
-                    gateType: GateType.Exit,
-                    lprIp: gateInfo.LprIp,
-                    pcIp: gateInfo.PcIp,
-                    controlIp: gateInfo.ControlIp,
-                    onvifCameraSettingId: onvifCameraSettingId,
-                    assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
-                    isAssigned: gateInfo.IsAssigned);
-
-                configuration.AddParkingGate(parkingGate);
-            }
-
             await _parkingSystemConfigurationRepository.AddAsync(configuration, cancellationToken);
             await _parkingSystemConfigurationRepository.SaveChangesAsync(cancellationToken);
+
+            var addEntryGatesResult = await AddNewGatesAsync(
+                configurationId: configuration.Id,
+                gateInfos: request.EntryGates,
+                gateType: GateType.Entrance,
+                cancellationToken: cancellationToken);
+
+            if (addEntryGatesResult.IsFailure)
+                return addEntryGatesResult;
+
+            var addExitGatesResult = await AddNewGatesAsync(
+                configurationId: configuration.Id,
+                gateInfos: request.ExitGates,
+                gateType: GateType.Exit,
+                cancellationToken: cancellationToken);
+
+            if (addExitGatesResult.IsFailure)
+                return addExitGatesResult;
+
+            await _parkingGateRepository.SaveChangesAsync(cancellationToken);
 
             await SafeAuditAsync(
                 eventName: "CreateParkingSystemConfiguration",
@@ -203,40 +159,34 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             UpdateParkingConfigurationCommand request,
             CancellationToken cancellationToken)
         {
-            var pricingSchemaId =
-                request.PricingSchemaId == Guid.Empty ? null : request.PricingSchemaId;
+            var pricingSchemaId = request.PricingSchemaId == Guid.Empty
+                ? null
+                : request.PricingSchemaId;
 
             var gracePeriod = request.gracePeriodMinutes.HasValue
                 ? TimeSpan.FromMinutes(request.gracePeriodMinutes.Value)
                 : (TimeSpan?)null;
 
             configuration.Update(
-                configuration,
-                request.EntryGatesCount,
-                request.ExitGatesCount,
-                request.AllowedParkingSlots,
-                request.PriceType,
-                request.VehiclePassengerData,
-                request.PrintType,
-                request.DateTimeFlag,
-                request.TicketIdFlag,
-                request.FeesFlag,
-                pricingSchemaId,
-                gracePeriod);
+                entryGatesCount: request.EntryGatesCount,
+                exitGatesCount: request.ExitGatesCount,
+                allowedParkingSlots: request.AllowedParkingSlots,
+                priceType: request.PriceType,
+                vehiclePassengerData: request.VehiclePassengerData,
+                printType: request.PrintType,
+                dateTimeFlag: request.DateTimeFlag,
+                ticketIdFlag: request.TicketIdFlag,
+                feesFlag: request.FeesFlag,
+                pricingSchemaId: pricingSchemaId,
+                gracePeriod: gracePeriod);
 
             await _parkingSystemConfigurationRepository.SaveChangesAsync(cancellationToken);
 
             var gateSpec = new GetParkingGateBySystemConfiguration(configuration.Id);
+
             var existingGates = (await _parkingGateRepository
                 .ListWithSpecAsync(gateSpec, cancellationToken))
                 .ToList();
-
-            var existingGateById = existingGates
-                .Where(g => g.Id != Guid.Empty)
-                .ToDictionary(g => g.Id, g => g);
-
-            var requestedEntryGates = request.EntryGates;
-            var requestedExitGates = request.ExitGates;
 
             var requestedGateIds = request.EntryGates
                 .Concat(request.ExitGates)
@@ -244,137 +194,78 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 .Select(g => g.GateId!.Value)
                 .ToHashSet();
 
+            var gatesToDelete = existingGates
+                .Where(g => !requestedGateIds.Contains(g.Id))
+                .ToList();
+
+            foreach (var gate in gatesToDelete)
+            {
+                var hasTickets = await _ticketRepository.IsExistAsync(
+                    t => t.GateId == gate.Id,
+                    cancellationToken);
+
+                if (hasTickets)
+                {
+                    return Result.Fail(
+                        new Error(
+                            Code: "Gate.HasTickets",
+                            Message: ErrorMessage.Gate_HasTickets,
+                            Type: ErrorType.Conflict));
+                }
+            }
+
+            if (gatesToDelete.Count > 0)
+            {
+                _parkingGateRepository.DeleteRange(gatesToDelete);
+                await _parkingGateRepository.SaveChangesAsync(cancellationToken);
+            }
+
+            existingGates = (await _parkingGateRepository
+                .ListWithSpecAsync(gateSpec, cancellationToken))
+                .ToList();
+
+            var existingGateById = existingGates
+                .ToDictionary(g => g.Id, g => g);
+
             var updateEntryResult = await UpdateExistingGatesAsync(
-                existingGateById,
-                requestedEntryGates,
-                GateType.Entrance,
-                cancellationToken);
+                existingGateById: existingGateById,
+                gateInfos: request.EntryGates,
+                gateType: GateType.Entrance,
+                cancellationToken: cancellationToken);
 
             if (updateEntryResult.IsFailure)
                 return updateEntryResult;
 
             var updateExitResult = await UpdateExistingGatesAsync(
-                existingGateById,
-                requestedExitGates,
-                GateType.Exit,
-                cancellationToken);
+                existingGateById: existingGateById,
+                gateInfos: request.ExitGates,
+                gateType: GateType.Exit,
+                cancellationToken: cancellationToken);
 
             if (updateExitResult.IsFailure)
                 return updateExitResult;
 
             await _parkingGateRepository.SaveChangesAsync(cancellationToken);
 
-            var gatesToDelete = existingGates
-                .Where(g => !requestedGateIds.Contains(g.Id))
-                .ToList();
+            var addNewEntryGatesResult = await AddNewGatesAsync(
+                configurationId: configuration.Id,
+                gateInfos: request.EntryGates.Where(g => !g.GateId.HasValue),
+                gateType: GateType.Entrance,
+                cancellationToken: cancellationToken);
 
-            if (gatesToDelete.Count > 0)
-            {
-                foreach (var gate in gatesToDelete)
-                {
-                    var hasTickets = await _ticketRepository
-                        .IsExistAsync(t => t.GateId == gate.Id, cancellationToken);
+            if (addNewEntryGatesResult.IsFailure)
+                return addNewEntryGatesResult;
 
-                    if (hasTickets)
-                    {
-                        _logger.LogWarning(
-                            "Cannot delete gate with tickets. GateId: {GateId}, GateNumber: {GateNumber}",
-                            gate.Id,
-                            gate.GateNumber);
+            var addNewExitGatesResult = await AddNewGatesAsync(
+                configurationId: configuration.Id,
+                gateInfos: request.ExitGates.Where(g => !g.GateId.HasValue),
+                gateType: GateType.Exit,
+                cancellationToken: cancellationToken);
 
-                        return Result.Fail(
-                            new Error(
-                                Code: "Gate.HasTickets",
-                                Message: ErrorMessage.Gate_HasTickets,
-                                Type: ErrorType.Conflict));
-                    }
-                }
+            if (addNewExitGatesResult.IsFailure)
+                return addNewExitGatesResult;
 
-                _parkingGateRepository.DeleteRange(gatesToDelete);
-                await _parkingGateRepository.SaveChangesAsync(cancellationToken);
-            }
-
-            var newGates = new List<ParkingGate>();
-
-            foreach (var gateInfo in requestedEntryGates.Where(g => !g.GateId.HasValue))
-            {
-                var validationResult = await ValidateGateInfoAsync(
-                    gateInfo,
-                    GateType.Entrance,
-                    cancellationToken);
-
-                if (validationResult.IsFailure)
-                    return validationResult;
-
-                var onvifCameraSettingId = await CreateOrUpdateOnvifCameraSettingAsync(
-                    gateInfo.ONVIFCameraSetting,
-                    existingCameraSettingId: null,
-                    cancellationToken);
-
-                var parkingGate = ParkingGate.Create(
-                    gateNumber: gateInfo.GateNumber,
-                    gateType: GateType.Entrance,
-                    lprIp: gateInfo.LprIp,
-                    pcIp: gateInfo.PcIp,
-                    controlIp: gateInfo.ControlIp,
-                    onvifCameraSettingId: onvifCameraSettingId,
-                    id: configuration.Id);
-
-                parkingGate.UpdateGateInfo(
-                    gateNumber: gateInfo.GateNumber,
-                    gateType: GateType.Entrance,
-                    lprIp: gateInfo.LprIp,
-                    pcIp: gateInfo.PcIp,
-                    controlIp: gateInfo.ControlIp,
-                    onvifCameraSettingId: onvifCameraSettingId,
-                    assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
-                    isAssigned: gateInfo.IsAssigned);
-
-                newGates.Add(parkingGate);
-            }
-
-            foreach (var gateInfo in requestedExitGates.Where(g => !g.GateId.HasValue))
-            {
-                var validationResult = await ValidateGateInfoAsync(
-                    gateInfo,
-                    GateType.Exit,
-                    cancellationToken);
-
-                if (validationResult.IsFailure)
-                    return validationResult;
-
-                var onvifCameraSettingId = await CreateOrUpdateOnvifCameraSettingAsync(
-                    gateInfo.ONVIFCameraSetting,
-                    existingCameraSettingId: null,
-                    cancellationToken);
-
-                var parkingGate = ParkingGate.Create(
-                    gateNumber: gateInfo.GateNumber,
-                    gateType: GateType.Exit,
-                    lprIp: gateInfo.LprIp,
-                    pcIp: gateInfo.PcIp,
-                    controlIp: gateInfo.ControlIp,
-                    onvifCameraSettingId: onvifCameraSettingId,
-                    id: configuration.Id);
-
-                parkingGate.UpdateGateInfo(
-                    gateNumber: gateInfo.GateNumber,
-                    gateType: GateType.Exit,
-                    lprIp: gateInfo.LprIp,
-                    pcIp: gateInfo.PcIp,
-                    controlIp: gateInfo.ControlIp,
-                    onvifCameraSettingId: onvifCameraSettingId,
-                    assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
-                    isAssigned: gateInfo.IsAssigned);
-
-                newGates.Add(parkingGate);
-            }
-
-            if (newGates.Count > 0)
-            {
-                await _parkingGateRepository.AddRangeAsync(newGates, cancellationToken);
-                await _parkingGateRepository.SaveChangesAsync(cancellationToken);
-            }
+            await _parkingGateRepository.SaveChangesAsync(cancellationToken);
 
             await SafeAuditAsync(
                 eventName: "UpdateParkingSystemConfiguration",
@@ -390,17 +281,117 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             return Result.Ok();
         }
 
+        private async Task<Result> AddNewGatesAsync(
+            int configurationId,
+            IEnumerable<GateInfo> gateInfos,
+            GateType gateType,
+            CancellationToken cancellationToken)
+        {
+            var gateInfoList = gateInfos.ToList();
+
+            var duplicateGateNumberInRequest = gateInfoList
+                .GroupBy(g => g.GateNumber)
+                .FirstOrDefault(g => g.Count() > 1);
+
+            if (duplicateGateNumberInRequest is not null)
+            {
+                return Result.Fail(
+                    new Error(
+                        Code: "Gate.DuplicateGateNumberInRequest",
+                        Message: $"Gate number {duplicateGateNumberInRequest.Key} is duplicated in {gateType} gates request.",
+                        Type: ErrorType.Validation));
+            }
+
+            foreach (var gateInfo in gateInfoList)
+            {
+                var validationResult = await ValidateGateInfoAsync(
+                    gateInfo,
+                    gateType,
+                    cancellationToken);
+
+                if (validationResult.IsFailure)
+                    return validationResult;
+
+                var alreadyExists = await _parkingGateRepository.IsExistAsync(
+                    g => g.GateNumber == gateInfo.GateNumber &&
+                         g.GateType == gateType,
+                    cancellationToken);
+
+                if (alreadyExists)
+                {
+                    return Result.Fail(
+                        new Error(
+                            Code: "Gate.DuplicateGateNumberForType",
+                            Message: $"Gate number {gateInfo.GateNumber} already exists for {gateType}. If this is an existing gate, frontend must send gateId.",
+                            Type: ErrorType.Conflict));
+                }
+
+                var onvifCameraSettingId = await CreateOrUpdateOnvifCameraSettingAsync(
+                    gateInfo.ONVIFCameraSetting,
+                    existingCameraSettingId: null,
+                    cancellationToken);
+
+                var parkingGate = ParkingGate.Create(
+                    gateNumber: gateInfo.GateNumber,
+                    gateType: gateType,
+                    parkingSystemConfigurationId: configurationId,
+                    lprIp: gateInfo.LprIp,
+                    pcIp: gateInfo.PcIp,
+                    controlIp: gateInfo.ControlIp,
+                    onvifCameraSettingId: onvifCameraSettingId,
+                    qrPrinterName: gateInfo.QrPrinterName,
+                    receiptPrinterName: gateInfo.ReceiptPrinterName);
+
+                parkingGate.UpdateGateInfo(
+                    gateNumber: gateInfo.GateNumber,
+                    gateType: gateType,
+                    lprIp: gateInfo.LprIp,
+                    pcIp: gateInfo.PcIp,
+                    controlIp: gateInfo.ControlIp,
+                    onvifCameraSettingId: onvifCameraSettingId,
+                    isAssigned: gateInfo.IsAssigned,
+                    assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
+                    qrPrinterName: gateInfo.QrPrinterName,
+                    receiptPrinterName: gateInfo.ReceiptPrinterName);
+
+                await _parkingGateRepository.AddAsync(parkingGate, cancellationToken);
+            }
+
+            return Result.Ok();
+        }
+
         private async Task<Result> UpdateExistingGatesAsync(
             IDictionary<Guid, ParkingGate> existingGateById,
             IEnumerable<GateInfo> gateInfos,
             GateType gateType,
             CancellationToken cancellationToken)
         {
-            foreach (var gateInfo in gateInfos.Where(g => g.GateId.HasValue))
+            var gateInfoList = gateInfos
+                .Where(g => g.GateId.HasValue)
+                .ToList();
+
+            var duplicateGateNumberInRequest = gateInfoList
+                .GroupBy(g => g.GateNumber)
+                .FirstOrDefault(g => g.Count() > 1);
+
+            if (duplicateGateNumberInRequest is not null)
+            {
+                return Result.Fail(
+                    new Error(
+                        Code: "Gate.DuplicateGateNumberInRequest",
+                        Message: $"Gate number {duplicateGateNumberInRequest.Key} is duplicated in {gateType} gates request.",
+                        Type: ErrorType.Validation));
+            }
+
+            foreach (var gateInfo in gateInfoList)
             {
                 if (!existingGateById.TryGetValue(gateInfo.GateId!.Value, out var gate))
                 {
-                    continue;
+                    return Result.Fail(
+                        new Error(
+                            Code: "Gate.NotFound",
+                            Message: $"Gate with id {gateInfo.GateId.Value} was not found.",
+                            Type: ErrorType.NotFound));
                 }
 
                 var validationResult = await ValidateGateInfoAsync(
@@ -410,6 +401,21 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
 
                 if (validationResult.IsFailure)
                     return validationResult;
+
+                var duplicateGateNumberExists = await _parkingGateRepository.IsExistAsync(
+                    g => g.Id != gate.Id &&
+                         g.GateNumber == gateInfo.GateNumber &&
+                         g.GateType == gateType,
+                    cancellationToken);
+
+                if (duplicateGateNumberExists)
+                {
+                    return Result.Fail(
+                        new Error(
+                            Code: "Gate.DuplicateGateNumberForType",
+                            Message: $"Gate number {gateInfo.GateNumber} already exists for {gateType}.",
+                            Type: ErrorType.Conflict));
+                }
 
                 var onvifCameraSettingId = await CreateOrUpdateOnvifCameraSettingAsync(
                     gateInfo.ONVIFCameraSetting,
@@ -423,8 +429,10 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                     pcIp: gateInfo.PcIp,
                     controlIp: gateInfo.ControlIp,
                     onvifCameraSettingId: onvifCameraSettingId,
+                    isAssigned: gateInfo.IsAssigned,
                     assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
-                    isAssigned: gateInfo.IsAssigned);
+                    qrPrinterName: gateInfo.QrPrinterName,
+                    receiptPrinterName: gateInfo.ReceiptPrinterName);
             }
 
             return Result.Ok();
@@ -442,6 +450,35 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                         Code: "Gate.ControlIp.Required",
                         Message: $"Gate {gateInfo.GateNumber} must have a control IP.",
                         Type: ErrorType.Validation));
+            }
+
+            if (gateInfo.IsAssigned && gateInfo.AssignedTo is null)
+            {
+                return Result.Fail(
+                    new Error(
+                        Code: "Gate.AssignedTo.Required",
+                        Message: $"Gate {gateInfo.GateNumber} must have an assigned user.",
+                        Type: ErrorType.Validation));
+            }
+
+            if (gateInfo.AssignedTo.HasValue)
+            {
+                var user = await _userRepository.GetByIdAsync(
+                    gateInfo.AssignedTo.Value,
+                    cancellationToken);
+
+                var expectedRoleId = gateType == GateType.Entrance
+                    ? SystemRoles.EntranceCashierRoleId
+                    : SystemRoles.ExitCashierRoleId;
+
+                if (user is null || user.RoleId != expectedRoleId)
+                {
+                    return Result.Fail(
+                        new Error(
+                            Code: "Gate.AssignedToInvalidUser",
+                            Message: $"Gate {gateInfo.GateNumber} is assigned to an invalid user.",
+                            Type: ErrorType.Validation));
+                }
             }
 
             if (gateInfo.ONVIFCameraSetting is not null)
@@ -474,33 +511,6 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                 }
             }
 
-            if (!gateInfo.IsAssigned)
-                return Result.Ok();
-
-            if (gateInfo.AssignedTo is null)
-            {
-                return Result.Fail(
-                    new Error(
-                        Code: "Gate.AssignedTo.Required",
-                        Message: $"Gate {gateInfo.GateNumber} must have an assigned user.",
-                        Type: ErrorType.Validation));
-            }
-
-            var assignedUser = await _userRepository.GetByIdAsync(gateInfo.AssignedTo.Value, cancellationToken);
-
-            var expectedRoleId = gateType == GateType.Entrance
-                ? SystemRoles.EntranceCashierRoleId
-                : SystemRoles.ExitCashierRoleId;
-
-            if (assignedUser is null || assignedUser.RoleId != expectedRoleId)
-            {
-                return Result.Fail(
-                    new Error(
-                        Code: "Gate.AssignedToInvalidUser",
-                        Message: $"Gate {gateInfo.GateNumber} is assigned to an invalid user.",
-                        Type: ErrorType.Validation));
-            }
-
             return Result.Ok();
         }
 
@@ -510,19 +520,23 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             CancellationToken cancellationToken)
         {
             if (dto is null)
-            {
                 return null;
-            }
 
             if (existingCameraSettingId.HasValue)
             {
-                var existing = await _onvifCameraSettingRepository
-                    .GetByIdAsync(existingCameraSettingId.Value, cancellationToken);
+                var existing = await _onvifCameraSettingRepository.GetByIdAsync(
+                    existingCameraSettingId.Value,
+                    cancellationToken);
 
                 if (existing is not null)
                 {
-                    existing.Update(dto.UrlRequest, dto.UserName, dto.Password);
+                    existing.Update(
+                        dto.UrlRequest,
+                        dto.UserName,
+                        dto.Password);
+
                     await _onvifCameraSettingRepository.SaveChangesAsync(cancellationToken);
+
                     return existing.Id;
                 }
             }

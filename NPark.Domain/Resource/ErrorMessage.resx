@@ -414,4 +414,58 @@
   <data name="ReportTickets_SearchTerm_MaxLength" xml:space="preserve">
     <value>Search term must not exceed the allowed length</value>
   </data>
+  <data name="Subscriber_AlreadyInsidePark" xml:space="preserve">
+    <value>This subscriber is already inside the park and has not exited yet.</value>
+  </data>
+  <data name="GateAssignedToAnotherUser" xml:space="preserve">
+    <value>Gate is assigned to another user</value>
+  </data>
+  <data name="UserNameMaxLength" xml:space="preserve">
+    <value>Username must not exceed 100 characters.</value>
+  </data>
+  <data name="GateNumberMustBeGreaterThanZero" xml:space="preserve">
+    <value>Gate number must be greater than 0.</value>
+  </data>
+  <data name="GateTypeInvalid" xml:space="preserve">
+    <value>Invalid gate type.</value>
+  </data>
+  <data name="AuthInvalidCredentials" xml:space="preserve">
+    <value>Invalid username or password.</value>
+  </data>
+  <data name="SupervisorLoginUnexpected" xml:space="preserve">
+    <value>Unexpected error occurred during supervisor login, please try again later.</value>
+  </data>
+  <data name="ParkingGateConnectionInfoNotFound" xml:space="preserve">
+    <value>Parking gate was not found.</value>
+  </data>
+  <data name="LprIpNotFound" xml:space="preserve">
+    <value>LPR IP not found.</value>
+  </data>
+  <data name="LprIpRequired" xml:space="preserve">
+    <value>LPR IP is required.</value>
+  </data>
+  <data name="LprIpMaxLength" xml:space="preserve">
+    <value>LPR IP must not exceed 100 characters.</value>
+  </data>
+  <data name="VehicleNumberRequired" xml:space="preserve">
+    <value>Vehicle number is required.</value>
+  </data>
+  <data name="VehicleNumberMaxLength" xml:space="preserve">
+    <value>Vehicle number must not exceed 50 characters.</value>
+  </data>
+  <data name="CardNumberRequired" xml:space="preserve">
+    <value>Card number is required.</value>
+  </data>
+  <data name="PricingSchemaNotConfiguredForEnterPriceType" xml:space="preserve">
+    <value>Pricing schema is not configured for enter price type.</value>
+  </data>
+  <data name="CardNumberMaxLength" xml:space="preserve">
+    <value>Card number must not exceed 50 characters.</value>
+  </data>
+  <data name="SubscriberTicketCardOrVehicleNumberRequired" xml:space="preserve">
+    <value>Card number or vehicle number is required for subscriber tickets.</value>
+  </data>
+  <data name="NonSubscriberTicketCardNumberMustBeEmpty" xml:space="preserve">
+    <value>Card number must be empty for non-subscriber tickets.</value>
+  </data>
 </root>

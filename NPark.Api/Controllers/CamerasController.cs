@@ -14,9 +14,9 @@ namespace NPark.Api.Controllers
         }
 
         [HttpGet("snapshot")]
-        public async Task<IActionResult> GetSnapshot(CancellationToken cancellationToken)
+        public async Task<IActionResult> GetSnapshot([FromQuery] GetCameraSnapshotQuery query, CancellationToken cancellationToken)
         {
-            var result = await sender.Send(new GetCameraSnapshotQuery(), cancellationToken);
+            var result = await sender.Send(query, cancellationToken);
 
             if (result.IsFailure)
                 return result.ToIActionResult(cancellationToken);

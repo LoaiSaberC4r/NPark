@@ -17,8 +17,11 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
             IByteVerificationService byteVerificationService,
             IGenericRepository<Ticket> ticketRepository)
         {
-            _byteVerificationService = byteVerificationService;
-            _ticketRepository = ticketRepository;
+            _byteVerificationService = byteVerificationService
+                ?? throw new ArgumentNullException(nameof(byteVerificationService));
+
+            _ticketRepository = ticketRepository
+                ?? throw new ArgumentNullException(nameof(ticketRepository));
         }
 
         public async Task<Result<ValidateExitByTextCommandResponse>> Handle(
@@ -39,10 +42,11 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
             Ticket? ticket = null;
             string? matchType = null;
 
-            // 1) Try QR first
+            // 1) Try QR Code first
             if (LooksLikeBase64(text))
             {
                 ticket = await GetTicketByQrAsync(text, cancellationToken);
+
                 if (ticket is not null)
                 {
                     matchType = "QrCode";
@@ -53,13 +57,25 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
             if (ticket is null)
             {
                 ticket = await GetTicketByCardNumberAsync(text, cancellationToken);
+
                 if (ticket is not null)
                 {
                     matchType = "CardNumber";
                 }
             }
 
-            // 3) No ticket found
+            // 3) Fallback to VehicleNumber
+            if (ticket is null)
+            {
+                ticket = await GetTicketByVehicleNumberAsync(text, cancellationToken);
+
+                if (ticket is not null)
+                {
+                    matchType = "VehicleNumber";
+                }
+            }
+
+            // 4) No ticket found
             if (ticket is null)
             {
                 return Result<ValidateExitByTextCommandResponse>.Ok(
@@ -77,8 +93,9 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
                     });
             }
 
-            // 4) Validate exit rule
+            // 5) Validate exit rule
             var now = DateTime.Now;
+
             var isValidForExit =
                 ticket.StartDate.Date == now.Date &&
                 ticket.EndDate is null;
@@ -99,7 +116,9 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
             return Result<ValidateExitByTextCommandResponse>.Ok(response);
         }
 
-        private async Task<Ticket?> GetTicketByQrAsync(string qrCode, CancellationToken cancellationToken)
+        private async Task<Ticket?> GetTicketByQrAsync(
+            string qrCode,
+            CancellationToken cancellationToken)
         {
             byte[] bytes;
 
@@ -119,16 +138,37 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
                 return null;
 
             var uniquePart = bytes[..4];
-            var uniqueCode = BitConverter.ToString(uniquePart).Replace("-", "");
+            var uniqueCode = BitConverter
+                .ToString(uniquePart)
+                .Replace("-", "");
 
             var spec = new TicketByUniqueCodeSpecification(uniqueCode);
-            return await _ticketRepository.FirstOrDefaultWithSpecAsync(spec, cancellationToken);
+
+            return await _ticketRepository.FirstOrDefaultWithSpecAsync(
+                spec,
+                cancellationToken);
         }
 
-        private async Task<Ticket?> GetTicketByCardNumberAsync(string cardNumber, CancellationToken cancellationToken)
+        private async Task<Ticket?> GetTicketByCardNumberAsync(
+            string cardNumber,
+            CancellationToken cancellationToken)
         {
             var spec = new TicketByCardNumberSpecification(cardNumber);
-            return await _ticketRepository.FirstOrDefaultWithSpecAsync(spec, cancellationToken);
+
+            return await _ticketRepository.FirstOrDefaultWithSpecAsync(
+                spec,
+                cancellationToken);
+        }
+
+        private async Task<Ticket?> GetTicketByVehicleNumberAsync(
+            string vehicleNumber,
+            CancellationToken cancellationToken)
+        {
+            var spec = new TicketByVehicleNumberSpecification(vehicleNumber);
+
+            return await _ticketRepository.FirstOrDefaultWithSpecAsync(
+                spec,
+                cancellationToken);
         }
 
         private static bool LooksLikeBase64(string input)
@@ -139,7 +179,9 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
             if (input.Length % 4 != 0)
                 return false;
 
-            return System.Text.RegularExpressions.Regex.IsMatch(input, @"^[A-Za-z0-9\+/=]+$");
+            return System.Text.RegularExpressions.Regex.IsMatch(
+                input,
+                @"^[A-Za-z0-9\+/=]+$");
         }
     }
 }

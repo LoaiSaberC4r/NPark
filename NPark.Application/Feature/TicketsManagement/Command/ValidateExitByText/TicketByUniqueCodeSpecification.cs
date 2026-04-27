@@ -7,7 +7,8 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
     {
         public TicketByUniqueCodeSpecification(string uniqueCode)
         {
-            AddCriteria(t => t.UniqueCode == uniqueCode);
+            AddCriteria(t => t.UniqueCode == uniqueCode
+            && t.EndDate == null);
         }
     }
 }

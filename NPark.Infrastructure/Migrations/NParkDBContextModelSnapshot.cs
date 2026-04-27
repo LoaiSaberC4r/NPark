@@ -202,6 +202,12 @@ namespace NPark.Infrastructure.Migrations
                     b.Property<string>("PcIp")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("QrPrinterName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ReceiptPrinterName")
+                        .HasColumnType("nvarchar(max)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AssignedTo")

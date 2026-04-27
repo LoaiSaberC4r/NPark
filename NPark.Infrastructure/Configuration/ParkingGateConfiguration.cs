@@ -16,6 +16,8 @@ namespace NPark.Infrastructure.Configuration
             builder.Property(x => x.LprIp).IsRequired(false);
             builder.Property(x => x.AssignedTo).IsRequired(false);
             builder.Property(x => x.ControlIp).IsRequired(false);
+            builder.Property(x => x.QrPrinterName).IsRequired(false);
+            builder.Property(x => x.ReceiptPrinterName).IsRequired(false);
             builder.HasIndex(x => new { x.GateNumber, x.GateType }).IsUnique();
 
             builder.HasOne(x => x.AssignedToUser)

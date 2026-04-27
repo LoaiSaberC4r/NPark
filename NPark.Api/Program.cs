@@ -2,7 +2,9 @@
 using BuildingBlock.Api.Logging;
 using BuildingBlock.Api.OpenAi;
 using Microsoft.OpenApi.Models;
+using NPark.Api.Hubs;
 using NPark.Api.RealTime;
+using NPark.Api.Services;
 using NPark.Application.Abstraction;
 using NPark.Application.Bootstrap;
 using NPark.Infrastructure.Bootstrap;
@@ -13,6 +15,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddApplicationBootstrap();
 builder.Services.InfrastructureInjection(builder.Configuration);
+builder.Services.AddScoped<ILprSignalRNotifier, LprSignalRNotifier>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSignalR();
@@ -112,6 +115,7 @@ app.MapLoggingDiagnostics();
 
 // SignalR Hubs
 app.MapHub<NotificationsHub>("/hubs/notifications");
+app.MapHub<LprHub>("/hubs/lpr");
 
 // Controllers
 app.MapControllers();

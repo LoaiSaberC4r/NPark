@@ -416,4 +416,58 @@
   <data name="ReportTickets_SearchTerm_MaxLength" xml:space="preserve">
     <value>كلمة البحث لا يجب أن تتجاوز الحد المسموح</value>
   </data>
+  <data name="Subscriber_AlreadyInsidePark" xml:space="preserve">
+    <value>هذا المشترك موجود بالفعل داخل الجراج ولم يخرج بعد.</value>
+  </data>
+  <data name="GateAssignedToAnotherUser" xml:space="preserve">
+    <value>البوابة مخصصة لمستخدم آخر</value>
+  </data>
+  <data name="UserNameMaxLength" xml:space="preserve">
+    <value>يجب ألا يزيد اسم المستخدم عن 100 حرف.</value>
+  </data>
+  <data name="GateNumberMustBeGreaterThanZero" xml:space="preserve">
+    <value>يجب أن يكون رقم البوابة أكبر من 0.</value>
+  </data>
+  <data name="GateTypeInvalid" xml:space="preserve">
+    <value>نوع البوابة غير صالح.</value>
+  </data>
+  <data name="AuthInvalidCredentials" xml:space="preserve">
+    <value>اسم المستخدم أو كلمة المرور غير صحيحة.</value>
+  </data>
+  <data name="SupervisorLoginUnexpected" xml:space="preserve">
+    <value>حدث خطأ غير متوقع أثناء تسجيل دخول المشرف، برجاء المحاولة لاحقًا.</value>
+  </data>
+  <data name="ParkingGateConnectionInfoNotFound" xml:space="preserve">
+    <value>لم يتم العثور على بوابة الموقف.</value>
+  </data>
+  <data name="LprIpNotFound" xml:space="preserve">
+    <value>لم يتم العثور على عنوان LPR IP.</value>
+  </data>
+  <data name="LprIpRequired" xml:space="preserve">
+    <value>عنوان LPR IP مطلوب.</value>
+  </data>
+  <data name="LprIpMaxLength" xml:space="preserve">
+    <value>يجب ألا يزيد عنوان LPR IP عن 100 حرف.</value>
+  </data>
+  <data name="VehicleNumberRequired" xml:space="preserve">
+    <value>رقم المركبة مطلوب.</value>
+  </data>
+  <data name="VehicleNumberMaxLength" xml:space="preserve">
+    <value>يجب ألا يزيد رقم المركبة عن 50 حرفًا.</value>
+  </data>
+  <data name="CardNumberRequired" xml:space="preserve">
+    <value>رقم الكارت مطلوب.</value>
+  </data>
+  <data name="PricingSchemaNotConfiguredForEnterPriceType" xml:space="preserve">
+    <value>لم يتم إعداد مخطط التسعير لنوع تسعير الدخول.</value>
+  </data>
+  <data name="CardNumberMaxLength" xml:space="preserve">
+    <value>يجب ألا يزيد رقم الكارت عن 50 حرفًا.</value>
+  </data>
+  <data name="SubscriberTicketCardOrVehicleNumberRequired" xml:space="preserve">
+    <value>رقم الكارت أو رقم المركبة مطلوب لتذاكر المشتركين.</value>
+  </data>
+  <data name="NonSubscriberTicketCardNumberMustBeEmpty" xml:space="preserve">
+    <value>يجب أن يكون رقم الكارت فارغًا لتذاكر غير المشتركين.</value>
+  </data>
 </root>

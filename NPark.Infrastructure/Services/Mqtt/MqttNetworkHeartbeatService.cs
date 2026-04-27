@@ -67,6 +67,7 @@ namespace NPark.Infrastructure.Services.Mqtt
                             .AsNoTracking()
                             .Where(x => !string.IsNullOrWhiteSpace(x.ControlIp))
                             .Select(x => x.ControlIp!)
+                            .Distinct()
                             .ToListAsync(stoppingToken);
 
                         foreach (var controlIp in controlIps)
@@ -83,6 +84,7 @@ namespace NPark.Infrastructure.Services.Mqtt
                                 "MQTT heartbeat published successfully. Topic={Topic}, PayloadHex={PayloadHex}",
                                 topic,
                                 BitConverter.ToString(hexPayload.ToArray()).Replace("-", ""));
+                            await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
                         }
                     }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

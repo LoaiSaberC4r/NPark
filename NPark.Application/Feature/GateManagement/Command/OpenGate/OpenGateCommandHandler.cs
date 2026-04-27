@@ -25,12 +25,18 @@ namespace NPark.Application.Feature.GateManagement.Command.OpenGate
             var controllerIdHex = controllerIdValue.ToString("X4");
 
             var payloadPrefix = "7B";
-            var payloadSuffix = "A3AEBEC1B17D";
+            var payloadSuffix = "AEBEC1B17D";
 
-            var payloadObject = $"{payloadPrefix}{controllerIdHex}{payloadSuffix}";
-            await _mqttPublisher.PublishStringAsync(
+            // الـ payload كامل كـ string hex
+            var payloadHexString = $"{payloadPrefix}{controllerIdHex}{payloadSuffix}";
+
+            // تحويل الـ hex string لـ byte array
+            var payloadBytes = HexStringToBytes(payloadHexString);
+
+            // نشر الـ payload كـ bytes
+            await _mqttPublisher.PublishBytesAsync(
                 topic,
-                payloadObject.Trim(),
+                payloadBytes,
                 new MqttPublishOptions(Qos: 1, Retain: false),
                 cancellationToken);
 
@@ -38,11 +44,26 @@ namespace NPark.Application.Feature.GateManagement.Command.OpenGate
             {
                 ControllerId = controllerId,
                 Topic = topic,
-                Payload = payloadObject,
+                Payload = payloadHexString,
                 PublishedAtUtc = DateTime.UtcNow
             };
 
             return Result<OpenGateCommandResponse>.Ok(response);
+        }
+
+        private static ReadOnlyMemory<byte> HexStringToBytes(string hex)
+        {
+            hex = hex.Replace(" ", "").Replace("-", "");
+
+            if (hex.Length % 2 != 0)
+                hex = "0" + hex; // إضافة صفر إذا الطول فردي
+
+            var bytes = new byte[hex.Length / 2];
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                bytes[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
+            }
+            return bytes;
         }
     }
 }

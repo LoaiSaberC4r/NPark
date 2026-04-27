@@ -163,14 +163,21 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             ParkingGate x,
             CancellationToken cancellationToken)
         {
-            // 1) Get subscriber by card number
-            var cardSpec = new GetCardSummaryByIdSpec(request.CardNumber ?? string.Empty, request.VehicleNumber ?? string.Empty);
+            // 1) Get subscriber by card number or vehicle number
+            var cardSpec = new GetCardSummaryByIdSpec(
+                request.CardNumber ?? string.Empty,
+                request.VehicleNumber ?? string.Empty);
+
             var subscriber = await _parkingMembershipsRepository
                 .FirstOrDefaultWithSpecAsync(cardSpec, cancellationToken);
 
             if (subscriber is null)
             {
-                _logger.LogWarning("Subscriber card not found. CardNumber: {CardNumber}", request.CardNumber);
+                _logger.LogWarning(
+                    "Subscriber card not found. CardNumber: {CardNumber}, VehicleNumber: {VehicleNumber}",
+                    request.CardNumber,
+                    request.VehicleNumber);
+
                 return Result<AddTicketCommandResponse>.Fail(
                     new Error(
                         Code: "Subscriber.Card.NotFound",
@@ -180,9 +187,14 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
 
             // 2) Validate subscriber validity period
             var now = DateTime.Now;
+
             if (now < subscriber.CreatedAt || now >= subscriber.EndDate)
             {
-                _logger.LogWarning("Invalid subscriber card date. CardNumber: {CardNumber}", request.CardNumber);
+                _logger.LogWarning(
+                    "Invalid subscriber card date. CardNumber: {CardNumber}, VehicleNumber: {VehicleNumber}",
+                    subscriber.CardNumber,
+                    subscriber.VehicleNumber);
+
                 return Result<AddTicketCommandResponse>.Fail(
                     new Error(
                         Code: "Subscriber.Card.InvalidDate",
@@ -190,17 +202,50 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                         Type: ErrorType.Validation));
             }
 
-            // 3) Create ticket with subscriber data (no QR in this scenario)
+            // 3) Prevent duplicate active subscriber ticket inside parking
+            var activeSubscriberTicketSpec = new GetActiveSubscriberTicketSpec(
+                cardNumber: subscriber.CardNumber,
+                subscriberNationalId: subscriber.NationalId,
+                vehicleNumber: subscriber.VehicleNumber);
+
+            var activeSubscriberTicket = await _ticketRepository
+                .FirstOrDefaultWithSpecAsync(activeSubscriberTicketSpec, cancellationToken);
+
+            if (activeSubscriberTicket is not null)
+            {
+                _logger.LogWarning(
+                    "Subscriber is already inside park. SubscriberNationalId: {SubscriberNationalId}, CardNumber: {CardNumber}, ActiveTicketId: {TicketId}",
+                    subscriber.NationalId,
+                    subscriber.CardNumber,
+                    activeSubscriberTicket.Id);
+
+                return Result<AddTicketCommandResponse>.Fail(
+                    new Error(
+                        Code: "Subscriber.AlreadyInsidePark",
+                        Message: ErrorMessage.Subscriber_AlreadyInsidePark,
+                        Type: ErrorType.Validation));
+            }
+
+            // 4) Create ticket with subscriber data
             var ticketEntity = Ticket.Create(
                 startDate: now,
                 price: 0m,
                 gateId: gateId,
                 userId: userId);
 
-            ticketEntity.SetSubscriber(subscriber.NationalId, subscriber.VehicleNumber, subscriber.CardNumber);
+            ticketEntity.SetSubscriber(
+                nationalId: subscriber.NationalId,
+                vehicleNumber: subscriber.VehicleNumber,
+                cardNumber: subscriber.CardNumber);
 
             await _ticketRepository.AddAsync(ticketEntity, cancellationToken);
             await _ticketRepository.SaveChangesAsync(cancellationToken);
+
+            await NotifyDashboardTicketAddedAsync(
+                ticketEntity,
+                x,
+                isSubscriber: true,
+                cancellationToken);
 
             var response = BuildResponse(ticketEntity, qrCode: Array.Empty<byte>());
 
@@ -231,7 +276,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                     return Result<AddTicketCommandResponse>.Fail(
                         new Error(
                             Code: "Configuration.PricingSchema.Missing",
-                            Message: "Pricing schema is not configured for enter price type.",
+                            Message: ErrorMessage.PricingSchemaNotConfiguredForEnterPriceType,
                             Type: ErrorType.Validation));
                 }
 
@@ -290,10 +335,11 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             await _ticketRepository.SaveChangesAsync(cancellationToken);
 
             await NotifyDashboardTicketAddedAsync(
-    ticketEntity,
-    x,
-    isSubscriber: true,
-    cancellationToken);
+                ticketEntity,
+                x,
+                isSubscriber: false,
+                cancellationToken);
+
             var qrCode = GenerateTicketQrCode(ticketEntity);
             var response = BuildResponse(ticketEntity, qrCode);
 
@@ -311,10 +357,11 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                 var gateNumber = x.GateType == GateType.Entrance
                     ? $"{ErrorMessage.EntranceGate} {x.GateNumber}"
                     : $"{ErrorMessage.ExitGate} {x.GateNumber} ";
+
                 var payload = new TicketAddedNotification
                 {
                     TicketId = ticketEntity.Id,
-                    GateId = ticketEntity.GateId,        // assuming Ticket has GateId property
+                    GateId = ticketEntity.GateId,
                     StartDate = ticketEntity.StartDate,
                     Price = ticketEntity.Price,
                     IsSubscriber = isSubscriber,
@@ -322,13 +369,13 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                     GateNumber = gateNumber
                 };
 
-                // channel name عام "tickets:added"
                 await _realtimeNotifier.NotifyTicketAddedAsync(payload);
             }
             catch (Exception ex)
             {
                 // مفيش فشل في العملية الأساسية لو SignalR وقع
-                _logger.LogError(ex,
+                _logger.LogError(
+                    ex,
                     "Failed to send realtime notification for ticket {TicketId}",
                     ticketEntity.Id);
             }
@@ -340,14 +387,14 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
         private byte[] GenerateTicketQrCode(Ticket ticketEntity)
         {
             var bytesGenerated = Array.Empty<byte>();
+
             do
             {
                 var byte5 = _byteVerificationService.GenerateComplexByte5FromGuid(ticketEntity.UniqueGuidPart);
                 var combinedBytes = ticketEntity.UniqueGuidPart.Concat(new[] { byte5 }).ToArray();
-                var encryptedData = Convert.ToBase64String(combinedBytes);
                 bytesGenerated = combinedBytes;
-            } while (bytesGenerated.Length != 5);
-            // byte5 based on UniqueGuidPart
+            }
+            while (bytesGenerated.Length != 5);
 
             return _qrCodeService.GenerateQRCode(bytesGenerated);
         }
@@ -363,7 +410,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                 Price = ticketEntity.Price,
                 QrCode = qrCode ?? Array.Empty<byte>(),
                 TicketId = ticketEntity.Id,
-                TicketInfo = BitConverter.ToString(ticketEntity.UniqueGuidPart).Replace("-", ""),
+                TicketInfo = BitConverter.ToString(ticketEntity.UniqueGuidPart).Replace("-", string.Empty),
             };
         }
     }

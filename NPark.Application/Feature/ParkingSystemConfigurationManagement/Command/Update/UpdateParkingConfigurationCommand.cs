@@ -29,15 +29,14 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
         public int GateNumber { get; set; }
         public string? LprIp { get; set; } = string.Empty;
         public string? PcIp { get; set; } = string.Empty;
-
-        // Required
         public string ControlIp { get; set; } = string.Empty;
-
-        // Optional DTO
         public ONVIFCameraSettingDto? ONVIFCameraSetting { get; set; }
-
         public bool IsAssigned { get; set; }
         public Guid? AssignedTo { get; set; }
+
+        // 🆕 إضافة الخصائص الجديدة
+        public string? QrPrinterName { get; set; }
+        public string? ReceiptPrinterName { get; set; }
     }
 
     public record ONVIFCameraSettingDto

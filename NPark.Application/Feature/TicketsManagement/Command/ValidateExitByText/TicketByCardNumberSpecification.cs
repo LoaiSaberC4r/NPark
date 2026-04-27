@@ -7,7 +7,8 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
     {
         public TicketByCardNumberSpecification(string cardNumber)
         {
-            AddCriteria(t => t.CardNumber != null && t.CardNumber == cardNumber);
+            AddCriteria(t => t.CardNumber != null && t.CardNumber == cardNumber
+            && t.EndDate == null);
             AddOrderByDescending(t => t.StartDate);
         }
     }

@@ -79,6 +79,15 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Invalid username or password..
+        /// </summary>
+        public static string AuthInvalidCredentials {
+            get {
+                return ResourceManager.GetString("AuthInvalidCredentials", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Unexpected error occurred during login, please try again later.
         /// </summary>
         public static string AuthLogin_Unexpected {
@@ -138,6 +147,24 @@ namespace NPark.Domain.Resource {
         public static string CardNumber_Required {
             get {
                 return ResourceManager.GetString("CardNumber_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Card number must not exceed 50 characters..
+        /// </summary>
+        public static string CardNumberMaxLength {
+            get {
+                return ResourceManager.GetString("CardNumberMaxLength", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Card number is required..
+        /// </summary>
+        public static string CardNumberRequired {
+            get {
+                return ResourceManager.GetString("CardNumberRequired", resourceCulture);
             }
         }
         
@@ -223,6 +250,15 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Gate is assigned to another user.
+        /// </summary>
+        public static string GateAssignedToAnotherUser {
+            get {
+                return ResourceManager.GetString("GateAssignedToAnotherUser", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to You cannot collect the ticket at an entrance gate because the current pricing mode is Pay on Exit..
         /// </summary>
         public static string GateInvalidForCollectEnterPricing {
@@ -250,6 +286,15 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Gate number must be greater than 0..
+        /// </summary>
+        public static string GateNumberMustBeGreaterThanZero {
+            get {
+                return ResourceManager.GetString("GateNumberMustBeGreaterThanZero", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Gate is occupied by another user.
         /// </summary>
         public static string GateOccupied {
@@ -273,6 +318,15 @@ namespace NPark.Domain.Resource {
         public static string GateSelectUnexpected {
             get {
                 return ResourceManager.GetString("GateSelectUnexpected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Invalid gate type..
+        /// </summary>
+        public static string GateTypeInvalid {
+            get {
+                return ResourceManager.GetString("GateTypeInvalid", resourceCulture);
             }
         }
         
@@ -421,6 +475,33 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to LPR IP must not exceed 100 characters..
+        /// </summary>
+        public static string LprIpMaxLength {
+            get {
+                return ResourceManager.GetString("LprIpMaxLength", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to LPR IP not found..
+        /// </summary>
+        public static string LprIpNotFound {
+            get {
+                return ResourceManager.GetString("LprIpNotFound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to LPR IP is required..
+        /// </summary>
+        public static string LprIpRequired {
+            get {
+                return ResourceManager.GetString("LprIpRequired", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Parking membership not found.
         /// </summary>
         public static string Membership_NotFound {
@@ -453,6 +534,15 @@ namespace NPark.Domain.Resource {
         public static string NewPassword_Required {
             get {
                 return ResourceManager.GetString("NewPassword_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Card number must be empty for non-subscriber tickets..
+        /// </summary>
+        public static string NonSubscriberTicketCardNumberMustBeEmpty {
+            get {
+                return ResourceManager.GetString("NonSubscriberTicketCardNumberMustBeEmpty", resourceCulture);
             }
         }
         
@@ -498,6 +588,15 @@ namespace NPark.Domain.Resource {
         public static string ParkingConfigurationUpdate_Unexpected {
             get {
                 return ResourceManager.GetString("ParkingConfigurationUpdate_Unexpected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Parking gate was not found..
+        /// </summary>
+        public static string ParkingGateConnectionInfoNotFound {
+            get {
+                return ResourceManager.GetString("ParkingGateConnectionInfoNotFound", resourceCulture);
             }
         }
         
@@ -552,6 +651,15 @@ namespace NPark.Domain.Resource {
         public static string PricingSchemaNameExist {
             get {
                 return ResourceManager.GetString("PricingSchemaNameExist", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Pricing schema is not configured for enter price type..
+        /// </summary>
+        public static string PricingSchemaNotConfiguredForEnterPriceType {
+            get {
+                return ResourceManager.GetString("PricingSchemaNotConfiguredForEnterPriceType", resourceCulture);
             }
         }
         
@@ -736,6 +844,15 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to This subscriber is already inside the park and has not exited yet..
+        /// </summary>
+        public static string Subscriber_AlreadyInsidePark {
+            get {
+                return ResourceManager.GetString("Subscriber_AlreadyInsidePark", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Subscriber card is not valid for the current date.
         /// </summary>
         public static string Subscriber_Card_InvalidDate {
@@ -750,6 +867,24 @@ namespace NPark.Domain.Resource {
         public static string SubscriberCard_NotFound {
             get {
                 return ResourceManager.GetString("SubscriberCard_NotFound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Card number or vehicle number is required for subscriber tickets..
+        /// </summary>
+        public static string SubscriberTicketCardOrVehicleNumberRequired {
+            get {
+                return ResourceManager.GetString("SubscriberTicketCardOrVehicleNumberRequired", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Unexpected error occurred during supervisor login, please try again later..
+        /// </summary>
+        public static string SupervisorLoginUnexpected {
+            get {
+                return ResourceManager.GetString("SupervisorLoginUnexpected", resourceCulture);
             }
         }
         
@@ -925,11 +1060,38 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Username must not exceed 100 characters..
+        /// </summary>
+        public static string UserNameMaxLength {
+            get {
+                return ResourceManager.GetString("UserNameMaxLength", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Vehicle number is required..
         /// </summary>
         public static string VehicleNumber_Required {
             get {
                 return ResourceManager.GetString("VehicleNumber_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Vehicle number must not exceed 50 characters..
+        /// </summary>
+        public static string VehicleNumberMaxLength {
+            get {
+                return ResourceManager.GetString("VehicleNumberMaxLength", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Vehicle number is required..
+        /// </summary>
+        public static string VehicleNumberRequired {
+            get {
+                return ResourceManager.GetString("VehicleNumberRequired", resourceCulture);
             }
         }
         
