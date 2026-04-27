@@ -15,6 +15,8 @@ namespace NPark.Application.Feature.GateManagement.Query.GetGateConnectionInfo
                 LprIp = x.LprIp,
                 PcIp = x.PcIp,
                 GateId = x.Id,
+                HasQrPrinterName = x.HasQrPrinterName,
+                HasReceiptPrinterName = x.HasReceiptPrinterName,
                 QrPrinterName = x.QrPrinterName,
                 ReceiptPrinterName = x.ReceiptPrinterName,
                 ONVIFCameraSetting = new ONVIFCameraSettingInfoResponse

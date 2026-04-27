@@ -26,7 +26,10 @@ namespace NPark.Domain.Entities
 
         public string? ControlIp { get; private set; }
 
+        public bool HasQrPrinterName { get; private set; }
         public string? QrPrinterName { get; private set; }
+
+        public bool HasReceiptPrinterName { get; private set; }
         public string? ReceiptPrinterName { get; private set; }
 
         public Guid? ONVIFCameraSettingId { get; private set; }
@@ -47,15 +50,19 @@ namespace NPark.Domain.Entities
             string? pcIp = null,
             string? controlIp = null,
             Guid? onvifCameraSettingId = null,
+            bool hasQrPrinterName = false,
             string? qrPrinterName = null,
+            bool hasReceiptPrinterName = false,
             string? receiptPrinterName = null)
         {
             if (parkingSystemConfigurationId <= 0)
+            {
                 throw new ArgumentException(
                     "ParkingSystemConfigurationId must be greater than zero.",
                     nameof(parkingSystemConfigurationId));
+            }
 
-            return new ParkingGate
+            var gate = new ParkingGate
             {
                 GateNumber = gateNumber,
                 GateType = gateType,
@@ -65,19 +72,26 @@ namespace NPark.Domain.Entities
                 PcIp = pcIp,
                 ControlIp = controlIp,
 
-                ONVIFCameraSettingId = onvifCameraSettingId,
-
-                QrPrinterName = qrPrinterName,
-                ReceiptPrinterName = receiptPrinterName
+                ONVIFCameraSettingId = onvifCameraSettingId
             };
+
+            gate.UpdatePrinters(
+                hasQrPrinterName: hasQrPrinterName,
+                qrPrinterName: qrPrinterName,
+                hasReceiptPrinterName: hasReceiptPrinterName,
+                receiptPrinterName: receiptPrinterName);
+
+            return gate;
         }
 
         public void AssignToConfiguration(int parkingSystemConfigurationId)
         {
             if (parkingSystemConfigurationId <= 0)
+            {
                 throw new ArgumentException(
                     "ParkingSystemConfigurationId must be greater than zero.",
                     nameof(parkingSystemConfigurationId));
+            }
 
             ParkingSystemConfigurationId = parkingSystemConfigurationId;
         }
@@ -93,11 +107,22 @@ namespace NPark.Domain.Entities
         }
 
         public void UpdatePrinters(
+            bool hasQrPrinterName,
             string? qrPrinterName,
+            bool hasReceiptPrinterName,
             string? receiptPrinterName)
         {
-            QrPrinterName = qrPrinterName;
-            ReceiptPrinterName = receiptPrinterName;
+            HasQrPrinterName = hasQrPrinterName;
+            QrPrinterName = NormalizePrinterName(
+                hasPrinterName: hasQrPrinterName,
+                printerName: qrPrinterName,
+                parameterName: nameof(qrPrinterName));
+
+            HasReceiptPrinterName = hasReceiptPrinterName;
+            ReceiptPrinterName = NormalizePrinterName(
+                hasPrinterName: hasReceiptPrinterName,
+                printerName: receiptPrinterName,
+                parameterName: nameof(receiptPrinterName));
         }
 
         public void SetPcIp(string pcIp)
@@ -114,7 +139,9 @@ namespace NPark.Domain.Entities
             Guid? onvifCameraSettingId,
             bool isAssigned,
             Guid? assignedTo,
+            bool hasQrPrinterName = false,
             string? qrPrinterName = null,
+            bool hasReceiptPrinterName = false,
             string? receiptPrinterName = null)
         {
             GateNumber = gateNumber;
@@ -124,9 +151,13 @@ namespace NPark.Domain.Entities
             ControlIp = controlIp;
             ONVIFCameraSettingId = onvifCameraSettingId;
             IsAssigned = isAssigned;
-            AssignedTo = assignedTo;
-            QrPrinterName = qrPrinterName;
-            ReceiptPrinterName = receiptPrinterName;
+            AssignedTo = isAssigned ? assignedTo : null;
+
+            UpdatePrinters(
+                hasQrPrinterName: hasQrPrinterName,
+                qrPrinterName: qrPrinterName,
+                hasReceiptPrinterName: hasReceiptPrinterName,
+                receiptPrinterName: receiptPrinterName);
         }
 
         public void SetLastLoginUserId(Guid userId)
@@ -142,6 +173,26 @@ namespace NPark.Domain.Entities
         public void SetONVIFCameraSettingId(Guid? id)
         {
             ONVIFCameraSettingId = id;
+        }
+
+        private static string? NormalizePrinterName(
+            bool hasPrinterName,
+            string? printerName,
+            string parameterName)
+        {
+            if (!hasPrinterName)
+            {
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(printerName))
+            {
+                throw new ArgumentException(
+                    $"{parameterName} is required when printer flag is enabled.",
+                    parameterName);
+            }
+
+            return printerName.Trim();
         }
     }
 }

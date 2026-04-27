@@ -241,11 +241,236 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Gate {0} must have an assigned user..
+        /// </summary>
+        public static string Gate_AssignedTo_Required {
+            get {
+                return ResourceManager.GetString("Gate_AssignedTo_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Gate {0} is assigned to an invalid user..
+        /// </summary>
+        public static string Gate_AssignedToInvalidUser {
+            get {
+                return ResourceManager.GetString("Gate_AssignedToInvalidUser", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to {0} Control IP must be a valid IPv4 or IPv6 address..
+        /// </summary>
+        public static string Gate_ControlIp_Invalid_ForGateType {
+            get {
+                return ResourceManager.GetString("Gate_ControlIp_Invalid_ForGateType", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Each Control IP must be unique across both EntryGates and ExitGates..
+        /// </summary>
+        public static string Gate_ControlIp_MustBeUnique {
+            get {
+                return ResourceManager.GetString("Gate_ControlIp_MustBeUnique", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Gate {0} must have a control IP..
+        /// </summary>
+        public static string Gate_ControlIp_Required {
+            get {
+                return ResourceManager.GetString("Gate_ControlIp_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to {0} Control IP is required..
+        /// </summary>
+        public static string Gate_ControlIp_Required_ForGateType {
+            get {
+                return ResourceManager.GetString("Gate_ControlIp_Required_ForGateType", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Gate number {0} already exists for {1}..
+        /// </summary>
+        public static string Gate_DuplicateGateNumberForType {
+            get {
+                return ResourceManager.GetString("Gate_DuplicateGateNumberForType", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Gate number {0} already exists for {1}. If this is an existing gate, frontend must send gateId..
+        /// </summary>
+        public static string Gate_DuplicateGateNumberForType_MissingGateId {
+            get {
+                return ResourceManager.GetString("Gate_DuplicateGateNumberForType_MissingGateId", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Gate number {0} is duplicated in {1} gates request..
+        /// </summary>
+        public static string Gate_DuplicateGateNumberInRequest {
+            get {
+                return ResourceManager.GetString("Gate_DuplicateGateNumberInRequest", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to EntryGatesCount must match the number of EntryGates..
+        /// </summary>
+        public static string Gate_EntryGatesCount_MustMatchEntryGates {
+            get {
+                return ResourceManager.GetString("Gate_EntryGatesCount_MustMatchEntryGates", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to ExitGatesCount must match the number of ExitGates..
+        /// </summary>
+        public static string Gate_ExitGatesCount_MustMatchExitGates {
+            get {
+                return ResourceManager.GetString("Gate_ExitGatesCount_MustMatchExitGates", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Cannot delete a gate that has tickets.
         /// </summary>
         public static string Gate_HasTickets {
             get {
                 return ResourceManager.GetString("Gate_HasTickets", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to {0} LPR IP must be a valid IPv4 or IPv6 address..
+        /// </summary>
+        public static string Gate_LprIp_Invalid_ForGateType {
+            get {
+                return ResourceManager.GetString("Gate_LprIp_Invalid_ForGateType", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Each LPR IP must be unique across both EntryGates and ExitGates..
+        /// </summary>
+        public static string Gate_LprIp_MustBeUnique {
+            get {
+                return ResourceManager.GetString("Gate_LprIp_MustBeUnique", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Gate with id {0} was not found..
+        /// </summary>
+        public static string Gate_NotFound {
+            get {
+                return ResourceManager.GetString("Gate_NotFound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to ONVIF Password is required..
+        /// </summary>
+        public static string Gate_ONVIF_Password_Required {
+            get {
+                return ResourceManager.GetString("Gate_ONVIF_Password_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Gate {0} ONVIF Password is required..
+        /// </summary>
+        public static string Gate_ONVIF_Password_Required_ForGate {
+            get {
+                return ResourceManager.GetString("Gate_ONVIF_Password_Required_ForGate", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to ONVIF UrlRequest is required..
+        /// </summary>
+        public static string Gate_ONVIF_UrlRequest_Required {
+            get {
+                return ResourceManager.GetString("Gate_ONVIF_UrlRequest_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Gate {0} ONVIF UrlRequest is required..
+        /// </summary>
+        public static string Gate_ONVIF_UrlRequest_Required_ForGate {
+            get {
+                return ResourceManager.GetString("Gate_ONVIF_UrlRequest_Required_ForGate", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to ONVIF UserName is required..
+        /// </summary>
+        public static string Gate_ONVIF_UserName_Required {
+            get {
+                return ResourceManager.GetString("Gate_ONVIF_UserName_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Gate {0} ONVIF UserName is required..
+        /// </summary>
+        public static string Gate_ONVIF_UserName_Required_ForGate {
+            get {
+                return ResourceManager.GetString("Gate_ONVIF_UserName_Required_ForGate", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to {0} PC IP must be a valid IPv4 or IPv6 address..
+        /// </summary>
+        public static string Gate_PcIp_Invalid_ForGateType {
+            get {
+                return ResourceManager.GetString("Gate_PcIp_Invalid_ForGateType", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to QR printer name must not exceed 250 characters..
+        /// </summary>
+        public static string Gate_QrPrinterName_MaxLength {
+            get {
+                return ResourceManager.GetString("Gate_QrPrinterName_MaxLength", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to QR printer name is required when HasQrPrinterName is true..
+        /// </summary>
+        public static string Gate_QrPrinterName_RequiredWhenHasQrPrinterName {
+            get {
+                return ResourceManager.GetString("Gate_QrPrinterName_RequiredWhenHasQrPrinterName", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Receipt printer name must not exceed 250 characters..
+        /// </summary>
+        public static string Gate_ReceiptPrinterName_MaxLength {
+            get {
+                return ResourceManager.GetString("Gate_ReceiptPrinterName_MaxLength", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Receipt printer name is required when HasReceiptPrinterName is true..
+        /// </summary>
+        public static string Gate_ReceiptPrinterName_RequiredWhenHasReceiptPrinterName {
+            get {
+                return ResourceManager.GetString("Gate_ReceiptPrinterName_RequiredWhenHasReceiptPrinterName", resourceCulture);
             }
         }
         
@@ -579,6 +804,15 @@ namespace NPark.Domain.Resource {
         public static string OutOfRange {
             get {
                 return ResourceManager.GetString("OutOfRange", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Unexpected error while updating parking configuration..
+        /// </summary>
+        public static string ParkingConfiguration_Update_Unexpected {
+            get {
+                return ResourceManager.GetString("ParkingConfiguration_Update_Unexpected", resourceCulture);
             }
         }
         

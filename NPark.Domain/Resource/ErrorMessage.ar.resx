@@ -470,4 +470,82 @@
   <data name="NonSubscriberTicketCardNumberMustBeEmpty" xml:space="preserve">
     <value>يجب أن يكون رقم الكارت فارغًا لتذاكر غير المشتركين.</value>
   </data>
+  <data name="ParkingConfiguration_Update_Unexpected" xml:space="preserve">
+    <value>حدث خطأ غير متوقع أثناء تحديث إعدادات نظام الجراج.</value>
+  </data>
+  <data name="Gate_EntryGatesCount_MustMatchEntryGates" xml:space="preserve">
+    <value>عدد بوابات الدخول يجب أن يطابق عدد العناصر المرسلة في EntryGates.</value>
+  </data>
+  <data name="Gate_ExitGatesCount_MustMatchExitGates" xml:space="preserve">
+    <value>عدد بوابات الخروج يجب أن يطابق عدد العناصر المرسلة في ExitGates.</value>
+  </data>
+  <data name="Gate_ControlIp_Required_ForGateType" xml:space="preserve">
+    <value>عنوان التحكم Control IP مطلوب للبوابة {0}.</value>
+  </data>
+  <data name="Gate_ControlIp_Invalid_ForGateType" xml:space="preserve">
+    <value>عنوان التحكم Control IP للبوابة {0} يجب أن يكون IPv4 أو IPv6 صحيحًا.</value>
+  </data>
+  <data name="Gate_LprIp_Invalid_ForGateType" xml:space="preserve">
+    <value>عنوان LPR IP للبوابة {0} يجب أن يكون IPv4 أو IPv6 صحيحًا.</value>
+  </data>
+  <data name="Gate_PcIp_Invalid_ForGateType" xml:space="preserve">
+    <value>عنوان PC IP للبوابة {0} يجب أن يكون IPv4 أو IPv6 صحيحًا.</value>
+  </data>
+  <data name="Gate_ONVIF_UrlRequest_Required" xml:space="preserve">
+    <value>رابط ONVIF UrlRequest مطلوب.</value>
+  </data>
+  <data name="Gate_ONVIF_UserName_Required" xml:space="preserve">
+    <value>اسم مستخدم ONVIF مطلوب.</value>
+  </data>
+  <data name="Gate_ONVIF_Password_Required" xml:space="preserve">
+    <value>كلمة مرور ONVIF مطلوبة.</value>
+  </data>
+  <data name="Gate_LprIp_MustBeUnique" xml:space="preserve">
+    <value>يجب أن يكون عنوان LPR IP فريدًا ولا يتكرر بين بوابات الدخول والخروج.</value>
+  </data>
+  <data name="Gate_ControlIp_MustBeUnique" xml:space="preserve">
+    <value>يجب أن يكون عنوان Control IP فريدًا ولا يتكرر بين بوابات الدخول والخروج.</value>
+  </data>
+  <data name="Gate_QrPrinterName_RequiredWhenHasQrPrinterName" xml:space="preserve">
+    <value>اسم طابعة QR مطلوب عند تفعيل HasQrPrinterName.</value>
+  </data>
+  <data name="Gate_ReceiptPrinterName_RequiredWhenHasReceiptPrinterName" xml:space="preserve">
+    <value>اسم طابعة الإيصال مطلوب عند تفعيل HasReceiptPrinterName.</value>
+  </data>
+  <data name="Gate_QrPrinterName_MaxLength" xml:space="preserve">
+    <value>اسم طابعة QR يجب ألا يتجاوز 250 حرفًا.</value>
+  </data>
+  <data name="Gate_ReceiptPrinterName_MaxLength" xml:space="preserve">
+    <value>اسم طابعة الإيصال يجب ألا يتجاوز 250 حرفًا.</value>
+  </data>
+  <data name="Gate_DuplicateGateNumberInRequest" xml:space="preserve">
+    <value>رقم البوابة {0} مكرر في طلب بوابات {1}.</value>
+  </data>
+  <data name="Gate_DuplicateGateNumberForType_MissingGateId" xml:space="preserve">
+    <value>رقم البوابة {0} موجود بالفعل لنوع {1}. إذا كانت بوابة موجودة، يجب على الفرونت إرسال gateId.</value>
+  </data>
+  <data name="Gate_DuplicateGateNumberForType" xml:space="preserve">
+    <value>رقم البوابة {0} موجود بالفعل لنوع {1}.</value>
+  </data>
+  <data name="Gate_NotFound" xml:space="preserve">
+    <value>لم يتم العثور على البوابة ذات المعرف {0}.</value>
+  </data>
+  <data name="Gate_ControlIp_Required" xml:space="preserve">
+    <value>يجب إدخال Control IP للبوابة رقم {0}.</value>
+  </data>
+  <data name="Gate_AssignedTo_Required" xml:space="preserve">
+    <value>يجب تعيين مستخدم للبوابة رقم {0}.</value>
+  </data>
+  <data name="Gate_AssignedToInvalidUser" xml:space="preserve">
+    <value>البوابة رقم {0} تم تعيينها لمستخدم غير صالح.</value>
+  </data>
+  <data name="Gate_ONVIF_UrlRequest_Required_ForGate" xml:space="preserve">
+    <value>رابط ONVIF UrlRequest مطلوب للبوابة رقم {0}.</value>
+  </data>
+  <data name="Gate_ONVIF_UserName_Required_ForGate" xml:space="preserve">
+    <value>اسم مستخدم ONVIF مطلوب للبوابة رقم {0}.</value>
+  </data>
+  <data name="Gate_ONVIF_Password_Required_ForGate" xml:space="preserve">
+    <value>كلمة مرور ONVIF مطلوبة للبوابة رقم {0}.</value>
+  </data>
 </root>

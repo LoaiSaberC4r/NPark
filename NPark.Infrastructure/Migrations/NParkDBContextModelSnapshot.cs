@@ -172,6 +172,16 @@ namespace NPark.Infrastructure.Migrations
                     b.Property<int>("GateType")
                         .HasColumnType("int");
 
+                    b.Property<bool>("HasQrPrinterName")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("HasReceiptPrinterName")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("IsAssigned")
                         .HasColumnType("bit");
 
@@ -196,7 +206,7 @@ namespace NPark.Infrastructure.Migrations
                     b.Property<DateTime?>("OccupiedTime")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("ParkingSystemConfigurationId")
+                    b.Property<int>("ParkingSystemConfigurationId")
                         .HasColumnType("int");
 
                     b.Property<string>("PcIp")

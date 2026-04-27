@@ -8,8 +8,10 @@ using System.Net;
 namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command.Update
 {
     public sealed class UpdateParkingConfigurationCommandValidator
-         : AbstractValidator<UpdateParkingConfigurationCommand>
+        : AbstractValidator<UpdateParkingConfigurationCommand>
     {
+        private const int PrinterNameMaxLength = 250;
+
         private readonly IGenericRepository<PricingScheme> _pricingSchemeRepository;
 
         public UpdateParkingConfigurationCommandValidator(
@@ -46,106 +48,115 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             When(x => x.PriceType == PriceType.Enter, () =>
             {
                 RuleFor(x => x.PricingSchemaId)
+                    .Cascade(CascadeMode.Stop)
                     .NotNull()
                     .NotEqual(Guid.Empty)
                     .WithMessage(ErrorMessage.PricingSchemaId_RequiredWhenEnter)
                     .MustAsync(async (id, token) =>
-                        await _pricingSchemeRepository.IsExistAsync(p => p.Id == id, token))
+                        id.HasValue &&
+                        await _pricingSchemeRepository.IsExistAsync(p => p.Id == id.Value, token))
                     .WithMessage(ErrorMessage.PricingSchema_NotFound);
             });
 
             RuleFor(x => x.EntryGatesCount)
                 .Equal(x => x.EntryGates.Count)
-                .WithMessage("عدد بوابات الدخول يجب أن يطابق EntryGatesCount (EntryGatesCount must match the number of EntryGates).");
+                .WithMessage(ErrorMessage.Gate_EntryGatesCount_MustMatchEntryGates);
 
             RuleFor(x => x.ExitGatesCount)
                 .Equal(x => x.ExitGates.Count)
-                .WithMessage("عدد بوابات الخروج يجب أن يطابق ExitGatesCount (ExitGatesCount must match the number of ExitGates).");
+                .WithMessage(ErrorMessage.Gate_ExitGatesCount_MustMatchExitGates);
 
             RuleForEach(x => x.EntryGates)
-                .ChildRules(g =>
+                .ChildRules(gate =>
                 {
-                    g.RuleFor(x => x.ControlIp)
-                        .NotEmpty()
-                        .WithMessage("Control IP is required for entry gates.");
-
-                    g.RuleFor(x => x.ControlIp)
-                        .Must(IsValidIp)
-                        .WithMessage("EntryGate Control IP must be a valid IPv4 or IPv6 address.");
-
-                    g.RuleFor(x => x.LprIp)
-                        .Must(IsValidIp)
-                        .WithMessage("عنوان LPR في بوابات الدخول يجب أن يكون IP v4 أو v6 صحيحًا (EntryGate LPR IP must be a valid IPv4 or IPv6 address).")
-                        .When(x => !string.IsNullOrWhiteSpace(x.LprIp));
-
-                    g.RuleFor(x => x.PcIp)
-                        .Must(IsValidIp)
-                        .WithMessage("عنوان PC في بوابات الدخول يجب أن يكون IP v4 أو v6 صحيحًا (EntryGate PC IP must be a valid IPv4 or IPv6 address).")
-                        .When(x => !string.IsNullOrWhiteSpace(x.PcIp));
-
-                    g.When(x => x.ONVIFCameraSetting is not null, () =>
-                    {
-                        g.RuleFor(x => x.ONVIFCameraSetting!.UrlRequest)
-                            .NotEmpty()
-                            .WithMessage("ONVIF UrlRequest is required.");
-
-                        g.RuleFor(x => x.ONVIFCameraSetting!.UserName)
-                            .NotEmpty()
-                            .WithMessage("ONVIF UserName is required.");
-
-                        g.RuleFor(x => x.ONVIFCameraSetting!.Password)
-                            .NotEmpty()
-                            .WithMessage("ONVIF Password is required.");
-                    });
+                    AddGateRules(gate, "EntryGate");
                 });
 
             RuleForEach(x => x.ExitGates)
-                .ChildRules(g =>
+                .ChildRules(gate =>
                 {
-                    g.RuleFor(x => x.ControlIp)
-                        .NotEmpty()
-                        .WithMessage("Control IP is required for exit gates.");
-
-                    g.RuleFor(x => x.ControlIp)
-                        .NotNull()
-                        .WithMessage("ExitGate Control IP must be a valid ");
-
-                    g.RuleFor(x => x.LprIp)
-                        .Must(IsValidIp)
-                        .WithMessage("عنوان LPR في بوابات الخروج يجب أن يكون IP v4 أو v6 صحيحًا (ExitGate LPR IP must be a valid IPv4 or IPv6 address).")
-                        .When(x => !string.IsNullOrWhiteSpace(x.LprIp));
-
-                    g.RuleFor(x => x.PcIp)
-                        .Must(IsValidIp)
-                        .WithMessage("عنوان PC في بوابات الخروج يجب أن يكون IP v4 أو v6 صحيحًا (ExitGate PC IP must be a valid IPv4 or IPv6 address).")
-                        .When(x => !string.IsNullOrWhiteSpace(x.PcIp));
-
-                    g.When(x => x.ONVIFCameraSetting is not null, () =>
-                    {
-                        g.RuleFor(x => x.ONVIFCameraSetting!.UrlRequest)
-                            .NotEmpty()
-                            .WithMessage("ONVIF UrlRequest is required.");
-
-                        g.RuleFor(x => x.ONVIFCameraSetting!.UserName)
-                            .NotEmpty()
-                            .WithMessage("ONVIF UserName is required.");
-
-                        g.RuleFor(x => x.ONVIFCameraSetting!.Password)
-                            .NotEmpty()
-                            .WithMessage("ONVIF Password is required.");
-                    });
+                    AddGateRules(gate, "ExitGate");
                 });
 
             RuleFor(x => x)
-                .Must(HaveUniqueIps)
-                .WithMessage("يجب أن يكون عنوان الـ LPR IP فريدًا ولا يتكرر بين بوابات الدخول والخروج (Each LPR IP must be unique across both EntryGates and ExitGates).");
+                .Must(HaveUniqueLprIps)
+                .WithMessage(ErrorMessage.Gate_LprIp_MustBeUnique);
 
             RuleFor(x => x)
                 .Must(HaveUniqueControlIps)
-                .WithMessage("يجب أن يكون عنوان الـ Control IP فريدًا ولا يتكرر بين بوابات الدخول والخروج (Each Control IP must be unique across both EntryGates and ExitGates).");
+                .WithMessage(ErrorMessage.Gate_ControlIp_MustBeUnique);
         }
 
-        private static bool HaveUniqueIps(UpdateParkingConfigurationCommand command)
+        private static void AddGateRules(
+            InlineValidator<GateInfo> gate,
+            string gateLabel)
+        {
+            gate.RuleFor(x => x.ControlIp)
+                .Cascade(CascadeMode.Stop)
+                .NotEmpty()
+                .WithMessage(string.Format(
+                    ErrorMessage.Gate_ControlIp_Required_ForGateType,
+                    gateLabel))
+                .Must(IsValidIp)
+                .WithMessage(string.Format(
+                    ErrorMessage.Gate_ControlIp_Invalid_ForGateType,
+                    gateLabel));
+
+            gate.RuleFor(x => x.LprIp)
+                .Must(IsValidIp)
+                .WithMessage(string.Format(
+                    ErrorMessage.Gate_LprIp_Invalid_ForGateType,
+                    gateLabel))
+                .When(x => !string.IsNullOrWhiteSpace(x.LprIp));
+
+            gate.RuleFor(x => x.PcIp)
+                .Must(IsValidIp)
+                .WithMessage(string.Format(
+                    ErrorMessage.Gate_PcIp_Invalid_ForGateType,
+                    gateLabel))
+                .When(x => !string.IsNullOrWhiteSpace(x.PcIp));
+
+            gate.When(x => x.ONVIFCameraSetting is not null, () =>
+            {
+                gate.RuleFor(x => x.ONVIFCameraSetting!.UrlRequest)
+                    .Must(value => !string.IsNullOrWhiteSpace(value))
+                    .WithMessage(ErrorMessage.Gate_ONVIF_UrlRequest_Required);
+
+                gate.RuleFor(x => x.ONVIFCameraSetting!.UserName)
+                    .Must(value => !string.IsNullOrWhiteSpace(value))
+                    .WithMessage(ErrorMessage.Gate_ONVIF_UserName_Required);
+
+                gate.RuleFor(x => x.ONVIFCameraSetting!.Password)
+                    .Must(value => !string.IsNullOrWhiteSpace(value))
+                    .WithMessage(ErrorMessage.Gate_ONVIF_Password_Required);
+            });
+
+            gate.When(x => x.HasQrPrinterName, () =>
+            {
+                gate.RuleFor(x => x.QrPrinterName)
+                    .Must(value => !string.IsNullOrWhiteSpace(value))
+                    .WithMessage(ErrorMessage.Gate_QrPrinterName_RequiredWhenHasQrPrinterName);
+            });
+
+            gate.RuleFor(x => x.QrPrinterName)
+                .MaximumLength(PrinterNameMaxLength)
+                .WithMessage(ErrorMessage.Gate_QrPrinterName_MaxLength)
+                .When(x => !string.IsNullOrWhiteSpace(x.QrPrinterName));
+
+            gate.When(x => x.HasReceiptPrinterName, () =>
+            {
+                gate.RuleFor(x => x.ReceiptPrinterName)
+                    .Must(value => !string.IsNullOrWhiteSpace(value))
+                    .WithMessage(ErrorMessage.Gate_ReceiptPrinterName_RequiredWhenHasReceiptPrinterName);
+            });
+
+            gate.RuleFor(x => x.ReceiptPrinterName)
+                .MaximumLength(PrinterNameMaxLength)
+                .WithMessage(ErrorMessage.Gate_ReceiptPrinterName_MaxLength)
+                .When(x => !string.IsNullOrWhiteSpace(x.ReceiptPrinterName));
+        }
+
+        private static bool HaveUniqueLprIps(UpdateParkingConfigurationCommand command)
         {
             var allIps = command.EntryGates
                 .Select(g => g.LprIp?.Trim())
@@ -169,8 +180,12 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
 
         private static bool IsValidIp(string? ip)
         {
-            if (string.IsNullOrWhiteSpace(ip)) return false;
-            return IPAddress.TryParse(ip, out _);
+            if (string.IsNullOrWhiteSpace(ip))
+            {
+                return false;
+            }
+
+            return IPAddress.TryParse(ip.Trim(), out _);
         }
     }
 }

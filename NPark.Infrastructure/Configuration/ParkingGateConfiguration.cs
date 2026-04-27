@@ -19,6 +19,13 @@ namespace NPark.Infrastructure.Configuration
             builder.Property(x => x.QrPrinterName).IsRequired(false);
             builder.Property(x => x.ReceiptPrinterName).IsRequired(false);
             builder.HasIndex(x => new { x.GateNumber, x.GateType }).IsUnique();
+            builder.Property(x => x.HasReceiptPrinterName)
+        .IsRequired()
+        .HasDefaultValue(false);
+
+            builder.Property(x => x.HasQrPrinterName)
+                .IsRequired()
+                .HasDefaultValue(false);
 
             builder.HasOne(x => x.AssignedToUser)
                 .WithOne()

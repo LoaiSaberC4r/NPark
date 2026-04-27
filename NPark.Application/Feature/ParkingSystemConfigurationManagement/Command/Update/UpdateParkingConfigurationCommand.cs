@@ -11,12 +11,14 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
 
         public PriceType PriceType { get; set; }
         public int? gracePeriodMinutes { get; set; }
+
         public VehiclePassengerData VehiclePassengerData { get; set; }
-        public PrintType PrintType { get; set; }
+        public PrintType PrintType { get; set; } = PrintType.Both;
 
         public bool DateTimeFlag { get; set; }
         public bool TicketIdFlag { get; set; }
         public bool FeesFlag { get; set; }
+
         public Guid? PricingSchemaId { get; set; }
 
         public List<GateInfo> EntryGates { get; set; } = new();
@@ -26,16 +28,22 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
     public record GateInfo
     {
         public Guid? GateId { get; set; }
+
         public int GateNumber { get; set; }
+
         public string? LprIp { get; set; } = string.Empty;
         public string? PcIp { get; set; } = string.Empty;
-        public string ControlIp { get; set; } = string.Empty;
+        public string? ControlIp { get; set; } = string.Empty;
+
         public ONVIFCameraSettingDto? ONVIFCameraSetting { get; set; }
+
         public bool IsAssigned { get; set; }
         public Guid? AssignedTo { get; set; }
 
-        // 🆕 إضافة الخصائص الجديدة
+        public bool HasQrPrinterName { get; set; }
         public string? QrPrinterName { get; set; }
+
+        public bool HasReceiptPrinterName { get; set; }
         public string? ReceiptPrinterName { get; set; }
     }
 

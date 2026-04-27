@@ -9,6 +9,9 @@
 
         public string? QrPrinterName { get; init; }
         public string? ReceiptPrinterName { get; init; }
+        public bool HasQrPrinterName { get; init; }
+
+        public bool HasReceiptPrinterName { get; init; }
 
         public ONVIFCameraSettingInfoResponse? ONVIFCameraSetting { get; init; }
     }

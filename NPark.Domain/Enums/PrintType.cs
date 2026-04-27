@@ -3,6 +3,7 @@
     public enum PrintType
     {
         QrCode = 0,
-        RFID = 1
+        RFID = 1,
+        Both = 2
     }
 }

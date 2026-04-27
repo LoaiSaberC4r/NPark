@@ -11,6 +11,7 @@ using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetAll;
 using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetInactiveMembership;
 using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetMembershipExpireNextSevenDays;
 using NPark.Application.Feature.ParkingMembershipsManagement.Query.GetSummaryById;
+using NPark.Application.Feature.ParkingMembershipsManagement.Query.MemberShipExist;
 using NPark.Application.Feature.ParkingMembershipsManagement.Query.MemberShipExistByVehicleNumber;
 
 namespace NPark.Api.Controllers
@@ -89,6 +90,15 @@ namespace NPark.Api.Controllers
                 new CheckMembershipByCardNumberQuery(cardNumber),
                 cancellationToken);
 
+            return result.ToIActionResult(cancellationToken);
+        }
+
+        [HttpGet("membership-exists")]
+        public async Task<IActionResult> MemberShipExist(
+    [FromQuery] MemberShipExistQuery query,
+    CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(query, cancellationToken);
             return result.ToIActionResult(cancellationToken);
         }
     }

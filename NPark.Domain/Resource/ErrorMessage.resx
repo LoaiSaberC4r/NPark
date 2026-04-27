@@ -468,4 +468,82 @@
   <data name="NonSubscriberTicketCardNumberMustBeEmpty" xml:space="preserve">
     <value>Card number must be empty for non-subscriber tickets.</value>
   </data>
+  <data name="ParkingConfiguration_Update_Unexpected" xml:space="preserve">
+    <value>Unexpected error while updating parking configuration.</value>
+  </data>
+  <data name="Gate_EntryGatesCount_MustMatchEntryGates" xml:space="preserve">
+    <value>EntryGatesCount must match the number of EntryGates.</value>
+  </data>
+  <data name="Gate_ExitGatesCount_MustMatchExitGates" xml:space="preserve">
+    <value>ExitGatesCount must match the number of ExitGates.</value>
+  </data>
+  <data name="Gate_ControlIp_Required_ForGateType" xml:space="preserve">
+    <value>{0} Control IP is required.</value>
+  </data>
+  <data name="Gate_ControlIp_Invalid_ForGateType" xml:space="preserve">
+    <value>{0} Control IP must be a valid IPv4 or IPv6 address.</value>
+  </data>
+  <data name="Gate_LprIp_Invalid_ForGateType" xml:space="preserve">
+    <value>{0} LPR IP must be a valid IPv4 or IPv6 address.</value>
+  </data>
+  <data name="Gate_PcIp_Invalid_ForGateType" xml:space="preserve">
+    <value>{0} PC IP must be a valid IPv4 or IPv6 address.</value>
+  </data>
+  <data name="Gate_ONVIF_UrlRequest_Required" xml:space="preserve">
+    <value>ONVIF UrlRequest is required.</value>
+  </data>
+  <data name="Gate_ONVIF_UserName_Required" xml:space="preserve">
+    <value>ONVIF UserName is required.</value>
+  </data>
+  <data name="Gate_ONVIF_Password_Required" xml:space="preserve">
+    <value>ONVIF Password is required.</value>
+  </data>
+  <data name="Gate_LprIp_MustBeUnique" xml:space="preserve">
+    <value>Each LPR IP must be unique across both EntryGates and ExitGates.</value>
+  </data>
+  <data name="Gate_ControlIp_MustBeUnique" xml:space="preserve">
+    <value>Each Control IP must be unique across both EntryGates and ExitGates.</value>
+  </data>
+  <data name="Gate_QrPrinterName_RequiredWhenHasQrPrinterName" xml:space="preserve">
+    <value>QR printer name is required when HasQrPrinterName is true.</value>
+  </data>
+  <data name="Gate_ReceiptPrinterName_RequiredWhenHasReceiptPrinterName" xml:space="preserve">
+    <value>Receipt printer name is required when HasReceiptPrinterName is true.</value>
+  </data>
+  <data name="Gate_QrPrinterName_MaxLength" xml:space="preserve">
+    <value>QR printer name must not exceed 250 characters.</value>
+  </data>
+  <data name="Gate_ReceiptPrinterName_MaxLength" xml:space="preserve">
+    <value>Receipt printer name must not exceed 250 characters.</value>
+  </data>
+  <data name="Gate_DuplicateGateNumberInRequest" xml:space="preserve">
+    <value>Gate number {0} is duplicated in {1} gates request.</value>
+  </data>
+  <data name="Gate_DuplicateGateNumberForType_MissingGateId" xml:space="preserve">
+    <value>Gate number {0} already exists for {1}. If this is an existing gate, frontend must send gateId.</value>
+  </data>
+  <data name="Gate_DuplicateGateNumberForType" xml:space="preserve">
+    <value>Gate number {0} already exists for {1}.</value>
+  </data>
+  <data name="Gate_NotFound" xml:space="preserve">
+    <value>Gate with id {0} was not found.</value>
+  </data>
+  <data name="Gate_ControlIp_Required" xml:space="preserve">
+    <value>Gate {0} must have a control IP.</value>
+  </data>
+  <data name="Gate_AssignedTo_Required" xml:space="preserve">
+    <value>Gate {0} must have an assigned user.</value>
+  </data>
+  <data name="Gate_AssignedToInvalidUser" xml:space="preserve">
+    <value>Gate {0} is assigned to an invalid user.</value>
+  </data>
+  <data name="Gate_ONVIF_UrlRequest_Required_ForGate" xml:space="preserve">
+    <value>Gate {0} ONVIF UrlRequest is required.</value>
+  </data>
+  <data name="Gate_ONVIF_UserName_Required_ForGate" xml:space="preserve">
+    <value>Gate {0} ONVIF UserName is required.</value>
+  </data>
+  <data name="Gate_ONVIF_Password_Required_ForGate" xml:space="preserve">
+    <value>Gate {0} ONVIF Password is required.</value>
+  </data>
 </root>
