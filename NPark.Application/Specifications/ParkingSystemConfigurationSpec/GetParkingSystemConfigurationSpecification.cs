@@ -12,10 +12,8 @@ namespace NPark.Application.Specifications.ParkingSystemConfigurationSpec
         public GetParkingSystemConfigurationSpecification()
         {
             AddCriteria(x => x.Id == 1);
-
             Include(x => x.PricingScheme);
             Include(x => x.ParkingGates);
-
             Select(x => new GetSystemConfigurationQueryResponse
             {
                 AllowedParkingSlots = x.AllowedParkingSlots,
@@ -68,7 +66,6 @@ namespace NPark.Application.Specifications.ParkingSystemConfigurationSpec
                     })
                     .OrderBy(g => g.GateNumber)
                     .ToList(),
-
                 ExitGates = x.ParkingGates
                     .Where(g => g.GateType == GateType.Exit)
                     .Select(g => new GateInfo

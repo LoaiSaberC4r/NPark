@@ -22,7 +22,7 @@ namespace NPark.Application.Feature.ParkingMembershipsManagement.Query.MemberShi
             var searchValue = request.SearchValue.Trim();
 
             var exists = await _repository.IsExistAsync(
-    x => x.VehicleNumber.Trim() == searchValue ||
+    x => x.VehicleNumber.Trim().Replace(" ", "") == searchValue.Trim().Replace(" ", "") ||
          x.CardNumber.Trim() == searchValue,
     cancellationToken);
 

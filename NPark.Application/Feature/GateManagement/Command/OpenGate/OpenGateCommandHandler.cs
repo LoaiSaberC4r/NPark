@@ -1,5 +1,6 @@
 ﻿using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Domain.Results;
+using Microsoft.Extensions.Logging;
 using NPark.Application.Abstraction;
 
 namespace NPark.Application.Feature.GateManagement.Command.OpenGate
@@ -8,10 +9,17 @@ namespace NPark.Application.Feature.GateManagement.Command.OpenGate
         : ICommandHandler<OpenGateCommand, OpenGateCommandResponse>
     {
         private readonly IMqttPublisher _mqttPublisher;
+        private readonly ILogger<OpenGateCommandHandler> _logger;
 
-        public OpenGateCommandHandler(IMqttPublisher mqttPublisher)
+        public OpenGateCommandHandler(
+            IMqttPublisher mqttPublisher,
+            ILogger<OpenGateCommandHandler> logger)
         {
-            _mqttPublisher = mqttPublisher;
+            _mqttPublisher = mqttPublisher
+                ?? throw new ArgumentNullException(nameof(mqttPublisher));
+
+            _logger = logger
+                ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public async Task<Result<OpenGateCommandResponse>> Handle(
@@ -19,26 +27,58 @@ namespace NPark.Application.Feature.GateManagement.Command.OpenGate
             CancellationToken cancellationToken)
         {
             var controllerId = request.ControllerId.Trim();
+
+            _logger.LogInformation(
+                "OpenGate started. ControllerId={ControllerId}",
+                controllerId);
+
+            if (!int.TryParse(controllerId, out var controllerIdValue))
+            {
+                _logger.LogWarning(
+                    "OpenGate stopped. ControllerId is invalid. ControllerId={ControllerId}",
+                    controllerId);
+
+                return Result<OpenGateCommandResponse>.Fail(
+                    new Error(
+                        Code: "OpenGate.ControllerId.Invalid",
+                        Message: "Controller id must be numeric.",
+                        Type: ErrorType.Validation));
+            }
+
             var topic = $"sub/network/{controllerId}";
 
-            var controllerIdValue = int.Parse(controllerId);
             var controllerIdHex = controllerIdValue.ToString("X4");
 
-            var payloadPrefix = "7B";
-            var payloadSuffix = "AEBEC1B17D";
+            const string payloadPrefix = "7B";
+            const string payloadSuffix = "AEBEC1B17D";
 
-            // الـ payload كامل كـ string hex
             var payloadHexString = $"{payloadPrefix}{controllerIdHex}{payloadSuffix}";
 
-            // تحويل الـ hex string لـ byte array
+            _logger.LogInformation(
+                "OpenGate payload built. ControllerId={ControllerId}, ControllerIdHex={ControllerIdHex}, Topic={Topic}, PayloadHex={PayloadHex}",
+                controllerId,
+                controllerIdHex,
+                topic,
+                ToSpacedHex(payloadHexString));
+
             var payloadBytes = HexStringToBytes(payloadHexString);
 
-            // نشر الـ payload كـ bytes
+            _logger.LogInformation(
+                "Publishing OpenGate MQTT message. Topic={Topic}, PayloadBytesLength={PayloadBytesLength}, PayloadHex={PayloadHex}",
+                topic,
+                payloadBytes.Length,
+                ToSpacedHex(payloadHexString));
+
             await _mqttPublisher.PublishBytesAsync(
                 topic,
                 payloadBytes,
                 new MqttPublishOptions(Qos: 1, Retain: false),
                 cancellationToken);
+
+            _logger.LogInformation(
+                "OpenGate MQTT message published successfully. Topic={Topic}, PayloadHex={PayloadHex}",
+                topic,
+                ToSpacedHex(payloadHexString));
 
             var response = new OpenGateCommandResponse
             {
@@ -53,17 +93,45 @@ namespace NPark.Application.Feature.GateManagement.Command.OpenGate
 
         private static ReadOnlyMemory<byte> HexStringToBytes(string hex)
         {
-            hex = hex.Replace(" ", "").Replace("-", "");
+            hex = hex
+                .Replace(" ", string.Empty)
+                .Replace("-", string.Empty)
+                .Replace("{", string.Empty)
+                .Replace("}", string.Empty)
+                .Replace("0x", string.Empty, StringComparison.OrdinalIgnoreCase);
 
             if (hex.Length % 2 != 0)
-                hex = "0" + hex; // إضافة صفر إذا الطول فردي
+                hex = "0" + hex;
 
             var bytes = new byte[hex.Length / 2];
-            for (int i = 0; i < bytes.Length; i++)
+
+            for (var i = 0; i < bytes.Length; i++)
             {
                 bytes[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
             }
+
             return bytes;
+        }
+
+        private static string ToSpacedHex(string hex)
+        {
+            if (string.IsNullOrWhiteSpace(hex))
+                return string.Empty;
+
+            hex = hex
+                .Replace(" ", string.Empty)
+                .Replace("-", string.Empty)
+                .Replace("{", string.Empty)
+                .Replace("}", string.Empty)
+                .Replace("0x", string.Empty, StringComparison.OrdinalIgnoreCase);
+
+            if (hex.Length % 2 != 0)
+                return hex;
+
+            return string.Join(
+                " ",
+                Enumerable.Range(0, hex.Length / 2)
+                    .Select(i => hex.Substring(i * 2, 2).ToUpperInvariant()));
         }
     }
 }

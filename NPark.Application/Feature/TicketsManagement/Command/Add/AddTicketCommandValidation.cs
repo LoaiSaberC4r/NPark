@@ -24,22 +24,22 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             // ---------------------------
             // Subscriber rules
             // ---------------------------
-            When(x => x.IsSubscriber, () =>
-            {
-                RuleFor(x => x)
-                    .Must(HaveCardNumberOrVehicleNumber)
-                    .WithMessage(ErrorMessage.SubscriberTicketCardOrVehicleNumberRequired);
-            });
+            //When(x => x.IsSubscriber, () =>
+            //{
+            //    RuleFor(x => x)
+            //        .Must(HaveCardNumberOrVehicleNumber)
+            //        .WithMessage(ErrorMessage.SubscriberTicketCardOrVehicleNumberRequired);
+            //});
 
             // ---------------------------
             // Non-subscriber rules
             // ---------------------------
-            When(x => !x.IsSubscriber, () =>
-            {
-                RuleFor(x => x.CardNumber)
-                    .Empty()
-                    .WithMessage(ErrorMessage.NonSubscriberTicketCardNumberMustBeEmpty);
-            });
+            //When(x => !x.IsSubscriber, () =>
+            //{
+            //    RuleFor(x => x.CardNumber)
+            //        .Empty()
+            //        .WithMessage(ErrorMessage.NonSubscriberTicketCardNumberMustBeEmpty);
+            //});
         }
 
         private static bool HaveCardNumberOrVehicleNumber(AddTicketCommand command)

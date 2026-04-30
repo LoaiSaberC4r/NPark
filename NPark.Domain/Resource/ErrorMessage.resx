@@ -546,4 +546,46 @@
   <data name="Gate_ONVIF_Password_Required_ForGate" xml:space="preserve">
     <value>Gate {0} ONVIF Password is required.</value>
   </data>
+  <data name="SearchTicket_SearchText_MaxLength" xml:space="preserve">
+    <value>Search text must not exceed 100 characters.</value>
+  </data>
+  <data name="SearchTicket_PageNumber_Invalid" xml:space="preserve">
+    <value>Page number must be greater than or equal to 1.</value>
+  </data>
+  <data name="SearchTicket_PageSize_Invalid" xml:space="preserve">
+    <value>Page size must be greater than or equal to 1.</value>
+  </data>
+  <data name="SearchTicket_PageSize_Max" xml:space="preserve">
+    <value>Page size must not exceed 100.</value>
+  </data>
+  <data name="SanctionIds_Required" xml:space="preserve">
+    <value>At least one sanction is required.</value>
+  </data>
+  <data name="SanctionIds_Duplicated" xml:space="preserve">
+    <value>Duplicate sanctions are not allowed.</value>
+  </data>
+  <data name="TicketExceedTransaction_AlreadyExists" xml:space="preserve">
+    <value>Exceed transaction already exists for this ticket.</value>
+  </data>
+  <data name="TicketExceedTransaction_Create_Unexpected" xml:space="preserve">
+    <value>Unexpected error occurred while creating ticket exceed transaction.</value>
+  </data>
+  <data name="User_NotFound" xml:space="preserve">
+    <value>User not found.</value>
+  </data>
+  <data name="Supervisor_OnlyCanCollectTicketExceedTransactions" xml:space="preserve">
+    <value>Only supervisor can collect ticket exceed transactions.</value>
+  </data>
+  <data name="TicketExceedTransactions_NoneToCollect" xml:space="preserve">
+    <value>There are no uncollected ticket exceed transactions for this gate.</value>
+  </data>
+  <data name="TicketExceedTransactions_CollectUnexpected" xml:space="preserve">
+    <value>An unexpected error occurred while collecting ticket exceed transactions.</value>
+  </data>
+  <data name="Tickets_GetUncollectedEnterTicketsUnexpected" xml:space="preserve">
+    <value>An unexpected error occurred while getting uncollected enter tickets.</value>
+  </data>
+  <data name="Tickets_CollectEnterTicketsUnexpected" xml:space="preserve">
+    <value>An unexpected error occurred while collecting enter tickets.</value>
+  </data>
 </root>

@@ -1069,11 +1069,65 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Duplicate sanctions are not allowed..
+        /// </summary>
+        public static string SanctionIds_Duplicated {
+            get {
+                return ResourceManager.GetString("SanctionIds_Duplicated", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to At least one sanction is required..
+        /// </summary>
+        public static string SanctionIds_Required {
+            get {
+                return ResourceManager.GetString("SanctionIds_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Sanction name is required..
         /// </summary>
         public static string SanctionName_Required {
             get {
                 return ResourceManager.GetString("SanctionName_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Page number must be greater than or equal to 1..
+        /// </summary>
+        public static string SearchTicket_PageNumber_Invalid {
+            get {
+                return ResourceManager.GetString("SearchTicket_PageNumber_Invalid", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Page size must be greater than or equal to 1..
+        /// </summary>
+        public static string SearchTicket_PageSize_Invalid {
+            get {
+                return ResourceManager.GetString("SearchTicket_PageSize_Invalid", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Page size must not exceed 100..
+        /// </summary>
+        public static string SearchTicket_PageSize_Max {
+            get {
+                return ResourceManager.GetString("SearchTicket_PageSize_Max", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Search text must not exceed 100 characters..
+        /// </summary>
+        public static string SearchTicket_SearchText_MaxLength {
+            get {
+                return ResourceManager.GetString("SearchTicket_SearchText_MaxLength", resourceCulture);
             }
         }
         
@@ -1110,6 +1164,15 @@ namespace NPark.Domain.Resource {
         public static string SubscriberTicketCardOrVehicleNumberRequired {
             get {
                 return ResourceManager.GetString("SubscriberTicketCardOrVehicleNumberRequired", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Only supervisor can collect ticket exceed transactions..
+        /// </summary>
+        public static string Supervisor_OnlyCanCollectTicketExceedTransactions {
+            get {
+                return ResourceManager.GetString("Supervisor_OnlyCanCollectTicketExceedTransactions", resourceCulture);
             }
         }
         
@@ -1177,11 +1240,65 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Exceed transaction already exists for this ticket..
+        /// </summary>
+        public static string TicketExceedTransaction_AlreadyExists {
+            get {
+                return ResourceManager.GetString("TicketExceedTransaction_AlreadyExists", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Unexpected error occurred while creating ticket exceed transaction..
+        /// </summary>
+        public static string TicketExceedTransaction_Create_Unexpected {
+            get {
+                return ResourceManager.GetString("TicketExceedTransaction_Create_Unexpected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to An unexpected error occurred while collecting ticket exceed transactions..
+        /// </summary>
+        public static string TicketExceedTransactions_CollectUnexpected {
+            get {
+                return ResourceManager.GetString("TicketExceedTransactions_CollectUnexpected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to There are no uncollected ticket exceed transactions for this gate..
+        /// </summary>
+        public static string TicketExceedTransactions_NoneToCollect {
+            get {
+                return ResourceManager.GetString("TicketExceedTransactions_NoneToCollect", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Ticket ID is required.
         /// </summary>
         public static string TicketId_Required {
             get {
                 return ResourceManager.GetString("TicketId_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to An unexpected error occurred while collecting enter tickets..
+        /// </summary>
+        public static string Tickets_CollectEnterTicketsUnexpected {
+            get {
+                return ResourceManager.GetString("Tickets_CollectEnterTicketsUnexpected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to An unexpected error occurred while getting uncollected enter tickets..
+        /// </summary>
+        public static string Tickets_GetUncollectedEnterTicketsUnexpected {
+            get {
+                return ResourceManager.GetString("Tickets_GetUncollectedEnterTicketsUnexpected", resourceCulture);
             }
         }
         
@@ -1245,6 +1362,15 @@ namespace NPark.Domain.Resource {
         public static string Unique_Phone {
             get {
                 return ResourceManager.GetString("Unique_Phone", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to User not found..
+        /// </summary>
+        public static string User_NotFound {
+            get {
+                return ResourceManager.GetString("User_NotFound", resourceCulture);
             }
         }
         

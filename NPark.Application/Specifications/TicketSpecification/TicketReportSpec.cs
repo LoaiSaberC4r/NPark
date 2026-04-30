@@ -9,16 +9,23 @@ namespace NPark.Application.Specifications.TicketSpecification
         public TicketReportSpec(ReportTicketsQuery request)
         {
             Include(x => x.UserCollector);
-            AddCriteria(x => x.StartDate >= request.FromDate && x.StartDate < request.ToDate);
+
+            var fromDate = request.FromDate.Date;
+            var toDateExclusive = request.ToDate.Date.AddDays(1);
+
+            AddCriteria(x =>
+                x.StartDate >= fromDate &&
+                x.StartDate < toDateExclusive);
 
             if (!string.IsNullOrWhiteSpace(request.SearchTerm))
             {
                 var searchTerm = request.SearchTerm.Trim();
 
                 AddCriteria(x =>
-                       (x.VehicleNumber != null && x.VehicleNumber.Contains(searchTerm)) ||
-                       (x.UserCollector != null && x.UserCollector.Name.Contains(searchTerm)));
+                    (x.VehicleNumber != null && x.VehicleNumber.Contains(searchTerm)) ||
+                    (x.UserCollector != null && x.UserCollector.Name.Contains(searchTerm)));
             }
+
             Select(x => new ReportTicketsResponse
             {
                 TicketId = x.Id,
@@ -27,7 +34,7 @@ namespace NPark.Application.Specifications.TicketSpecification
                 VehicleNumber = x.VehicleNumber,
                 IsSubscribed = x.IsSubscriber,
                 Price = x.Price,
-                CollectorName = (x.UserCollector == null) ? string.Empty : x.UserCollector.Name,
+                CollectorName = x.UserCollector == null ? string.Empty : x.UserCollector.Name,
                 TicketNumber = x.UniqueCode
             });
         }

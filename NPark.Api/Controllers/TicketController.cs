@@ -7,6 +7,7 @@ using NPark.Application.Feature.TicketsManagement.Command.Add;
 using NPark.Application.Feature.TicketsManagement.Command.CalculateSalary;
 using NPark.Application.Feature.TicketsManagement.Command.CalculateSalaryForSubscriber;
 using NPark.Application.Feature.TicketsManagement.Command.CollectDailyTicket;
+using NPark.Application.Feature.TicketsManagement.Command.CollectEnterTickets;
 using NPark.Application.Feature.TicketsManagement.Command.ColletByCachier;
 using NPark.Application.Feature.TicketsManagement.Command.ExitTicket;
 using NPark.Application.Feature.TicketsManagement.Command.ScanQrCode;
@@ -17,7 +18,9 @@ using NPark.Application.Feature.TicketsManagement.Query.GetExitTicketForAdmin;
 using NPark.Application.Feature.TicketsManagement.Query.GetTicketForEntryGate;
 using NPark.Application.Feature.TicketsManagement.Query.GetTicketForExitGate;
 using NPark.Application.Feature.TicketsManagement.Query.GetTicketInsidePark;
+using NPark.Application.Feature.TicketsManagement.Query.GetUncollectedEnterTickets;
 using NPark.Application.Feature.TicketsManagement.Query.ReportTickets;
+using NPark.Application.Feature.TicketsManagement.Query.SearchTicket;
 using NPark.Application.Feature.TicketsManagement.Query.ValidateExitByVehicleNumber;
 
 namespace NPark.Api.Controllers
@@ -151,7 +154,37 @@ namespace NPark.Api.Controllers
         {
             var result = await sender.Send(command, cancellationToken);
             return result.ToIActionResult();
+        }
 
+        [HttpGet("search")]
+        public async Task<IActionResult> Search(
+          [FromQuery] SearchTicketQuery query,
+          CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(query, cancellationToken);
+            return result.ToIActionResult(cancellationToken);
+        }
+
+        [HttpGet("uncollected-enter-tickets")]
+        public async Task<IActionResult> GetUncollectedEnterTickets(
+          CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(
+                new GetUncollectedEnterTicketsQuery(),
+                cancellationToken);
+
+            return result.ToIActionResult(cancellationToken);
+        }
+
+        [HttpPost("collect-enter-tickets")]
+        public async Task<IActionResult> CollectEnterTickets(
+           CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(
+                new CollectEnterTicketsCommand(),
+                cancellationToken);
+
+            return result.ToIActionResult(cancellationToken);
         }
     }
 }

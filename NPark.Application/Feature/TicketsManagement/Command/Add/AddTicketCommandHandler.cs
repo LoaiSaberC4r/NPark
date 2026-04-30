@@ -181,7 +181,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                 return Result<AddTicketCommandResponse>.Fail(
                     new Error(
                         Code: "Subscriber.Card.NotFound",
-                        Message: ErrorMessage.CardNumber_Require,
+                        Message: "المشترك غير موجود ",
                         Type: ErrorType.NotFound));
             }
 

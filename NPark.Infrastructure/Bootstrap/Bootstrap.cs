@@ -67,7 +67,10 @@ namespace NPark.Infrastructure.Bootstrap
                 var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<CameraOptions>>().Value;
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds <= 0 ? 15 : options.TimeoutSeconds);
             });
-
+            services.Configure<MqttNetworkSubscriberOptions>(
+    configuration.GetSection(MqttNetworkSubscriberOptions.SectionName));
+            services.AddHostedService<MqttNetworkSubscriberService>();
+            services.AddSingleton<IMqttExitQrPacketDecoder, MqttExitQrPacketDecoder>();
             return services;
         }
 

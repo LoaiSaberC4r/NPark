@@ -16,6 +16,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddApplicationBootstrap();
 builder.Services.InfrastructureInjection(builder.Configuration);
 builder.Services.AddScoped<ILprSignalRNotifier, LprSignalRNotifier>();
+builder.Services.AddSingleton<IMqttCaptureSignalRNotifier, MqttCaptureSignalRNotifier>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSignalR();

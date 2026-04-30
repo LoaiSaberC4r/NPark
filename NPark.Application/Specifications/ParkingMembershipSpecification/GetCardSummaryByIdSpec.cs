@@ -8,7 +8,8 @@ namespace NPark.Application.Specifications.ParkingMembershipSpecification
     {
         public GetCardSummaryByIdSpec(string cardNumber, string vehicleNumber)
         {
-            AddCriteria(x => x.CardNumber == cardNumber || x.VehicleNumber.Trim() == vehicleNumber.Trim());
+            AddCriteria(x => x.CardNumber == cardNumber ||
+            x.VehicleNumber.Trim().Replace(" ", "") == vehicleNumber.Trim().Replace(" ", ""));
             Include(x => x.PricingScheme);
             Select(x => new GetCardSummaryByIdQueryResponse
             {

@@ -548,4 +548,46 @@
   <data name="Gate_ONVIF_Password_Required_ForGate" xml:space="preserve">
     <value>كلمة مرور ONVIF مطلوبة للبوابة رقم {0}.</value>
   </data>
+  <data name="SearchTicket_SearchText_MaxLength" xml:space="preserve">
+    <value>نص البحث يجب ألا يتجاوز 100 حرف.</value>
+  </data>
+  <data name="SearchTicket_PageNumber_Invalid" xml:space="preserve">
+    <value>رقم الصفحة يجب أن يكون أكبر من أو يساوي 1.</value>
+  </data>
+  <data name="SearchTicket_PageSize_Invalid" xml:space="preserve">
+    <value>حجم الصفحة يجب أن يكون أكبر من أو يساوي 1.</value>
+  </data>
+  <data name="SearchTicket_PageSize_Max" xml:space="preserve">
+    <value>حجم الصفحة يجب ألا يتجاوز 100.</value>
+  </data>
+  <data name="SanctionIds_Required" xml:space="preserve">
+    <value>يجب اختيار مخالفة واحدة على الأقل.</value>
+  </data>
+  <data name="SanctionIds_Duplicated" xml:space="preserve">
+    <value>لا يمكن تكرار نفس المخالفة.</value>
+  </data>
+  <data name="TicketExceedTransaction_AlreadyExists" xml:space="preserve">
+    <value>تم تسجيل مخالفات لهذه التذكرة من قبل.</value>
+  </data>
+  <data name="TicketExceedTransaction_Create_Unexpected" xml:space="preserve">
+    <value>حدث خطأ غير متوقع أثناء تسجيل مخالفات التذكرة.</value>
+  </data>
+  <data name="User_NotFound" xml:space="preserve">
+    <value>المستخدم غير موجود.</value>
+  </data>
+  <data name="Supervisor_OnlyCanCollectTicketExceedTransactions" xml:space="preserve">
+    <value>غير مسموح بتحصيل زيادات التذاكر إلا للمشرف فقط.</value>
+  </data>
+  <data name="TicketExceedTransactions_NoneToCollect" xml:space="preserve">
+    <value>لا توجد زيادات تذاكر غير محصلة على هذه البوابة.</value>
+  </data>
+  <data name="TicketExceedTransactions_CollectUnexpected" xml:space="preserve">
+    <value>حدث خطأ غير متوقع أثناء تحصيل زيادات التذاكر.</value>
+  </data>
+  <data name="Tickets_GetUncollectedEnterTicketsUnexpected" xml:space="preserve">
+    <value>حدث خطأ غير متوقع أثناء جلب تذاكر الدخول غير المحصلة.</value>
+  </data>
+  <data name="Tickets_CollectEnterTicketsUnexpected" xml:space="preserve">
+    <value>حدث خطأ غير متوقع أثناء تحصيل تذاكر الدخول.</value>
+  </data>
 </root>

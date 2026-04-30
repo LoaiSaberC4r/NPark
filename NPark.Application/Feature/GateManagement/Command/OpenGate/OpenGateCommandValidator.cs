@@ -8,7 +8,11 @@ namespace NPark.Application.Feature.GateManagement.Command.OpenGate
         {
             RuleFor(x => x.ControllerId)
                 .NotEmpty()
-                .MaximumLength(100);
+                .WithMessage("Controller id is required.")
+                .MaximumLength(100)
+                .WithMessage("Controller id must not exceed 100 characters.")
+                .Must(x => int.TryParse(x, out _))
+                .WithMessage("Controller id must be numeric.");
         }
     }
 }

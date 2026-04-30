@@ -9,7 +9,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
         {
             AddCriteria(t =>
                 t.VehicleNumber != null &&
-                t.VehicleNumber == vehicleNumber
+                t.VehicleNumber.Trim().Replace(" ", "") == vehicleNumber.Trim().Replace(" ", "")
 
                 && t.EndDate == null);
 

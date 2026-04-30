@@ -722,6 +722,100 @@ namespace NPark.Infrastructure.Migrations
                     b.ToTable("TicketAttachments", (string)null);
                 });
 
+            modelBuilder.Entity("NPark.Domain.Entities.TicketExceedTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CardNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("ExceedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("GateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsSubscriber")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("SubscriberNationalId")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("SuperVisorCollectedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("SuperVisorCollectorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("TicketEndDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("TicketExitGateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TicketGateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TicketIdSnapshot")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("TicketOldExceedPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("TicketPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("TicketStartDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("TicketUniqueCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("TotalPriceAfterExceed")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("UserCollectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("VehicleNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("GateId");
+
+                    b.HasIndex("SuperVisorCollectorId");
+
+                    b.HasIndex("TicketIdSnapshot")
+                        .IsUnique();
+
+                    b.HasIndex("UserCollectId");
+
+                    b.ToTable("TicketExceedTransactions", (string)null);
+                });
+
             modelBuilder.Entity("NPark.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -780,6 +874,21 @@ namespace NPark.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("TicketExceedTransactionSanctions", b =>
+                {
+                    b.Property<Guid>("TicketExceedTransactionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("SanctionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("TicketExceedTransactionId", "SanctionId");
+
+                    b.HasIndex("SanctionId");
+
+                    b.ToTable("TicketExceedTransactionSanctions", (string)null);
                 });
 
             modelBuilder.Entity("NPark.Domain.Entities.OrderPricingSchema", b =>
@@ -929,6 +1038,32 @@ namespace NPark.Infrastructure.Migrations
                     b.Navigation("Ticket");
                 });
 
+            modelBuilder.Entity("NPark.Domain.Entities.TicketExceedTransaction", b =>
+                {
+                    b.HasOne("NPark.Domain.Entities.ParkingGate", "Gate")
+                        .WithMany()
+                        .HasForeignKey("GateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NPark.Domain.Entities.User", "SuperVisorCollector")
+                        .WithMany()
+                        .HasForeignKey("SuperVisorCollectorId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("NPark.Domain.Entities.User", "UserCollector")
+                        .WithMany()
+                        .HasForeignKey("UserCollectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Gate");
+
+                    b.Navigation("SuperVisorCollector");
+
+                    b.Navigation("UserCollector");
+                });
+
             modelBuilder.Entity("NPark.Domain.Entities.User", b =>
                 {
                     b.HasOne("NPark.Domain.Entities.Role", "Role")
@@ -937,6 +1072,21 @@ namespace NPark.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("TicketExceedTransactionSanctions", b =>
+                {
+                    b.HasOne("NPark.Domain.Entities.Sanction", null)
+                        .WithMany()
+                        .HasForeignKey("SanctionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NPark.Domain.Entities.TicketExceedTransaction", null)
+                        .WithMany()
+                        .HasForeignKey("TicketExceedTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("NPark.Domain.Entities.ParkingMemberships", b =>

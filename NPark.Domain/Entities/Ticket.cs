@@ -66,7 +66,12 @@ namespace NPark.Domain.Entities
 
         public void SetIsCashierCollected() => IsCashierCollected = true;
 
-        public void SetCollectedBy(Guid collectedBy) => CollectedBy = collectedBy;
+        public void SetCollectedBy(Guid collectedBy)
+        {
+            CollectedBy = collectedBy;
+            IsCollected = true;
+            CollectedDate = DateTime.Now;
+        }
 
         private static byte[] GetGuidUniquePart(Guid guid)
         {
@@ -106,6 +111,14 @@ namespace NPark.Domain.Entities
         {
             var attachment = TicketAttachment.Create(Id, filePath);
             _ticketAttachments.Add(attachment);
+        }
+
+        public void SetExceedPrice(decimal exceedPrice)
+        {
+            if (exceedPrice < 0)
+                throw new ArgumentOutOfRangeException(nameof(exceedPrice), "Exceed price cannot be negative.");
+
+            ExceedPrice = exceedPrice;
         }
     }
 }
