@@ -182,6 +182,11 @@ namespace NPark.Infrastructure.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
 
+                    b.Property<bool?>("HasScanner")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("IsAssigned")
                         .HasColumnType("bit");
 
@@ -613,7 +618,6 @@ namespace NPark.Infrastructure.Migrations
             modelBuilder.Entity("NPark.Domain.Entities.TicketArchive", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("CardNumber")
@@ -694,6 +698,33 @@ namespace NPark.Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("TicketArchive");
+                });
+
+            modelBuilder.Entity("NPark.Domain.Entities.TicketArchiveAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ModifiedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("TicketArchiveId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketArchiveId");
+
+                    b.ToTable("TicketArchiveAttachments", (string)null);
                 });
 
             modelBuilder.Entity("NPark.Domain.Entities.TicketAttachment", b =>
@@ -1027,6 +1058,17 @@ namespace NPark.Infrastructure.Migrations
                     b.Navigation("UserCollector");
                 });
 
+            modelBuilder.Entity("NPark.Domain.Entities.TicketArchiveAttachment", b =>
+                {
+                    b.HasOne("NPark.Domain.Entities.TicketArchive", "TicketArchive")
+                        .WithMany("TicketArchiveAttachments")
+                        .HasForeignKey("TicketArchiveId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TicketArchive");
+                });
+
             modelBuilder.Entity("NPark.Domain.Entities.TicketAttachment", b =>
                 {
                     b.HasOne("NPark.Domain.Entities.Ticket", "Ticket")
@@ -1117,6 +1159,11 @@ namespace NPark.Infrastructure.Migrations
             modelBuilder.Entity("NPark.Domain.Entities.Ticket", b =>
                 {
                     b.Navigation("TicketAttachments");
+                });
+
+            modelBuilder.Entity("NPark.Domain.Entities.TicketArchive", b =>
+                {
+                    b.Navigation("TicketArchiveAttachments");
                 });
 #pragma warning restore 612, 618
         }

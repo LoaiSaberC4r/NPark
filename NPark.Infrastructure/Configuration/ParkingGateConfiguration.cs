@@ -27,6 +27,10 @@ namespace NPark.Infrastructure.Configuration
                 .IsRequired()
                 .HasDefaultValue(false);
 
+            builder.Property(x => x.HasScanner)
+                .IsRequired(false)
+                .HasDefaultValue(false);
+
             builder.HasOne(x => x.AssignedToUser)
                 .WithOne()
                 .HasForeignKey<ParkingGate>(x => x.AssignedTo)

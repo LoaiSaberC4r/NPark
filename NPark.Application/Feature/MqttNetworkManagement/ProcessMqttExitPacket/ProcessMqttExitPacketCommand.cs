@@ -3,7 +3,7 @@
 namespace NPark.Application.Feature.MqttNetworkManagement.ProcessMqttExitPacket
 {
     public sealed record ProcessMqttExitPacketCommand
-        : ICommand<ProcessMqttExitPacketResponse>
+           : ICommand<ProcessMqttExitPacketResponse>
     {
         public string DeviceId { get; init; } = string.Empty;
 
@@ -14,7 +14,7 @@ namespace NPark.Application.Feature.MqttNetworkManagement.ProcessMqttExitPacket
     {
         public string DeviceId { get; init; } = string.Empty;
 
-        public int ControllerIdFromPacket { get; init; }
+        public int? ControllerIdFromPacket { get; init; }
 
         public string PayloadHex { get; init; } = string.Empty;
 

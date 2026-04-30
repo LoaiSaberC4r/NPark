@@ -1,6 +1,7 @@
 ﻿using BuildingBlock.Domain.Specification;
 using NPark.Application.Feature.TicketsManagement.Query.ReportTickets;
 using NPark.Domain.Entities;
+using NPark.Domain.FileNames;
 
 namespace NPark.Application.Specifications.TicketSpecification
 {
@@ -9,6 +10,7 @@ namespace NPark.Application.Specifications.TicketSpecification
         public TicketReportSpec(ReportTicketsQuery request)
         {
             Include(x => x.UserCollector);
+            Include(x => x.TicketArchiveAttachments);
 
             var fromDate = request.FromDate.Date;
             var toDateExclusive = request.ToDate.Date.AddDays(1);
@@ -35,7 +37,14 @@ namespace NPark.Application.Specifications.TicketSpecification
                 IsSubscribed = x.IsSubscriber,
                 Price = x.Price,
                 CollectorName = x.UserCollector == null ? string.Empty : x.UserCollector.Name,
-                TicketNumber = x.UniqueCode
+                TicketNumber = x.UniqueCode,
+
+                Attachments = x.TicketArchiveAttachments
+                    .Select(a => new ReportTicketAttachmentResponse
+                    {
+                        ImagePath = "Media/" + FileNames.TicketAttachments + "/" + a.FilePath
+                    })
+                    .ToList()
             });
         }
     }

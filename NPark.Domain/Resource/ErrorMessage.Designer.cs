@@ -340,6 +340,15 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to HasScanner is required for each gate..
+        /// </summary>
+        public static string Gate_HasScanner_Required {
+            get {
+                return ResourceManager.GetString("Gate_HasScanner_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Cannot delete a gate that has tickets.
         /// </summary>
         public static string Gate_HasTickets {
@@ -1092,6 +1101,15 @@ namespace NPark.Domain.Resource {
         public static string SanctionName_Required {
             get {
                 return ResourceManager.GetString("SanctionName_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Scanner Photo Is Required.
+        /// </summary>
+        public static string ScannerPhotoRequired {
+            get {
+                return ResourceManager.GetString("ScannerPhotoRequired", resourceCulture);
             }
         }
         

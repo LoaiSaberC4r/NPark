@@ -588,4 +588,10 @@
   <data name="Tickets_CollectEnterTicketsUnexpected" xml:space="preserve">
     <value>An unexpected error occurred while collecting enter tickets.</value>
   </data>
+  <data name="ScannerPhotoRequired" xml:space="preserve">
+    <value>Scanner Photo Is Required</value>
+  </data>
+  <data name="Gate_HasScanner_Required" xml:space="preserve">
+    <value>HasScanner is required for each gate.</value>
+  </data>
 </root>

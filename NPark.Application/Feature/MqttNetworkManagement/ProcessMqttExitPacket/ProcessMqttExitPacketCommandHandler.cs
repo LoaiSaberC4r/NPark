@@ -10,7 +10,7 @@ using NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText;
 namespace NPark.Application.Feature.MqttNetworkManagement.ProcessMqttExitPacket
 {
     internal sealed class ProcessMqttExitPacketCommandHandler
-       : ICommandHandler<ProcessMqttExitPacketCommand, ProcessMqttExitPacketResponse>
+         : ICommandHandler<ProcessMqttExitPacketCommand, ProcessMqttExitPacketResponse>
     {
         private readonly IMqttExitQrPacketDecoder _decoder;
         private readonly ISender _sender;
@@ -57,10 +57,6 @@ namespace NPark.Application.Feature.MqttNetworkManagement.ProcessMqttExitPacket
                     "Device id must be numeric.");
             }
 
-            _logger.LogInformation(
-                "Decoding MQTT exit packet. DeviceId={DeviceId}",
-                deviceId);
-
             var decode = _decoder.Decode(request.PayloadBytes);
 
             if (!decode.IsSuccess)
@@ -83,20 +79,23 @@ namespace NPark.Application.Feature.MqttNetworkManagement.ProcessMqttExitPacket
             }
 
             _logger.LogInformation(
-                "Decode success. DeviceId={DeviceId}, ControllerIdFromPacket={ControllerIdFromPacket}, ControllerIdHex={ControllerIdHex}, MyDataHex={MyDataHex}, ActualQrHex={ActualQrHex}, QrStringLength={QrStringLength}",
+                "Decode success. DeviceId={DeviceId}, HasControllerId={HasControllerId}, ControllerIdFromPacket={ControllerIdFromPacket}, ControllerIdHex={ControllerIdHex}, MyDataHex={MyDataHex}, ActualQrHex={ActualQrHex}, QrString={QrString}",
                 deviceId,
+                decode.HasControllerId,
                 decode.ControllerId,
                 ToSpacedHex(decode.ControllerIdHex),
                 ToSpacedHex(decode.MyDataHex),
-                ToSpacedHex(decode.ActualQrHex),
-                decode.QrString?.Length ?? 0);
+                decode.ActualQrHex,
+                decode.QrString);
 
-            if (decode.ControllerId != topicControllerId)
+            if (decode.HasControllerId &&
+                decode.ControllerId.HasValue &&
+                decode.ControllerId.Value != topicControllerId)
             {
                 _logger.LogWarning(
                     "ControllerId mismatch. TopicDeviceId={TopicDeviceId}, PacketControllerId={PacketControllerId}",
                     topicControllerId,
-                    decode.ControllerId);
+                    decode.ControllerId.Value);
 
                 return Result<ProcessMqttExitPacketResponse>.Ok(
                     new ProcessMqttExitPacketResponse
@@ -108,14 +107,14 @@ namespace NPark.Application.Feature.MqttNetworkManagement.ProcessMqttExitPacket
                         ActualQrHex = decode.ActualQrHex,
                         QrString = decode.QrString,
                         ErrorCode = "MqttExit.ControllerId.Mismatch",
-                        ErrorMessage = $"Topic deviceId '{deviceId}' does not match packet controllerId '{decode.ControllerId}'."
+                        ErrorMessage = $"Topic deviceId '{deviceId}' does not match packet controllerId '{decode.ControllerId.Value}'."
                     });
             }
 
             _logger.LogInformation(
-                "Sending ValidateExitByTextCommand. DeviceId={DeviceId}, QrStringLength={QrStringLength}",
+                "Sending ValidateExitByTextCommand. DeviceId={DeviceId}, Text={Text}",
                 deviceId,
-                decode.QrString.Length);
+                decode.QrString);
 
             var validationResult = await _sender.Send(
                 new ValidateExitByTextCommand
@@ -216,11 +215,6 @@ namespace NPark.Application.Feature.MqttNetworkManagement.ProcessMqttExitPacket
                 exitResult.Value.TicketId,
                 exitResult.Value.GateId);
 
-            _logger.LogInformation(
-                "Sending OpenGateCommand. DeviceId={DeviceId}, ControllerId={ControllerId}",
-                deviceId,
-                deviceId);
-
             var openGateResult = await _sender.Send(
                 new OpenGateCommand
                 {
@@ -256,11 +250,6 @@ namespace NPark.Application.Feature.MqttNetworkManagement.ProcessMqttExitPacket
                 openGate.Topic,
                 ToSpacedHex(openGate.Payload),
                 openGate.PublishedAtUtc);
-
-            _logger.LogInformation(
-                "MQTT exit workflow succeeded. DeviceId={DeviceId}, TicketId={TicketId}, GateOpened=true",
-                deviceId,
-                validation.TicketId.Value);
 
             return Result<ProcessMqttExitPacketResponse>.Ok(
                 new ProcessMqttExitPacketResponse

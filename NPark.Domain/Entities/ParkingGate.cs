@@ -17,7 +17,7 @@ namespace NPark.Domain.Entities
 
         public string? LprIp { get; private set; } = string.Empty;
         public bool HasLpr => !string.IsNullOrWhiteSpace(LprIp);
-
+        public bool? HasScanner { get; private set; } = false;
         public Guid? LastLoginUserId { get; private set; }
 
         public bool IsAssigned { get; private set; }
@@ -131,18 +131,19 @@ namespace NPark.Domain.Entities
         }
 
         public void UpdateGateInfo(
-            int gateNumber,
-            GateType gateType,
-            string? lprIp,
-            string? pcIp,
-            string? controlIp,
-            Guid? onvifCameraSettingId,
-            bool isAssigned,
-            Guid? assignedTo,
-            bool hasQrPrinterName = false,
-            string? qrPrinterName = null,
-            bool hasReceiptPrinterName = false,
-            string? receiptPrinterName = null)
+    int gateNumber,
+    GateType gateType,
+    string? lprIp,
+    string? pcIp,
+    string? controlIp,
+    Guid? onvifCameraSettingId,
+    bool isAssigned,
+    Guid? assignedTo,
+    bool hasScanner,
+    bool hasQrPrinterName = false,
+    string? qrPrinterName = null,
+    bool hasReceiptPrinterName = false,
+    string? receiptPrinterName = null)
         {
             GateNumber = gateNumber;
             GateType = gateType;
@@ -152,6 +153,8 @@ namespace NPark.Domain.Entities
             ONVIFCameraSettingId = onvifCameraSettingId;
             IsAssigned = isAssigned;
             AssignedTo = isAssigned ? assignedTo : null;
+
+            SetScanner(hasScanner);
 
             UpdatePrinters(
                 hasQrPrinterName: hasQrPrinterName,
@@ -193,6 +196,11 @@ namespace NPark.Domain.Entities
             }
 
             return printerName.Trim();
+        }
+
+        public void SetScanner(bool hasScanner)
+        {
+            HasScanner = hasScanner;
         }
     }
 }

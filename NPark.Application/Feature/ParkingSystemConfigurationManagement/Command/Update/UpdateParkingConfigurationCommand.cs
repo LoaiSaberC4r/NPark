@@ -27,6 +27,7 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
 
     public record GateInfo
     {
+        public bool? HasScanner { get; set; }
         public Guid? GateId { get; set; }
 
         public int GateNumber { get; set; }

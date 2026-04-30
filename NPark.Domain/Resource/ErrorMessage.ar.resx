@@ -590,4 +590,10 @@
   <data name="Tickets_CollectEnterTicketsUnexpected" xml:space="preserve">
     <value>حدث خطأ غير متوقع أثناء تحصيل تذاكر الدخول.</value>
   </data>
+  <data name="ScannerPhotoRequired" xml:space="preserve">
+    <value>صورة الاسكانر مطلوبة</value>
+  </data>
+  <data name="Gate_HasScanner_Required" xml:space="preserve">
+    <value>يجب تحديد هل البوابة تحتوي على Scanner أم لا.</value>
+  </data>
 </root>
