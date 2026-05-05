@@ -41,6 +41,7 @@ namespace NPark.Domain.Entities
         public User? UserCollector { get; private set; }
 
         public ParkingGate ParkingGate { get; private set; } = default!;
+        public ParkingGate ExitParkingGate { get; private set; } = default!;
 
         public bool IsSubscriber { get; private set; } = false;
 

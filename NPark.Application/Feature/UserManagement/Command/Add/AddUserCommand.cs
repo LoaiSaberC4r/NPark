@@ -11,5 +11,8 @@ namespace NPark.Application.Feature.UserManagement.Command.Add
         public string PhoneNumber { get; init; } = string.Empty;
         public string NationalId { get; init; } = string.Empty;
         public Guid RoleId { get; init; }
+
+        public TimeSpan? ShiftStartTime { get; init; }
+        public TimeSpan? ShiftEndTime { get; init; }
     }
 }

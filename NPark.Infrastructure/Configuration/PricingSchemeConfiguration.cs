@@ -9,15 +9,41 @@ namespace NPark.Infrastructure.Configuration
         public void Configure(EntityTypeBuilder<PricingScheme> builder)
         {
             builder.ToTable("PricingSchemes");
+
             builder.HasKey(x => x.Id);
-            builder.Property(x => x.Name).IsRequired().HasMaxLength(100);
-            builder.Property(x => x.DurationType).IsRequired();
-            builder.Property(x => x.StartTime).IsRequired(false);
-            builder.Property(x => x.EndTime).IsRequired(false);
-            builder.Property(x => x.Salary).IsRequired();
-            builder.Property(x => x.IsRepeated).IsRequired();
-            builder.Property(x => x.TotalDays).IsRequired(false);
-            builder.Property(x => x.TotalHours).IsRequired(false);
+
+            builder.Property(x => x.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            builder.Property(x => x.DurationType)
+                .IsRequired();
+
+            builder.Property(x => x.StartTime)
+                .IsRequired(false);
+
+            builder.Property(x => x.EndTime)
+                .IsRequired(false);
+
+            builder.Property(x => x.Salary)
+                .IsRequired()
+                .HasColumnType("decimal(18,2)");
+
+            builder.Property(x => x.IsRepeated)
+                .IsRequired();
+
+            builder.Property(x => x.TotalDays)
+                .IsRequired(false);
+
+            builder.Property(x => x.TotalHours)
+                .IsRequired(false);
+
+            builder.Property(x => x.IsEnterPriceSchema)
+                .IsRequired()
+                .HasDefaultValue(false);
+
+            builder.HasIndex(x => x.IsEnterPriceSchema);
+            builder.HasIndex(x => x.IsRepeated);
         }
     }
 }

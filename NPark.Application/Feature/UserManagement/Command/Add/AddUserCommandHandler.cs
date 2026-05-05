@@ -27,13 +27,15 @@ namespace NPark.Application.Feature.UserManagement.Command.Add
         {
             var passwordHash = _passwordService.Hash(request.Password);
             var user = User.Create(
-               name: request.Name,
-               email: request.Email,
-               username: request.UserName,
-               passwordHash: passwordHash,
-               phoneNumber: request.PhoneNumber,
-               nationalId: request.NationalId
-           );
+     name: request.Name,
+     email: request.Email,
+     username: request.UserName,
+     passwordHash: passwordHash,
+     phoneNumber: request.PhoneNumber,
+     nationalId: request.NationalId,
+     shiftStartTime: request.ShiftStartTime,
+     shiftEndTime: request.ShiftEndTime
+ );
             user.SetRole(request.RoleId);
             await _userRepository.AddAsync(user, cancellationToken);
             await _userRepository.SaveChangesAsync(cancellationToken);

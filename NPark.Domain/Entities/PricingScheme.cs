@@ -5,7 +5,7 @@ namespace NPark.Domain.Entities
 {
     public class PricingScheme : Entity<Guid>
     {
-        private List<ParkingMemberships> _parkingMemberships = new();
+        private readonly List<ParkingMemberships> _parkingMemberships = new();
 
         public string Name { get; private set; } = string.Empty;
         public DurationType DurationType { get; private set; }
@@ -15,27 +15,68 @@ namespace NPark.Domain.Entities
         public decimal Salary { get; private set; }
         public int? TotalDays { get; private set; }
         public int? TotalHours { get; private set; }
+
+        public bool IsEnterPriceSchema { get; private set; }
+
         public IReadOnlyCollection<ParkingMemberships> ParkingMemberships => _parkingMemberships;
 
         private PricingScheme()
-        { }
-
-        public static PricingScheme Create(string name, DurationType durationType, TimeSpan? startTime, TimeSpan? endTime, bool isRepeated, decimal salary, int? totalDays, int? totalHours) => new PricingScheme()
         {
-            Name = name,
-            DurationType = durationType,
-            StartTime = startTime,
-            EndTime = endTime,
-            IsRepeated = isRepeated,
-            Salary = salary,
-            TotalDays = totalDays,
-            TotalHours = totalHours
-        };
+        }
 
-        public void Update(string name, DurationType durationType, TimeSpan? startTime, TimeSpan? endTime, bool isRepeated, decimal salary, int? totalDays, int? totalHours
-            )
+        public static PricingScheme Create(
+            string name,
+            DurationType durationType,
+            TimeSpan? startTime,
+            TimeSpan? endTime,
+            bool isRepeated,
+            decimal salary,
+            int? totalDays,
+            int? totalHours)
         {
-            Name = name;
+            return new PricingScheme
+            {
+                Name = name.Trim(),
+                DurationType = durationType,
+                StartTime = startTime,
+                EndTime = endTime,
+                IsRepeated = isRepeated,
+                Salary = salary,
+                TotalDays = totalDays,
+                TotalHours = totalHours,
+                IsEnterPriceSchema = false
+            };
+        }
+
+        public static PricingScheme CreateEnterPriceSchema(
+            string name,
+            decimal salary)
+        {
+            return new PricingScheme
+            {
+                Name = name.Trim(),
+                DurationType = DurationType.Days,
+                StartTime = null,
+                EndTime = null,
+                IsRepeated = false,
+                Salary = salary,
+                TotalDays = 1,
+                TotalHours = null,
+                IsEnterPriceSchema = true
+            };
+        }
+
+        public void Update(
+            string name,
+            DurationType durationType,
+            TimeSpan? startTime,
+            TimeSpan? endTime,
+            bool isRepeated,
+            decimal salary,
+            int? totalDays,
+            int? totalHours)
+        {
+            Name = name.Trim();
             DurationType = durationType;
             StartTime = startTime;
             EndTime = endTime;
@@ -45,7 +86,22 @@ namespace NPark.Domain.Entities
             TotalHours = totalHours;
         }
 
-        public void UpdateName(string name) => Name = name;
+        public void UpdateEnterPriceSchema(
+            string name,
+            decimal salary)
+        {
+            Name = name.Trim();
+            DurationType = DurationType.Days;
+            StartTime = null;
+            EndTime = null;
+            IsRepeated = false;
+            Salary = salary;
+            TotalDays = 1;
+            TotalHours = null;
+            IsEnterPriceSchema = true;
+        }
+
+        public void UpdateName(string name) => Name = name.Trim();
 
         public void UpdateDurationType(DurationType durationType) => DurationType = durationType;
 

@@ -311,7 +311,18 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                             Message: ErrorMessage.PricingSchema_NotFound,
                             Type: ErrorType.NotFound));
                 }
+                if (!pricingScheme.IsEnterPriceSchema)
+                {
+                    _logger.LogWarning(
+                        "Invalid pricing scheme for enter ticket. PricingSchemaId={PricingSchemaId}",
+                        request.PricingSchemaId.Value);
 
+                    return Result<AddTicketCommandResponse>.Fail(
+                        new Error(
+                            Code: "EnterPriceSchema.InvalidForEnterTicket",
+                            Message: ErrorMessage.EnterPriceSchema_InvalidForEnterTicket,
+                            Type: ErrorType.Validation));
+                }
                 ticketEntity = Ticket.Create(
                     startDate: now,
                     price: pricingScheme.Salary,

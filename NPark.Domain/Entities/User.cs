@@ -14,11 +14,36 @@ namespace NPark.Domain.Entities
         public string PhoneNumber { get; private set; } = string.Empty!;
 
         public string NationalId { get; private set; } = string.Empty!;
-        public Guid? RoleId { get; private set; }
+        public Guid RoleId { get; private set; }
         public Role Role { get; private set; } = null!;
 
-        public static User Create(string name, string email, string username, string passwordHash, string phoneNumber, string nationalId) => new User()
-        { Name = name, Email = email, PasswordHash = passwordHash, Username = username, PhoneNumber = phoneNumber, NationalId = nationalId };
+        public TimeSpan? ShiftStartTime { get; private set; }
+        public TimeSpan? ShiftEndTime { get; private set; }
+
+        public static User Create(
+            string name,
+            string email,
+            string username,
+            string passwordHash,
+            string phoneNumber,
+            string nationalId,
+            TimeSpan? shiftStartTime = null,
+            TimeSpan? shiftEndTime = null)
+        {
+            var user = new User
+            {
+                Name = name,
+                Email = email,
+                PasswordHash = passwordHash,
+                Username = username,
+                PhoneNumber = phoneNumber,
+                NationalId = nationalId
+            };
+
+            user.SetShift(shiftStartTime, shiftEndTime);
+
+            return user;
+        }
 
         public void UpdateName(string name) => Name = name;
 
@@ -35,5 +60,17 @@ namespace NPark.Domain.Entities
         public void SetRole(Guid roleId) => RoleId = roleId;
 
         public void UpdatePassword(string passwordHash) => PasswordHash = passwordHash;
+
+        public void SetShift(TimeSpan? shiftStartTime, TimeSpan? shiftEndTime)
+        {
+            ShiftStartTime = shiftStartTime;
+            ShiftEndTime = shiftEndTime;
+        }
+
+        public void ClearShift()
+        {
+            ShiftStartTime = null;
+            ShiftEndTime = null;
+        }
     }
 }

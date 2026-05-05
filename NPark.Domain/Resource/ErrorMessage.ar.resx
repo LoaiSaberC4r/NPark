@@ -596,4 +596,46 @@
   <data name="Gate_HasScanner_Required" xml:space="preserve">
     <value>يجب تحديد هل البوابة تحتوي على Scanner أم لا.</value>
   </data>
+  <data name="EnterPriceSchema_Name_Required" xml:space="preserve">
+    <value>اسم سعر الدخول مطلوب.</value>
+  </data>
+  <data name="EnterPriceSchema_Name_MaxLength" xml:space="preserve">
+    <value>اسم سعر الدخول يجب ألا يتجاوز 100 حرف.</value>
+  </data>
+  <data name="EnterPriceSchema_Salary_GreaterThanZero" xml:space="preserve">
+    <value>سعر الدخول يجب أن يكون أكبر من صفر.</value>
+  </data>
+  <data name="EnterPriceSchema_Name_AlreadyExists" xml:space="preserve">
+    <value>يوجد سعر دخول بنفس الاسم بالفعل.</value>
+  </data>
+  <data name="EnterPriceSchema_Create_Unexpected" xml:space="preserve">
+    <value>حدث خطأ غير متوقع أثناء إنشاء سعر الدخول.</value>
+  </data>
+  <data name="EnterPriceSchema_Selection_Unexpected" xml:space="preserve">
+    <value>حدث خطأ غير متوقع أثناء تحميل أسعار الدخول.</value>
+  </data>
+  <data name="EnterPriceSchema_InvalidForEnterTicket" xml:space="preserve">
+    <value>يجب اختيار سعر دخول صالح للتذكرة.</value>
+  </data>
+  <data name="RoleId_Required" xml:space="preserve">
+    <value>يجب اختيار الدور.</value>
+  </data>
+  <data name="Role_NotFound" xml:space="preserve">
+    <value>الدور غير موجود.</value>
+  </data>
+  <data name="UserId_Required" xml:space="preserve">
+    <value>يجب اختيار المستخدم.</value>
+  </data>
+  <data name="FromDate_Required" xml:space="preserve">
+    <value>تاريخ النهاية مطلوب.</value>
+  </data>
+  <data name="ToDate_MustBeGreaterThanOrEqualFromDate" xml:space="preserve">
+    <value>تاريخ النهاية يجب أن يكون أكبر من أو يساوي تاريخ البداية.</value>
+  </data>
+  <data name="User_MustBeEntranceCashier" xml:space="preserve">
+    <value>المستخدم يجب أن يكون كاشير دخول.</value>
+  </data>
+  <data name="ToDate_Required" xml:space="preserve">
+    <value>تاريخ النهاية مطلوب.</value>
+  </data>
 </root>

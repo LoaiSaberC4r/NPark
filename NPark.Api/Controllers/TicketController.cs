@@ -15,6 +15,7 @@ using NPark.Application.Feature.TicketsManagement.Command.SearchTicket;
 using NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText;
 using NPark.Application.Feature.TicketsManagement.Query.GetEntryTicketForAdmin;
 using NPark.Application.Feature.TicketsManagement.Query.GetExitTicketForAdmin;
+using NPark.Application.Feature.TicketsManagement.Query.GetTicketDetails;
 using NPark.Application.Feature.TicketsManagement.Query.GetTicketForEntryGate;
 using NPark.Application.Feature.TicketsManagement.Query.GetTicketForExitGate;
 using NPark.Application.Feature.TicketsManagement.Query.GetTicketInsidePark;
@@ -184,6 +185,15 @@ namespace NPark.Api.Controllers
                 new CollectEnterTicketsCommand(),
                 cancellationToken);
 
+            return result.ToIActionResult(cancellationToken);
+        }
+
+        [HttpGet("GetDetails")]
+        public async Task<IActionResult> GetDetails(
+            [FromQuery] GetTicketDetailsQuery query,
+            CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(query, cancellationToken);
             return result.ToIActionResult(cancellationToken);
         }
     }

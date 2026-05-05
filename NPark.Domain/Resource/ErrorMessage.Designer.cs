@@ -19,7 +19,7 @@ namespace NPark.Domain.Resource {
     // class via a tool like ResGen or Visual Studio.
     // To add or remove a member, edit your .ResX file then rerun ResGen
     // with the /str option, or rebuild your VS project.
-    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder", "17.0.0.0")]
+    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder", "18.0.0.0")]
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
     public class ErrorMessage {
@@ -223,6 +223,69 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to An unexpected error occurred while creating the enter price schema..
+        /// </summary>
+        public static string EnterPriceSchema_Create_Unexpected {
+            get {
+                return ResourceManager.GetString("EnterPriceSchema_Create_Unexpected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to A valid enter price schema must be selected for the ticket..
+        /// </summary>
+        public static string EnterPriceSchema_InvalidForEnterTicket {
+            get {
+                return ResourceManager.GetString("EnterPriceSchema_InvalidForEnterTicket", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to An enter price schema with the same name already exists..
+        /// </summary>
+        public static string EnterPriceSchema_Name_AlreadyExists {
+            get {
+                return ResourceManager.GetString("EnterPriceSchema_Name_AlreadyExists", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Enter price schema name must not exceed 100 characters..
+        /// </summary>
+        public static string EnterPriceSchema_Name_MaxLength {
+            get {
+                return ResourceManager.GetString("EnterPriceSchema_Name_MaxLength", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Enter price schema name is required..
+        /// </summary>
+        public static string EnterPriceSchema_Name_Required {
+            get {
+                return ResourceManager.GetString("EnterPriceSchema_Name_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Enter price must be greater than zero..
+        /// </summary>
+        public static string EnterPriceSchema_Salary_GreaterThanZero {
+            get {
+                return ResourceManager.GetString("EnterPriceSchema_Salary_GreaterThanZero", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to An unexpected error occurred while loading enter price schemas..
+        /// </summary>
+        public static string EnterPriceSchema_Selection_Unexpected {
+            get {
+                return ResourceManager.GetString("EnterPriceSchema_Selection_Unexpected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Entrance Gate.
         /// </summary>
         public static string EntranceGate {
@@ -237,6 +300,15 @@ namespace NPark.Domain.Resource {
         public static string ExitGate {
             get {
                 return ResourceManager.GetString("ExitGate", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to To date is required..
+        /// </summary>
+        public static string FromDate_Required {
+            get {
+                return ResourceManager.GetString("FromDate_Required", resourceCulture);
             }
         }
         
@@ -1024,11 +1096,29 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Role was not found..
+        /// </summary>
+        public static string Role_NotFound {
+            get {
+                return ResourceManager.GetString("Role_NotFound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Role is required..
         /// </summary>
         public static string Role_Requred {
             get {
                 return ResourceManager.GetString("Role_Requred", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Role is required..
+        /// </summary>
+        public static string RoleId_Required {
+            get {
+                return ResourceManager.GetString("RoleId_Required", resourceCulture);
             }
         }
         
@@ -1339,6 +1429,24 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to To date must be greater than or equal to from date..
+        /// </summary>
+        public static string ToDate_MustBeGreaterThanOrEqualFromDate {
+            get {
+                return ResourceManager.GetString("ToDate_MustBeGreaterThanOrEqualFromDate", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to To date is required..
+        /// </summary>
+        public static string ToDate_Required {
+            get {
+                return ResourceManager.GetString("ToDate_Required", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to GateId or UserId not found.
         /// </summary>
         public static string TokenInfo_Missing {
@@ -1384,11 +1492,29 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to User must be an entrance cashier..
+        /// </summary>
+        public static string User_MustBeEntranceCashier {
+            get {
+                return ResourceManager.GetString("User_MustBeEntranceCashier", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to User not found..
         /// </summary>
         public static string User_NotFound {
             get {
                 return ResourceManager.GetString("User_NotFound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to User is required..
+        /// </summary>
+        public static string UserId_Required {
+            get {
+                return ResourceManager.GetString("UserId_Required", resourceCulture);
             }
         }
         

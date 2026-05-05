@@ -1,4 +1,5 @@
 ﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction.QrCode;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
 using Microsoft.AspNetCore.Http;
@@ -18,6 +19,9 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
         private readonly IGenericRepository<ParkingGate> _parkingGateRepository;
         private readonly IGenericRepository<User> _userRepository;
 
+        private readonly IQRCodeService _qrCodeService;
+        private readonly IByteVerificationService _byteVerificationService;
+
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly ITokenReader _tokenReader;
         private readonly ILogger<CreateTicketExceedTransactionCommandHandler> _logger;
@@ -28,6 +32,8 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
             IGenericRepository<Sanction> sanctionRepository,
             IGenericRepository<ParkingGate> parkingGateRepository,
             IGenericRepository<User> userRepository,
+            IQRCodeService qrCodeService,
+            IByteVerificationService byteVerificationService,
             IHttpContextAccessor httpContextAccessor,
             ITokenReader tokenReader,
             ILogger<CreateTicketExceedTransactionCommandHandler> logger)
@@ -37,6 +43,10 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
             _sanctionRepository = sanctionRepository ?? throw new ArgumentNullException(nameof(sanctionRepository));
             _parkingGateRepository = parkingGateRepository ?? throw new ArgumentNullException(nameof(parkingGateRepository));
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
+
+            _qrCodeService = qrCodeService ?? throw new ArgumentNullException(nameof(qrCodeService));
+            _byteVerificationService = byteVerificationService ?? throw new ArgumentNullException(nameof(byteVerificationService));
+
             _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
             _tokenReader = tokenReader ?? throw new ArgumentNullException(nameof(tokenReader));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -76,7 +86,9 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
 
                 if (gate is null)
                 {
-                    _logger.LogWarning("Gate not found while creating ticket exceed transaction. GateId: {GateId}", gateId);
+                    _logger.LogWarning(
+                        "Gate not found while creating ticket exceed transaction. GateId: {GateId}",
+                        gateId);
 
                     return Result<CreateTicketExceedTransactionCommandResponse>.Fail(
                         new Error(
@@ -142,7 +154,12 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
                 }
 
                 // ---------------------------------------------------------------
-                // 6) Get Sanctions + calculate total exceed amount
+                // 6) Generate SAME ticket QR as AddTicket
+                // ---------------------------------------------------------------
+                var generatedQr = GenerateTicketQrCode(ticketEntity);
+
+                // ---------------------------------------------------------------
+                // 7) Get Sanctions + calculate total exceed amount
                 // ---------------------------------------------------------------
                 var distinctSanctionIds = request.SanctionIds
                     .Distinct()
@@ -174,13 +191,12 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
                 var oldExceedPrice = ticketEntity.ExceedPrice;
 
                 // ---------------------------------------------------------------
-                // 7) Update ticket exceed price
+                // 8) Update ticket exceed price
                 // ---------------------------------------------------------------
                 ticketEntity.SetExceedPrice(totalExceedAmount);
 
-
                 // ---------------------------------------------------------------
-                // 8) Create transaction snapshot
+                // 9) Create transaction snapshot
                 // SuperVisorCollectorId = null initially
                 // ---------------------------------------------------------------
                 var transaction = TicketExceedTransaction.Create(
@@ -201,7 +217,7 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
                 await _ticketRepository.SaveChangesAsync(cancellationToken);
 
                 // ---------------------------------------------------------------
-                // 9) Build response
+                // 10) Build response
                 // ---------------------------------------------------------------
                 var response = new CreateTicketExceedTransactionCommandResponse
                 {
@@ -217,7 +233,10 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
                     SuperVisorCollectorId = transaction.SuperVisorCollectorId,
 
                     SanctionIds = distinctSanctionIds,
-                    CreatedAt = transaction.CreatedAt
+                    CreatedAt = transaction.CreatedAt,
+
+                    QrCode = generatedQr.QrCode,
+                    TicketInfo = generatedQr.QrText
                 };
 
                 return Result<CreateTicketExceedTransactionCommandResponse>.Ok(response);
@@ -237,6 +256,40 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
                         Message: ErrorMessage.TicketExceedTransaction_Create_Unexpected,
                         Type: ErrorType.Infrastructure));
             }
+        }
+
+        private (byte[] QrCode, string QrText) GenerateTicketQrCode(Ticket ticketEntity)
+        {
+            if (ticketEntity.UniqueGuidPart is null || ticketEntity.UniqueGuidPart.Length != 4)
+            {
+                throw new InvalidOperationException(
+                    $"Ticket UniqueGuidPart must be exactly 4 bytes. TicketId={ticketEntity.Id}");
+            }
+
+            var byte5 = _byteVerificationService
+                .GenerateComplexByte5FromGuid(ticketEntity.UniqueGuidPart);
+
+            var combinedBytes = ticketEntity.UniqueGuidPart
+                .Concat(new[] { byte5 })
+                .ToArray();
+
+            if (combinedBytes.Length != 5)
+            {
+                throw new InvalidOperationException(
+                    $"Generated QR bytes must be exactly 5 bytes, but got {combinedBytes.Length} bytes. TicketId={ticketEntity.Id}");
+            }
+
+            var qrText = Convert.ToHexString(combinedBytes);
+
+            _logger.LogInformation(
+                "Ticket QR generated for exceed transaction. TicketId={TicketId}, UniqueCode={UniqueCode}, QrText={QrText}",
+                ticketEntity.Id,
+                ticketEntity.UniqueCode,
+                qrText);
+
+            var qrCode = _qrCodeService.GenerateQRCodeFromText(qrText);
+
+            return (qrCode, qrText);
         }
     }
 }

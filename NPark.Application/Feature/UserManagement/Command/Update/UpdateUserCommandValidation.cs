@@ -1,6 +1,7 @@
 ﻿using BuildingBlock.Application.Repositories;
 using FluentValidation;
 using NPark.Domain.Entities;
+using NPark.Domain.FileNames;
 using NPark.Domain.Resource;
 
 namespace NPark.Application.Feature.UserManagement.Command.Update
@@ -10,17 +11,14 @@ namespace NPark.Application.Feature.UserManagement.Command.Update
         private readonly IGenericRepository<Role> _roleRepository;
 
         private const string PasswordRegex =
-    @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,128}$";
+            @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,128}$";
 
-        public UpdateUserCommandValidation(IGenericRepository<User> userRepository, IGenericRepository<Role> roleRepository)
+        public UpdateUserCommandValidation(
+            IGenericRepository<User> userRepository,
+            IGenericRepository<Role> roleRepository)
         {
-            RuleFor(x => x.Password)
-                .Matches(PasswordRegex)
-                .WithMessage(ErrorMessage.UserManagement_Password_Invalid)
-                .When(x => !string.IsNullOrWhiteSpace(x.Password));
-
             _roleRepository = roleRepository ?? throw new ArgumentNullException(nameof(roleRepository));
-            // 🔹 التحقق من Id (لازم يكون موجود)
+
             RuleFor(x => x.Id)
                 .NotEmpty()
                 .WithMessage(ErrorMessage.IsRequired)
@@ -28,7 +26,6 @@ namespace NPark.Application.Feature.UserManagement.Command.Update
                     await userRepository.IsExistAsync(u => u.Id == id, ct))
                 .WithMessage(ErrorMessage.NotFound);
 
-            // 🔹 Email
             RuleFor(x => x.Email)
                 .NotEmpty()
                 .WithMessage(ErrorMessage.Email_Required)
@@ -40,7 +37,6 @@ namespace NPark.Application.Feature.UserManagement.Command.Update
                         ct))
                 .WithMessage(ErrorMessage.Email_Exist);
 
-            // 🔹 UserName (Required + MaxLength + Unique مع استثناء نفس الـ Id)
             RuleFor(x => x.UserName)
                 .NotEmpty()
                 .WithMessage(ErrorMessage.UserName_Required)
@@ -52,7 +48,6 @@ namespace NPark.Application.Feature.UserManagement.Command.Update
                         ct))
                 .WithMessage(ErrorMessage.UserName_Exist);
 
-            // 🔹 RoleId (مش فاضى ومش Guid.Empty)
             RuleFor(x => x.RoleId)
                 .NotEmpty()
                 .WithMessage(ErrorMessage.Role_Requred)
@@ -60,7 +55,39 @@ namespace NPark.Application.Feature.UserManagement.Command.Update
                 .WithMessage(ErrorMessage.Role_Requred)
                 .MustAsync(async (roleId, ct) =>
                     await _roleRepository.IsExistAsync(r => r.Id == roleId, ct))
-                .WithMessage(ErrorMessage.Role_Exist); ;
+                .WithMessage(ErrorMessage.Role_Exist);
+
+            RuleFor(x => x.Password)
+                .Matches(PasswordRegex)
+                .WithMessage(ErrorMessage.UserManagement_Password_Invalid)
+                .When(x => !string.IsNullOrWhiteSpace(x.Password));
+
+            RuleFor(x => x)
+                .Must(x => x.ShiftStartTime.HasValue == x.ShiftEndTime.HasValue)
+                .WithMessage("Shift start time and shift end time must be provided together. / يجب إدخال وقت بداية ونهاية الشيفت معًا.");
+
+            RuleFor(x => x.ShiftStartTime)
+                .NotNull()
+                .WithMessage("Shift start time is required for cashier users. / وقت بداية الشيفت مطلوب للكاشير.")
+                .When(x => AppRoleIds.IsCashier(x.RoleId));
+
+            RuleFor(x => x.ShiftEndTime)
+                .NotNull()
+                .WithMessage("Shift end time is required for cashier users. / وقت نهاية الشيفت مطلوب للكاشير.")
+                .When(x => AppRoleIds.IsCashier(x.RoleId));
+
+            RuleFor(x => x)
+                .Must(command =>
+                {
+                    if (AppRoleIds.IsCashier(command.RoleId))
+                    {
+                        return true;
+                    }
+
+                    return command.ShiftStartTime is null &&
+                           command.ShiftEndTime is null;
+                })
+                .WithMessage("Shift time is allowed only for EntranceCashier and ExitCashier roles. / الشيفت مسموح فقط لكاشير الدخول وكاشير الخروج.");
         }
     }
 }

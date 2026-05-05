@@ -45,6 +45,11 @@ namespace NPark.Infrastructure.Configuration
                 .HasForeignKey(x => x.CollectedBy)
                 .OnDelete(DeleteBehavior.Restrict)
                 .IsRequired(false);
+
+            builder.HasOne(x => x.ExitParkingGate)
+              .WithMany()
+              .HasForeignKey(x => x.ExitGateId)
+              .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }
