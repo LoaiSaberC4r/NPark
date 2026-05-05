@@ -3,11 +3,13 @@ using BuildingBlock.Api.ControllerTemplate;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using NPark.Api.Attribute;
+using NPark.Application.Abstraction;
 using NPark.Application.Feature.UserManagement.Command.Add;
 using NPark.Application.Feature.UserManagement.Command.Delete;
 using NPark.Application.Feature.UserManagement.Command.Update;
 using NPark.Application.Feature.UserManagement.Query.GetCashier;
 using NPark.Application.Feature.UserManagement.Query.GetUsers;
+using NPark.Application.Feature.UserManagement.Query.GetUsersByRoleId;
 
 namespace NPark.Api.Controllers
 {
@@ -55,6 +57,22 @@ namespace NPark.Api.Controllers
         {
             var result = await sender.Send(query, cancellationToken);
             return result.ToIActionResult();
+        }
+
+        [HttpGet("by-role/{roleId:guid}")]
+        public async Task<IActionResult> GetByRoleId(
+            [FromRoute] Guid roleId,
+            [FromQuery] GetUsersByRoleIdQuery query,
+            CancellationToken cancellationToken)
+        {
+            query ??= new GetUsersByRoleIdQuery();
+
+            query.RoleId = roleId;
+            query.SearchText ??= string.Empty;
+
+            var result = await sender.Send(query, cancellationToken);
+
+            return result.ToIActionResult(cancellationToken);
         }
     }
 }

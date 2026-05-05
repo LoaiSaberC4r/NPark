@@ -1,6 +1,7 @@
 ﻿using BuildingBlock.Api;
 using BuildingBlock.Api.ControllerTemplate;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NPark.Application.Feature.Auth.Command.Login;
 using NPark.Application.Feature.Auth.Command.LoginFirstTime;
@@ -31,6 +32,7 @@ namespace NPark.Api.Controllers
             return result.ToIActionResult();
         }
 
+        [Authorize]
         [HttpPost(nameof(Logout))]
         public async Task<IActionResult> Logout([FromBody] LogoutCommand command, CancellationToken cancellationToken)
         {

@@ -27,12 +27,24 @@ namespace NPark.Application.Feature.Auth.Command.LogOut
         public async Task<Result> Handle(LogoutCommand request, CancellationToken cancellationToken)
         {
             var dto = _httpContextAccessor.HttpContext?.ReadToken(_tokenReader);
-            if (dto == null || !dto.GateId.HasValue)
+            if (dto == null)
             {
                 return Result.Fail(new Error("Token not found", "Token not found", ErrorType.NotFound));
             }
+            if (dto.UserId.HasValue == false)
+            {
+                return Result.Fail(new Error("UserId not found", "UserId not found", ErrorType.NotFound));
+            }
+            if (dto.Role == "Admin")
+            {
+                return Result.Ok();
+            }
+            if (dto.GateId.HasValue == false)
+            {
+                return Result.Fail(new Error("GateId not found", "GateId not found", ErrorType.NotFound));
+            }
 
-            var gate = await _gateRepository.GetByIdAsync((Guid)dto.GateId, cancellationToken);
+            var gate = await _gateRepository.GetByIdAsync((Guid)dto.GateId.Value, cancellationToken);
 
             if (gate is null)
                 return Result.Fail(new Error("Gate not found", "Gate not found", ErrorType.NotFound));

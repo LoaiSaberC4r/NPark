@@ -13,5 +13,6 @@ namespace NPark.Application.Feature.PricingSchemaManagement.Query.GetAll
         public bool IsRepeated { get; set; }
         public int? TotalDays { get; set; }
         public int? TotalHours { get; set; }
+        public bool IsEnterPriceSchema { get; set; }
     }
 }

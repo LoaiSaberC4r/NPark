@@ -15,7 +15,9 @@
 
         public string RawFrameHex { get; init; } = string.Empty;
 
-        public int ControllerId { get; init; }
+        public bool HasControllerId { get; init; }
+
+        public int? ControllerId { get; init; }
 
         public string ControllerIdHex { get; init; } = string.Empty;
 

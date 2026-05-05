@@ -10,15 +10,27 @@ namespace BuildingBlock.Infrastracture.Service
         {
             var jsonData = JsonSerializer.Serialize(data);
 
-            var qrGenerator = new QRCodeGenerator();
-            var qrCodeData = qrGenerator.CreateQrCode(jsonData, QRCodeGenerator.ECCLevel.Q);
-            var qrCode = new QRCode(qrCodeData);
+            return GenerateQrPng(jsonData);
+        }
 
-            using (var ms = new MemoryStream())
-            {
-                qrCode.GetGraphic(20).Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-                return ms.ToArray();
-            }
+        public byte[] GenerateQRCodeFromText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                throw new ArgumentException("QR text must not be empty.", nameof(text));
+
+            return GenerateQrPng(text.Trim());
+        }
+
+        private static byte[] GenerateQrPng(string payload)
+        {
+            using var qrGenerator = new QRCodeGenerator();
+            using var qrCodeData = qrGenerator.CreateQrCode(payload, QRCodeGenerator.ECCLevel.Q);
+            using var qrCode = new QRCode(qrCodeData);
+            using var ms = new MemoryStream();
+
+            qrCode.GetGraphic(20).Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+
+            return ms.ToArray();
         }
     }
 }

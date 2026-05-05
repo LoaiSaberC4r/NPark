@@ -47,6 +47,7 @@ namespace NPark.Application.Specifications.ParkingSystemConfigurationSpec
                         HasQrPrinterName = g.HasQrPrinterName,
                         LprIp = g.LprIp,
                         PcIp = g.PcIp,
+                        HasScanner = g.HasScanner,
                         ControlIp = g.ControlIp ?? string.Empty,
 
                         IsAssigned = g.IsAssigned,
@@ -74,6 +75,7 @@ namespace NPark.Application.Specifications.ParkingSystemConfigurationSpec
                         GateNumber = g.GateNumber,
 
                         LprIp = g.LprIp,
+                        HasScanner = g.HasScanner,
                         PcIp = g.PcIp,
                         HasReceiptPrinterName = g.HasReceiptPrinterName,
                         HasQrPrinterName = g.HasQrPrinterName,

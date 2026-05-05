@@ -16,11 +16,20 @@ namespace NPark.Infrastructure.Configuration
             builder.Property(x => x.PasswordHash).IsRequired().HasMaxLength(500);
             builder.Property(x => x.PhoneNumber).IsRequired(false).HasMaxLength(20);
             builder.Property(x => x.NationalId).IsRequired().HasMaxLength(50);
-            builder.HasOne(x => x.Role).WithMany().HasForeignKey(x => x.RoleId).OnDelete(DeleteBehavior.Restrict);
+            builder.HasOne(x => x.Role).WithMany().HasForeignKey(x => x.RoleId)
+                .IsRequired().OnDelete(DeleteBehavior.Restrict);
 
             builder.HasIndex(x => x.Username).IsUnique();
             builder.HasIndex(x => x.Email).IsUnique();
             builder.HasIndex(x => x.NationalId).IsUnique();
+
+            builder.Property(x => x.ShiftStartTime)
+                .IsRequired(false)
+                .HasColumnType("time");
+
+            builder.Property(x => x.ShiftEndTime)
+                .IsRequired(false)
+                .HasColumnType("time");
         }
     }
 }

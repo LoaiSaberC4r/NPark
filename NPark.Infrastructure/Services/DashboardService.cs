@@ -6,7 +6,8 @@ namespace NPark.Infrastructure.Services
     public interface IDashboardService
     {
         Task<DashboardDto> GetDashboardAsync(
-            DateTime? date = null,
+            DateOnly? from = null,
+            DateOnly? to = null,
             CancellationToken cancellationToken = default);
     }
 
@@ -20,15 +21,22 @@ namespace NPark.Infrastructure.Services
         }
 
         public async Task<DashboardDto> GetDashboardAsync(
-            DateTime? date = null,
+            DateOnly? from = null,
+            DateOnly? to = null,
             CancellationToken cancellationToken = default)
         {
-            var targetDate = date.HasValue
-                ? DateOnly.FromDateTime(date.Value)
-                : DateOnly.FromDateTime(DateTime.Now);
+            var today = DateOnly.FromDateTime(DateTime.Now);
 
-            var start = targetDate.ToDateTime(TimeOnly.MinValue);
-            var end = start.AddDays(1);
+            var fromDate = from ?? today;
+            var toDate = to ?? fromDate;
+
+            if (toDate < fromDate)
+            {
+                throw new ArgumentException("To date must be greater than or equal to From date.");
+            }
+
+            var start = fromDate.ToDateTime(TimeOnly.MinValue);
+            var end = toDate.ToDateTime(TimeOnly.MinValue).AddDays(1);
 
             // =========================================================
             // 1) BASE QUERIES
@@ -37,36 +45,36 @@ namespace NPark.Infrastructure.Services
             var archivedTicketsQuery = _context.Set<TicketArchive>().AsNoTracking();
             var ticketExceedTransactionsQuery = _context.Set<TicketExceedTransaction>().AsNoTracking();
 
-            var liveEnteredTodayQuery = liveTicketsQuery
+            var liveEnteredInPeriodQuery = liveTicketsQuery
                 .Where(t => t.StartDate >= start && t.StartDate < end);
 
-            var archivedEnteredTodayQuery = archivedTicketsQuery
+            var archivedEnteredInPeriodQuery = archivedTicketsQuery
                 .Where(t => t.StartDate >= start && t.StartDate < end);
 
-            var archivedExitedTodayQuery = archivedTicketsQuery
+            var archivedExitedInPeriodQuery = archivedTicketsQuery
                 .Where(t => t.EndDate >= start && t.EndDate < end);
 
-            var ticketEnterNotTodayButNotExitYetQuery = liveTicketsQuery
+            var ticketsEnteredBeforePeriodAndStillInsideQuery = liveTicketsQuery
                 .Where(t => t.StartDate < start);
 
-            var exceedTransactionsTodayQuery = ticketExceedTransactionsQuery
+            var exceedTransactionsInPeriodQuery = ticketExceedTransactionsQuery
                 .Where(t => t.CreatedAt >= start && t.CreatedAt < end);
 
             // =========================================================
             // 2) TICKETS COUNTS
             // =========================================================
-            var liveEnteredTodayCount = await liveEnteredTodayQuery
+            var liveEnteredInPeriodCount = await liveEnteredInPeriodQuery
                 .CountAsync(cancellationToken);
 
-            var archivedEnteredTodayCount = await archivedEnteredTodayQuery
+            var archivedEnteredInPeriodCount = await archivedEnteredInPeriodQuery
                 .CountAsync(cancellationToken);
 
-            var ticketEnterToday = liveEnteredTodayCount + archivedEnteredTodayCount;
+            var ticketEnterInPeriod = liveEnteredInPeriodCount + archivedEnteredInPeriodCount;
 
-            var ticketEnterNotTodayButNotExitYet = await ticketEnterNotTodayButNotExitYetQuery
+            var ticketEnterBeforePeriodButNotExitYet = await ticketsEnteredBeforePeriodAndStillInsideQuery
                 .CountAsync(cancellationToken);
 
-            var exitTicketsCount = await archivedExitedTodayQuery
+            var exitTicketsCount = await archivedExitedInPeriodQuery
                 .CountAsync(cancellationToken);
 
             // =========================================================
@@ -96,7 +104,7 @@ namespace NPark.Infrastructure.Services
             // =========================================================
             // 4) TICKET BASE REVENUE DATASET
             // =========================================================
-            var revenueLiveRows = await liveEnteredTodayQuery
+            var revenueLiveRows = await liveEnteredInPeriodQuery
                 .Select(t => new RevenueRow
                 {
                     IsCollected = t.IsCollected,
@@ -108,7 +116,7 @@ namespace NPark.Infrastructure.Services
                 })
                 .ToListAsync(cancellationToken);
 
-            var revenueArchiveRows = await archivedEnteredTodayQuery
+            var revenueArchiveRows = await archivedEnteredInPeriodQuery
                 .Select(t => new RevenueRow
                 {
                     IsCollected = t.IsCollected,
@@ -127,7 +135,7 @@ namespace NPark.Infrastructure.Services
             // =========================================================
             // 5) EXCEED TRANSACTIONS DATASET
             // =========================================================
-            var exceedRows = await exceedTransactionsTodayQuery
+            var exceedRows = await exceedTransactionsInPeriodQuery
                 .Select(t => new ExceedTransactionRow
                 {
                     Id = t.Id,
@@ -232,7 +240,7 @@ namespace NPark.Infrastructure.Services
             // =========================================================
             // 9) PARKING DURATION
             // =========================================================
-            var exitedDurations = await archivedExitedTodayQuery
+            var exitedDurations = await archivedExitedInPeriodQuery
                 .Select(t => EF.Functions.DateDiffMinute(t.StartDate, t.EndDate))
                 .ToListAsync(cancellationToken);
 
@@ -269,7 +277,7 @@ namespace NPark.Infrastructure.Services
             // =========================================================
             // 11) ENTRY GATES STATS
             // =========================================================
-            var entryGateLiveRows = await liveEnteredTodayQuery
+            var entryGateLiveRows = await liveEnteredInPeriodQuery
                 .Select(t => new EntryGateRow
                 {
                     GateId = t.GateId,
@@ -280,7 +288,7 @@ namespace NPark.Infrastructure.Services
                 })
                 .ToListAsync(cancellationToken);
 
-            var entryGateArchiveRows = await archivedEnteredTodayQuery
+            var entryGateArchiveRows = await archivedEnteredInPeriodQuery
                 .Select(t => new EntryGateRow
                 {
                     GateId = t.GateId,
@@ -353,7 +361,7 @@ namespace NPark.Infrastructure.Services
             // =========================================================
             // 12) EXIT GATES STATS
             // =========================================================
-            var exitTrafficRows = await archivedExitedTodayQuery
+            var exitTrafficRows = await archivedExitedInPeriodQuery
                 .Where(t => t.ExitGateId != Guid.Empty)
                 .Select(t => new ExitTrafficRow
                 {
@@ -514,7 +522,11 @@ namespace NPark.Infrastructure.Services
             // =========================================================
             return new DashboardDto
             {
-                Date = targetDate,
+                // Backward compatibility
+                Date = fromDate,
+
+                FromDate = fromDate,
+                ToDate = toDate,
 
                 // Subscriptions
                 SubscriptionCount = subscriptionCount,
@@ -523,8 +535,8 @@ namespace NPark.Infrastructure.Services
                 MembershipsExpiringNext7Days = membershipsExpiringNext7Days,
 
                 // Tickets
-                TicketEnterToday = ticketEnterToday,
-                TicketEnterNotTodayButNotExitYet = ticketEnterNotTodayButNotExitYet,
+                TicketEnterToday = ticketEnterInPeriod,
+                TicketEnterNotTodayButNotExitYet = ticketEnterBeforePeriodButNotExitYet,
                 ExitTicketsCount = exitTicketsCount,
 
                 CurrentVehiclesInside = currentVehiclesInside,
@@ -636,179 +648,186 @@ namespace NPark.Infrastructure.Services
             public DateTime? SupervisorCollectedAt { get; init; }
         }
     }
-}
 
-public sealed class DashboardDto
-{
-    public DateOnly Date { get; init; }
+    public sealed class DashboardDto
+    {
+        // Backward compatibility with old frontend
+        public DateOnly Date { get; init; }
 
-    // -----------------------------
-    // Subscriptions
-    // -----------------------------
-    public int SubscriptionCount { get; init; }
+        public DateOnly FromDate { get; init; }
 
-    public int ActiveSubscriptionCount { get; init; }
-    public int InactiveSubscriptionCount { get; init; }
-    public int MembershipsExpiringNext7Days { get; init; }
+        public DateOnly ToDate { get; init; }
 
-    // -----------------------------
-    // Tickets
-    // -----------------------------
-    public int TicketEnterToday { get; init; }
+        // -----------------------------
+        // Subscriptions
+        // -----------------------------
+        public int SubscriptionCount { get; init; }
 
-    public int TicketEnterNotTodayButNotExitYet { get; init; }
+        public int ActiveSubscriptionCount { get; init; }
 
-    public int ExitTicketsCount { get; init; }
+        public int InactiveSubscriptionCount { get; init; }
 
-    public int CurrentVehiclesInside { get; init; }
+        public int MembershipsExpiringNext7Days { get; init; }
 
-    public int ActiveTicketsCount { get; init; }
+        // -----------------------------
+        // Tickets
+        // -----------------------------
+        public int TicketEnterToday { get; init; }
 
-    public decimal OccupancyPercentage { get; init; }
+        public int TicketEnterNotTodayButNotExitYet { get; init; }
 
-    public int EstimatedFreeSlots { get; init; }
+        public int ExitTicketsCount { get; init; }
 
-    // -----------------------------
-    // Revenue
-    // -----------------------------
-    public decimal TotalRevenue { get; init; }
+        public int CurrentVehiclesInside { get; init; }
 
-    public decimal CollectedRevenue { get; init; }
+        public int ActiveTicketsCount { get; init; }
 
-    public decimal PendingRevenue { get; init; }
+        public decimal OccupancyPercentage { get; init; }
 
-    public decimal TicketBaseRevenue { get; init; }
+        public int EstimatedFreeSlots { get; init; }
 
-    public decimal CollectedTicketBaseRevenue { get; init; }
+        // -----------------------------
+        // Revenue
+        // -----------------------------
+        public decimal TotalRevenue { get; init; }
 
-    public decimal PendingTicketBaseRevenue { get; init; }
+        public decimal CollectedRevenue { get; init; }
 
-    // -----------------------------
-    // Membership / Walk-in
-    // -----------------------------
-    public int MembershipTicketsCount { get; init; }
+        public decimal PendingRevenue { get; init; }
 
-    public int WalkInTicketsCount { get; init; }
+        public decimal TicketBaseRevenue { get; init; }
 
-    public decimal MembershipRelatedRevenue { get; init; }
+        public decimal CollectedTicketBaseRevenue { get; init; }
 
-    public decimal WalkInRevenue { get; init; }
+        public decimal PendingTicketBaseRevenue { get; init; }
 
-    // -----------------------------
-    // Duration
-    // -----------------------------
-    public int AverageDurationMinutes { get; init; }
+        // -----------------------------
+        // Membership / Walk-in
+        // -----------------------------
+        public int MembershipTicketsCount { get; init; }
 
-    public int MaxDurationMinutes { get; init; }
+        public int WalkInTicketsCount { get; init; }
 
-    // -----------------------------
-    // Exceed
-    // -----------------------------
-    public int ExceededTicketsCount { get; init; }
+        public decimal MembershipRelatedRevenue { get; init; }
 
-    public int ExceedTransactionsCount { get; init; }
+        public decimal WalkInRevenue { get; init; }
 
-    public int CollectedExceedTransactionsCount { get; init; }
+        // -----------------------------
+        // Duration
+        // -----------------------------
+        public int AverageDurationMinutes { get; init; }
 
-    public int PendingExceedTransactionsCount { get; init; }
+        public int MaxDurationMinutes { get; init; }
 
-    public decimal TotalExceedRevenue { get; init; }
+        // -----------------------------
+        // Exceed
+        // -----------------------------
+        public int ExceededTicketsCount { get; init; }
 
-    public decimal CollectedExceedRevenue { get; init; }
+        public int ExceedTransactionsCount { get; init; }
 
-    public decimal PendingExceedRevenue { get; init; }
+        public int CollectedExceedTransactionsCount { get; init; }
 
-    public decimal AverageExceedPerTicket { get; init; }
+        public int PendingExceedTransactionsCount { get; init; }
 
-    public decimal AverageExceedPerTransaction { get; init; }
+        public decimal TotalExceedRevenue { get; init; }
 
-    // -----------------------------
-    // Gates
-    // -----------------------------
-    public int BusiestGateNumber { get; init; }
+        public decimal CollectedExceedRevenue { get; init; }
 
-    public int BusiestGateTicketsCount { get; init; }
+        public decimal PendingExceedRevenue { get; init; }
 
-    public List<EntryGateSummaryDto> EntryGates { get; init; } = new();
+        public decimal AverageExceedPerTicket { get; init; }
 
-    public List<ExitGateSummaryDto> ExitGates { get; init; } = new();
+        public decimal AverageExceedPerTransaction { get; init; }
 
-    // -----------------------------
-    // Collectors
-    // -----------------------------
-    public string? TopCollectorName { get; init; }
+        // -----------------------------
+        // Gates
+        // -----------------------------
+        public int BusiestGateNumber { get; init; }
 
-    public decimal TopCollectorAmount { get; init; }
+        public int BusiestGateTicketsCount { get; init; }
 
-    public int TopCollectorTicketsCount { get; init; }
+        public List<EntryGateSummaryDto> EntryGates { get; init; } = new();
 
-    public string? TopExceedCollectorName { get; init; }
+        public List<ExitGateSummaryDto> ExitGates { get; init; } = new();
 
-    public decimal TopExceedCollectorAmount { get; init; }
+        // -----------------------------
+        // Collectors
+        // -----------------------------
+        public string? TopCollectorName { get; init; }
 
-    public int TopExceedCollectorTransactionsCount { get; init; }
-}
+        public decimal TopCollectorAmount { get; init; }
 
-public sealed class EntryGateSummaryDto
-{
-    public Guid GateId { get; init; }
+        public int TopCollectorTicketsCount { get; init; }
 
-    public int GateNumber { get; init; }
+        public string? TopExceedCollectorName { get; init; }
 
-    public int TicketsCount { get; init; }
+        public decimal TopExceedCollectorAmount { get; init; }
 
-    public decimal TotalPrice { get; init; }
+        public int TopExceedCollectorTransactionsCount { get; init; }
+    }
 
-    public decimal CollectedPrice { get; init; }
+    public sealed class EntryGateSummaryDto
+    {
+        public Guid GateId { get; init; }
 
-    public decimal PendingPrice { get; init; }
+        public int GateNumber { get; init; }
 
-    public List<GateCollectorSummaryDto> Collectors { get; init; } = new();
-}
+        public int TicketsCount { get; init; }
 
-public sealed class GateCollectorSummaryDto
-{
-    public Guid CollectorId { get; init; }
+        public decimal TotalPrice { get; init; }
 
-    public string CollectorName { get; init; } = string.Empty;
+        public decimal CollectedPrice { get; init; }
 
-    public int TicketsCount { get; init; }
+        public decimal PendingPrice { get; init; }
 
-    public decimal CollectedAmount { get; init; }
-}
+        public List<GateCollectorSummaryDto> Collectors { get; init; } = new();
+    }
 
-public sealed class ExitGateSummaryDto
-{
-    public Guid GateId { get; init; }
+    public sealed class GateCollectorSummaryDto
+    {
+        public Guid CollectorId { get; init; }
 
-    public int GateNumber { get; init; }
+        public string CollectorName { get; init; } = string.Empty;
 
-    // From TicketArchive
-    public int ExitedTicketsCount { get; init; }
+        public int TicketsCount { get; init; }
 
-    // From TicketExceedTransaction
-    public int ExceedTransactionsCount { get; init; }
+        public decimal CollectedAmount { get; init; }
+    }
 
-    public int CollectedExceedTransactionsCount { get; init; }
+    public sealed class ExitGateSummaryDto
+    {
+        public Guid GateId { get; init; }
 
-    public int PendingExceedTransactionsCount { get; init; }
+        public int GateNumber { get; init; }
 
-    public decimal TotalExceedAmount { get; init; }
+        // From TicketArchive
+        public int ExitedTicketsCount { get; init; }
 
-    public decimal CollectedExceedAmount { get; init; }
+        // From TicketExceedTransaction
+        public int ExceedTransactionsCount { get; init; }
 
-    public decimal PendingExceedAmount { get; init; }
+        public int CollectedExceedTransactionsCount { get; init; }
 
-    public List<GateSupervisorSummaryDto> Supervisors { get; init; } = new();
-}
+        public int PendingExceedTransactionsCount { get; init; }
 
-public sealed class GateSupervisorSummaryDto
-{
-    public Guid SupervisorId { get; init; }
+        public decimal TotalExceedAmount { get; init; }
 
-    public string SupervisorName { get; init; } = string.Empty;
+        public decimal CollectedExceedAmount { get; init; }
 
-    public int TransactionsCount { get; init; }
+        public decimal PendingExceedAmount { get; init; }
 
-    public decimal CollectedAmount { get; init; }
+        public List<GateSupervisorSummaryDto> Supervisors { get; init; } = new();
+    }
+
+    public sealed class GateSupervisorSummaryDto
+    {
+        public Guid SupervisorId { get; init; }
+
+        public string SupervisorName { get; init; } = string.Empty;
+
+        public int TransactionsCount { get; init; }
+
+        public decimal CollectedAmount { get; init; }
+    }
 }

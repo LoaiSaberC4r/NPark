@@ -15,9 +15,31 @@ namespace NPark.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> Get(CancellationToken cancellationToken)
+        public async Task<IActionResult> Get(
+            [FromQuery] DateOnly? from,
+            [FromQuery] DateOnly? to,
+            CancellationToken cancellationToken)
         {
-            var result = await _dashboardService.GetDashboardAsync(DateTime.Now, cancellationToken);
+            var today = DateOnly.FromDateTime(DateTime.Now);
+
+            var fromDate = from ?? today;
+            var toDate = to ?? fromDate;
+
+            if (toDate < fromDate)
+            {
+                return BadRequest(new
+                {
+                    Message = "To date must be greater than or equal to From date.",
+                    From = fromDate,
+                    To = toDate
+                });
+            }
+
+            var result = await _dashboardService.GetDashboardAsync(
+                fromDate,
+                toDate,
+                cancellationToken);
+
             return Ok(result);
         }
     }

@@ -373,6 +373,7 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                     onvifCameraSettingId: onvifCameraSettingId,
                     isAssigned: gateInfo.IsAssigned,
                     assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
+                    hasScanner: gateInfo.HasScanner!.Value,
                     hasQrPrinterName: gateInfo.HasQrPrinterName,
                     qrPrinterName: gateInfo.QrPrinterName,
                     hasReceiptPrinterName: gateInfo.HasReceiptPrinterName,
@@ -465,6 +466,7 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                     onvifCameraSettingId: onvifCameraSettingId,
                     isAssigned: gateInfo.IsAssigned,
                     assignedTo: gateInfo.IsAssigned ? gateInfo.AssignedTo : null,
+                    hasScanner: gateInfo.HasScanner!.Value,
                     hasQrPrinterName: gateInfo.HasQrPrinterName,
                     qrPrinterName: gateInfo.QrPrinterName,
                     hasReceiptPrinterName: gateInfo.HasReceiptPrinterName,
@@ -479,6 +481,15 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
             GateType gateType,
             CancellationToken cancellationToken)
         {
+            if (!gateInfo.HasScanner.HasValue)
+            {
+                return Result.Fail(
+                    new Error(
+                        Code: "Gate.HasScanner.Required",
+                        Message: ErrorMessage.Gate_HasScanner_Required,
+                        Type: ErrorType.Validation));
+            }
+
             if (string.IsNullOrWhiteSpace(gateInfo.ControlIp))
             {
                 return Result.Fail(
@@ -647,6 +658,8 @@ namespace NPark.Application.Feature.ParkingSystemConfigurationManagement.Command
                             request.gracePeriodMinutes,
                             TotalEntryGates = request.EntryGates.Count,
                             TotalExitGates = request.ExitGates.Count,
+                            EntryGatesWithScanner = request.EntryGates.Count(g => g.HasScanner == true),
+                            ExitGatesWithScanner = request.ExitGates.Count(g => g.HasScanner == true),
                             LoggedAt = DateTime.UtcNow
                         }),
                     cancellationToken);

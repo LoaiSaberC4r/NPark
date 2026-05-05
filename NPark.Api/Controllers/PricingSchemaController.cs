@@ -3,11 +3,14 @@ using BuildingBlock.Api.ControllerTemplate;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using NPark.Api.Attribute;
+using NPark.Api.Contracts.EnterPriceSchemas;
 using NPark.Application.Feature.PricingSchemaManagement.Command.Add;
 using NPark.Application.Feature.PricingSchemaManagement.Command.AddOrderSchema;
+using NPark.Application.Feature.PricingSchemaManagement.Command.CreateEnterPriceSchema;
 using NPark.Application.Feature.PricingSchemaManagement.Command.Delete;
 using NPark.Application.Feature.PricingSchemaManagement.Command.Update;
 using NPark.Application.Feature.PricingSchemaManagement.Query.GetAll;
+using NPark.Application.Feature.PricingSchemaManagement.Query.GetEnterPriceSchemasForSelection;
 using NPark.Application.Feature.PricingSchemaManagement.Query.GetOrderSchema;
 using NPark.Application.Feature.PricingSchemaManagement.Query.GetPricingSchema;
 using NPark.Application.Feature.PricingSchemaManagement.Query.GetRepeatedPricingSchema;
@@ -83,6 +86,32 @@ namespace NPark.Api.Controllers
         {
             var result = await sender.Send(query, cancellationToken);
             return result.ToIActionResult();
+        }
+
+        [HttpPost("create-enter-pricing-schema")]
+        public async Task<IActionResult> CreateEnterPricingSchema(
+           [FromBody] CreateEnterPriceSchemaRequest request,
+           CancellationToken cancellationToken)
+        {
+            var command = new CreateEnterPriceSchemaCommand
+            {
+                Name = request.Name,
+                Salary = request.Salary
+            };
+
+            var result = await sender.Send(command, cancellationToken);
+
+            return result.ToIActionResult(cancellationToken);
+        }
+
+        [HttpGet("enter-price-schema-for-selection")]
+        public async Task<IActionResult> GetForSelection(CancellationToken cancellationToken)
+        {
+            var result = await sender.Send(
+                new GetEnterPriceSchemasForSelectionQuery(),
+                cancellationToken);
+
+            return result.ToIActionResult(cancellationToken);
         }
     }
 }

@@ -31,7 +31,8 @@ namespace NPark.Application.Specifications.PricingSchemaSpecification
                 StartTime = x.StartTime,
                 IsRepeated = x.IsRepeated,
                 TotalDays = x.TotalDays,
-                TotalHours = x.TotalHours
+                TotalHours = x.TotalHours,
+                IsEnterPriceSchema = x.IsEnterPriceSchema
             });
             UseNoTracking();
         }

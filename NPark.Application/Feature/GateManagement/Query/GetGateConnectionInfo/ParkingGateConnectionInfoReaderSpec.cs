@@ -19,6 +19,7 @@ namespace NPark.Application.Feature.GateManagement.Query.GetGateConnectionInfo
                 HasReceiptPrinterName = x.HasReceiptPrinterName,
                 QrPrinterName = x.QrPrinterName,
                 ReceiptPrinterName = x.ReceiptPrinterName,
+                HasScanner = x.HasScanner,
                 ONVIFCameraSetting = new ONVIFCameraSettingInfoResponse
                 {
                     Url = x.ONVIFCameraSetting == null ? string.Empty : x.ONVIFCameraSetting.UrlRequest

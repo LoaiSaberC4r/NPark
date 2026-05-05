@@ -14,7 +14,8 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
         // CardNumber is only required when IsSubscriber == true.
         public string? CardNumber { get; init; }
 
-        public List<IFormFile>? TicketsImages { get; init; }
+        public List<IFormFile>? TicketsImages { get; set; }
         public Guid? PricingSchemaId { get; init; }
+        public IFormFile? ScannerPhoto { get; set; }
     }
 }

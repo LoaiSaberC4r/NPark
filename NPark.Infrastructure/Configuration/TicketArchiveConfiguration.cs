@@ -9,7 +9,8 @@ namespace NPark.Infrastructure.Configuration
         public void Configure(EntityTypeBuilder<TicketArchive> builder)
         {
             builder.HasKey(t => t.Id);
-            builder.Property(t => t.Id).ValueGeneratedOnAdd();
+            builder.Property(t => t.Id)
+    .ValueGeneratedNever();
             builder.Property(t => t.StartDate).IsRequired();
             builder.Property(t => t.EndDate).IsRequired();
             builder.Property(t => t.CollectedBy).IsRequired(false);
@@ -44,6 +45,11 @@ namespace NPark.Infrastructure.Configuration
                 .HasForeignKey(x => x.CollectedBy)
                 .OnDelete(DeleteBehavior.Restrict)
                 .IsRequired(false);
+
+            builder.HasOne(x => x.ExitParkingGate)
+              .WithMany()
+              .HasForeignKey(x => x.ExitGateId)
+              .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

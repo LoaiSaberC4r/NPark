@@ -588,4 +588,52 @@
   <data name="Tickets_CollectEnterTicketsUnexpected" xml:space="preserve">
     <value>An unexpected error occurred while collecting enter tickets.</value>
   </data>
+  <data name="ScannerPhotoRequired" xml:space="preserve">
+    <value>Scanner Photo Is Required</value>
+  </data>
+  <data name="Gate_HasScanner_Required" xml:space="preserve">
+    <value>HasScanner is required for each gate.</value>
+  </data>
+  <data name="EnterPriceSchema_Name_Required" xml:space="preserve">
+    <value>Enter price schema name is required.</value>
+  </data>
+  <data name="EnterPriceSchema_Name_MaxLength" xml:space="preserve">
+    <value>Enter price schema name must not exceed 100 characters.</value>
+  </data>
+  <data name="EnterPriceSchema_Salary_GreaterThanZero" xml:space="preserve">
+    <value>Enter price must be greater than zero.</value>
+  </data>
+  <data name="EnterPriceSchema_Name_AlreadyExists" xml:space="preserve">
+    <value>An enter price schema with the same name already exists.</value>
+  </data>
+  <data name="EnterPriceSchema_Create_Unexpected" xml:space="preserve">
+    <value>An unexpected error occurred while creating the enter price schema.</value>
+  </data>
+  <data name="EnterPriceSchema_Selection_Unexpected" xml:space="preserve">
+    <value>An unexpected error occurred while loading enter price schemas.</value>
+  </data>
+  <data name="EnterPriceSchema_InvalidForEnterTicket" xml:space="preserve">
+    <value>A valid enter price schema must be selected for the ticket.</value>
+  </data>
+  <data name="RoleId_Required" xml:space="preserve">
+    <value>Role is required.</value>
+  </data>
+  <data name="Role_NotFound" xml:space="preserve">
+    <value>Role was not found.</value>
+  </data>
+  <data name="UserId_Required" xml:space="preserve">
+    <value>User is required.</value>
+  </data>
+  <data name="FromDate_Required" xml:space="preserve">
+    <value>To date is required.</value>
+  </data>
+  <data name="ToDate_MustBeGreaterThanOrEqualFromDate" xml:space="preserve">
+    <value>To date must be greater than or equal to from date.</value>
+  </data>
+  <data name="User_MustBeEntranceCashier" xml:space="preserve">
+    <value>User must be an entrance cashier.</value>
+  </data>
+  <data name="ToDate_Required" xml:space="preserve">
+    <value>To date is required.</value>
+  </data>
 </root>

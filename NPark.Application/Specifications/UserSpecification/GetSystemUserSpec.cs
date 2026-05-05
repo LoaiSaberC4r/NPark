@@ -15,7 +15,9 @@ namespace NPark.Application.Specifications.UserSpecification
                 Id = q.Id,
                 Email = q.Email,
                 RoleName = q.Role.NameEn,
-                Username = q.Username
+                Username = q.Username,
+                ShiftEndTime = q.ShiftEndTime,
+                ShiftStartTime = q.ShiftStartTime
             });
         }
     }

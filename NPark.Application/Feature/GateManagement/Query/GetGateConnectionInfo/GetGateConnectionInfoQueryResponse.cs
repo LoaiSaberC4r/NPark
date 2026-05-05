@@ -12,6 +12,7 @@
         public bool HasQrPrinterName { get; init; }
 
         public bool HasReceiptPrinterName { get; init; }
+        public bool? HasScanner { get; init; }
 
         public ONVIFCameraSettingInfoResponse? ONVIFCameraSetting { get; init; }
     }

@@ -26,5 +26,9 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
         public IReadOnlyCollection<Guid> SanctionIds { get; init; } = Array.Empty<Guid>();
 
         public DateTime CreatedAt { get; init; }
+
+        public byte[] QrCode { get; init; } = Array.Empty<byte>();
+
+        public string? TicketInfo { get; init; } = string.Empty;
     }
 }

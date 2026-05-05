@@ -16,32 +16,34 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ExitTicket
     {
         private readonly IGenericRepository<Ticket> _ticketRepository;
         private readonly IGenericRepository<TicketArchive> _ticketArchiveRepository;
-        private readonly ITokenReader _tokenReader;
         private readonly IGenericRepository<ParkingGate> _parkingGateRepository;
-
+        private readonly ITokenReader _tokenReader;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IRealtimeNotifier _realtimeNotifier;
         private readonly ILogger<ExitTicketCommandHandler> _logger;
 
-        public ExitTicketCommandHandler(IGenericRepository<Ticket> ticketRepository,
-            IHttpContextAccessor httpContextAccessor, ITokenReader tokenReader,
+        public ExitTicketCommandHandler(
+            IGenericRepository<Ticket> ticketRepository,
+            IHttpContextAccessor httpContextAccessor,
+            ITokenReader tokenReader,
             IGenericRepository<TicketArchive> ticketArchiveRepository,
-            IRealtimeNotifier realTimeNotifier, ILogger<ExitTicketCommandHandler> logger, IGenericRepository<ParkingGate> parkingGateRepository)
+            IRealtimeNotifier realTimeNotifier,
+            ILogger<ExitTicketCommandHandler> logger,
+            IGenericRepository<ParkingGate> parkingGateRepository)
         {
-            _ticketRepository = ticketRepository;
-            _httpContextAccessor = httpContextAccessor;
-            _tokenReader = tokenReader;
-            _realtimeNotifier = realTimeNotifier;
-            _logger = logger;
-            _parkingGateRepository = parkingGateRepository;
-            _ticketArchiveRepository = ticketArchiveRepository;
+            _ticketRepository = ticketRepository ?? throw new ArgumentNullException(nameof(ticketRepository));
+            _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
+            _tokenReader = tokenReader ?? throw new ArgumentNullException(nameof(tokenReader));
+            _ticketArchiveRepository = ticketArchiveRepository ?? throw new ArgumentNullException(nameof(ticketArchiveRepository));
+            _realtimeNotifier = realTimeNotifier ?? throw new ArgumentNullException(nameof(realTimeNotifier));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _parkingGateRepository = parkingGateRepository ?? throw new ArgumentNullException(nameof(parkingGateRepository));
         }
 
         public async Task<Result> Handle(ExitTicketCommand request, CancellationToken cancellationToken)
         {
-            // ----------------------------------------
-            // 1) Read token info (GateId + UserId)
-            // ----------------------------------------
+            cancellationToken.ThrowIfCancellationRequested();
+
             var tokenInfo = _httpContextAccessor.HttpContext?.ReadToken(_tokenReader);
 
             if (tokenInfo is null || !tokenInfo.GateId.HasValue || !tokenInfo.UserId.HasValue)
@@ -55,19 +57,26 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ExitTicket
 
             var gateId = tokenInfo.GateId.Value;
             var userId = tokenInfo.UserId.Value;
-            var ticketEntity = await _ticketRepository.GetByIdAsync(request.TicketId);
 
-            var gateInfo = await _parkingGateRepository.GetByIdAsync(tokenInfo.GateId.Value, cancellationToken);
+            var gateInfo = await _parkingGateRepository.GetByIdAsync(gateId, cancellationToken);
 
             if (gateInfo is null)
             {
-                _logger.LogWarning("Gate info not found while adding ticket.");
+                _logger.LogWarning(
+                    "Gate info not found while exiting ticket. GateId={GateId}",
+                    gateId);
+
                 return Result.Fail(
                     new Error(
                         Code: "Gate.NotFound",
                         Message: ErrorMessage.GateNotFound,
                         Type: ErrorType.NotFound));
             }
+
+            var ticketSpec = new GetTicketForExitArchiveSpec(request.TicketId);
+
+            var ticketEntity = await _ticketRepository
+                .FirstOrDefaultWithSpecAsync(ticketSpec, cancellationToken);
 
             if (ticketEntity is null)
             {
@@ -77,6 +86,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ExitTicket
                         Message: ErrorMessage.Ticket_NotFound,
                         Type: ErrorType.NotFound));
             }
+
             if (!ticketEntity.IsCashierCollected)
             {
                 return Result.Fail(
@@ -85,6 +95,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ExitTicket
                         Message: ErrorMessage.Ticket_CashierCollected_Required,
                         Type: ErrorType.Conflict));
             }
+
             if (ticketEntity.EndDate.HasValue)
             {
                 return Result.Fail(
@@ -93,17 +104,29 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ExitTicket
                         Message: ErrorMessage.TicketAlreadyExited,
                         Type: ErrorType.Conflict));
             }
+
             ticketEntity.SetExitGate(gateId);
             ticketEntity.SetExitDate();
 
-            await _ticketRepository.SaveChangesAsync(cancellationToken);
-            await NotifyDashboardTicketExitedAsync(ticketEntity, gateId, userId, gateInfo, cancellationToken);
+            /*
+             * هنا بنعمل Snapshot قبل الحذف.
+             * لازم TicketAttachments تكون Loaded من الـ Specification.
+             */
             var ticketArchive = TicketArchive.CreateFromTicket(ticketEntity);
 
             await _ticketArchiveRepository.AddAsync(ticketArchive, cancellationToken);
-            await _ticketArchiveRepository.SaveChangesAsync(cancellationToken);
+
             _ticketRepository.Delete(ticketEntity);
+
             await _ticketRepository.SaveChangesAsync(cancellationToken);
+            await _ticketArchiveRepository.SaveChangesAsync(cancellationToken);
+
+            await NotifyDashboardTicketExitedAsync(
+                ticketEntity,
+                gateId,
+                userId,
+                gateInfo,
+                cancellationToken);
 
             return Result.Ok();
         }
@@ -112,14 +135,15 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ExitTicket
             Ticket ticketEntity,
             Guid gateId,
             Guid userId,
-            ParkingGate x,
+            ParkingGate gateInfo,
             CancellationToken cancellationToken)
         {
             try
             {
-                var gateNumber = x.GateType == GateType.Entrance
-    ? $"{ErrorMessage.EntranceGate} {x.GateNumber}"
-    : $"{ErrorMessage.ExitGate} {x.GateNumber} ";
+                var gateNumber = gateInfo.GateType == GateType.Entrance
+                    ? $"{ErrorMessage.EntranceGate} {gateInfo.GateNumber}"
+                    : $"{ErrorMessage.ExitGate} {gateInfo.GateNumber}";
+
                 var payload = new TicketExitedNotification
                 {
                     TicketId = ticketEntity.Id,
@@ -129,14 +153,12 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ExitTicket
                     GateNumber = gateNumber
                 };
 
-                // channel name: "tickets:exited"
-                await _realtimeNotifier.NotifyTicketExitedAsync(payload
-              );
+                await _realtimeNotifier.NotifyTicketExitedAsync(payload);
             }
             catch (Exception ex)
             {
-                // ما نبوّظش عملية الـ Exit لو SignalR وقع
-                _logger.LogError(ex,
+                _logger.LogError(
+                    ex,
                     "Failed to send realtime exit notification for ticket {TicketId}",
                     ticketEntity.Id);
             }

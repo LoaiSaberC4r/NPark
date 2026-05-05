@@ -14,14 +14,84 @@ namespace BuildingBlock.Infrastracture.Service
         {
             if (payloadBytes is null || payloadBytes.Length == 0)
             {
-                return Fail("Mqtt.ExitQr.EmptyPayload", "MQTT payload is empty.");
+                return Fail(
+                    "Mqtt.ExitQr.EmptyPayload",
+                    "MQTT payload is empty.");
             }
 
-            var frameBytes = NormalizePayloadToBytes(payloadBytes);
+            // Case 1:
+            // Full packet as real bytes:
+            // 7B 00 05 BD 43 41 36 39 32 30 31 35 46 34 7D
+            if (LooksLikeRealPacket(payloadBytes))
+            {
+                return DecodePacket(payloadBytes);
+            }
+
+            // Case 2:
+            // Full packet as ASCII hex:
+            // "7b0005bd434136393230313546347d"
+            var payloadAsText = Encoding.ASCII.GetString(payloadBytes).Trim();
+
+            if (LooksLikeHexText(payloadAsText))
+            {
+                var maybePacketBytes = TryConvertHexTextToBytes(payloadAsText);
+
+                if (maybePacketBytes is not null && LooksLikeRealPacket(maybePacketBytes))
+                {
+                    return DecodePacket(maybePacketBytes);
+                }
+            }
+
+            // Case 3:
+            // RS485 ASCII card number:
+            // 43 41 36 39 32 30 31 35 46 34 0D 0A
+            // ASCII => CA692015F4\r\n
+            var asciiQr = ExtractQrTextFromAsciiBytes(payloadBytes);
+
+            if (IsExactFiveByteQrHex(asciiQr))
+            {
+                var rawFrameHex = Convert.ToHexString(payloadBytes);
+                var myDataBytes = RemoveTrailingCrLf(payloadBytes);
+                var myDataHex = Convert.ToHexString(myDataBytes);
+
+                return Success(
+                    rawFrameHex: rawFrameHex,
+                    hasControllerId: false,
+                    controllerId: null,
+                    controllerIdHex: string.Empty,
+                    myDataHex: myDataHex,
+                    qrText: asciiQr);
+            }
+
+            // Case 4:
+            // Direct text:
+            // "CA692015F4"
+            var directText = NormalizeQrText(payloadAsText);
+
+            if (IsExactFiveByteQrHex(directText))
+            {
+                var rawFrameHex = Convert.ToHexString(payloadBytes);
+                var myDataHex = Convert.ToHexString(Encoding.ASCII.GetBytes(directText));
+
+                return Success(
+                    rawFrameHex: rawFrameHex,
+                    hasControllerId: false,
+                    controllerId: null,
+                    controllerIdHex: string.Empty,
+                    myDataHex: myDataHex,
+                    qrText: directText);
+            }
+
+            return Fail(
+                "Mqtt.ExitQr.UnsupportedPayload",
+                "MQTT payload is not a supported QR format. Expected full packet, ASCII hex QR, or direct 10-character QR hex text.",
+                Convert.ToHexString(payloadBytes));
+        }
+
+        private static MqttExitQrPacketDecodeResult DecodePacket(byte[] frameBytes)
+        {
             var rawFrameHex = Convert.ToHexString(frameBytes);
 
-            // Expected:
-            // 7B 00 05 BD 75 A7 14 A3 C3 7D
             if (frameBytes.Length < 6)
             {
                 return Fail(
@@ -46,15 +116,15 @@ namespace BuildingBlock.Infrastracture.Service
                     rawFrameHex);
             }
 
-            // Expected:
-            // index 0 = 7B
-            // index 1,2 = controller id
-            // index 3 = BD
-            if (frameBytes[3] != PacketConstantByte)
+            if (frameBytes.Length <= 4 || frameBytes[3] != PacketConstantByte)
             {
+                var actual = frameBytes.Length > 3
+                    ? $"0x{frameBytes[3]:X2}"
+                    : "missing";
+
                 return Fail(
                     "Mqtt.ExitQr.InvalidConstantByte",
-                    $"Invalid constant byte. Expected 0xBD but got 0x{frameBytes[3]:X2}.",
+                    $"Invalid constant byte. Expected 0xBD but got {actual}.",
                     rawFrameHex);
             }
 
@@ -63,7 +133,9 @@ namespace BuildingBlock.Infrastracture.Service
             var controllerId = (controllerIdBytes[0] << 8) | controllerIdBytes[1];
             var controllerIdHex = Convert.ToHexString(controllerIdBytes);
 
-            // MyData = everything after BD and before 7D
+            // MyData = bytes after BD and before 7D
+            // Example:
+            // 43 41 36 39 32 30 31 35 46 34
             var myDataBytes = frameBytes[4..^1];
 
             if (myDataBytes.Length == 0)
@@ -76,62 +148,180 @@ namespace BuildingBlock.Infrastracture.Service
 
             var myDataHex = Convert.ToHexString(myDataBytes);
 
-            // IMPORTANT:
-            // Validation Text must be Base64 of MyData only.
-            // Example:
-            // MyDataHex = 75 A7 14 A3 C3
-            // QrString  = dacUo8M=
-            var qrString = Convert
-                .ToBase64String(myDataBytes)
-                .Trim()
-                .Trim('"');
+            // First expected packet mode:
+            // MyData is ASCII for QR text.
+            // 43 41 36 39 32 30 31 35 46 34 => CA692015F4
+            var asciiQr = ExtractQrTextFromAsciiBytes(myDataBytes);
+
+            if (IsExactFiveByteQrHex(asciiQr))
+            {
+                return Success(
+                    rawFrameHex: rawFrameHex,
+                    hasControllerId: true,
+                    controllerId: controllerId,
+                    controllerIdHex: controllerIdHex,
+                    myDataHex: myDataHex,
+                    qrText: asciiQr);
+            }
+
+            // Second supported packet mode:
+            // MyData is the real 5 QR bytes.
+            // CA 69 20 15 F4 => CA692015F4
+            if (myDataBytes.Length == 5)
+            {
+                var qrText = Convert.ToHexString(myDataBytes);
+
+                if (IsExactFiveByteQrHex(qrText))
+                {
+                    return Success(
+                        rawFrameHex: rawFrameHex,
+                        hasControllerId: true,
+                        controllerId: controllerId,
+                        controllerIdHex: controllerIdHex,
+                        myDataHex: myDataHex,
+                        qrText: qrText);
+                }
+            }
+
+            return Fail(
+                "Mqtt.ExitQr.UnsupportedQrData",
+                "MQTT QR data is not valid ASCII QR hex text or real 5-byte QR data.",
+                rawFrameHex);
+        }
+
+        private static MqttExitQrPacketDecodeResult Success(
+            string rawFrameHex,
+            bool hasControllerId,
+            int? controllerId,
+            string controllerIdHex,
+            string myDataHex,
+            string qrText)
+        {
+            var normalizedQrText = NormalizeQrText(qrText);
 
             return new MqttExitQrPacketDecodeResult
             {
                 IsSuccess = true,
                 RawFrameHex = rawFrameHex,
+                HasControllerId = hasControllerId,
                 ControllerId = controllerId,
                 ControllerIdHex = controllerIdHex,
                 MyDataHex = myDataHex,
 
-                // هنخليها نفس MyDataHex عشان مفيش wrapping خلاص.
-                ActualQrHex = myDataHex,
+                // Actual QR value after decoding ASCII.
+                // Example: CA692015F4
+                ActualQrHex = normalizedQrText,
 
-                // ده اللي هيتبعت للـ ValidateExitByTextCommand.Text
-                QrString = qrString
+                // This is what must go to ValidateExitByTextCommand.Text
+                QrString = normalizedQrText
             };
         }
 
-        private static byte[] NormalizePayloadToBytes(byte[] payloadBytes)
+        private static bool LooksLikeRealPacket(byte[] payloadBytes)
         {
-            // Case 1:
-            // Device sends real bytes:
-            // 7B 00 05 BD 75 A7 14 A3 C3 7D
-            if (payloadBytes.Length > 0 && payloadBytes[0] == StartByte)
+            return payloadBytes.Length >= 6 &&
+                   payloadBytes[0] == StartByte &&
+                   payloadBytes[^1] == EndByte;
+        }
+
+        private static byte[]? TryConvertHexTextToBytes(string text)
+        {
+            var normalized = NormalizeHexText(text);
+
+            if (normalized.Length == 0)
+                return null;
+
+            if (normalized.Length % 2 != 0)
+                return null;
+
+            if (!Regex.IsMatch(normalized, "^[0-9a-fA-F]+$"))
+                return null;
+
+            try
             {
-                return payloadBytes;
+                return Convert.FromHexString(normalized);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string ExtractQrTextFromAsciiBytes(byte[] bytes)
+        {
+            if (bytes.Length == 0)
+                return string.Empty;
+
+            var cleanBytes = RemoveTrailingCrLf(bytes);
+
+            var text = Encoding.ASCII
+                .GetString(cleanBytes)
+                .Trim();
+
+            return NormalizeQrText(text);
+        }
+
+        private static byte[] RemoveTrailingCrLf(byte[] bytes)
+        {
+            var end = bytes.Length;
+
+            while (end > 0 && (bytes[end - 1] == 0x0D || bytes[end - 1] == 0x0A))
+            {
+                end--;
             }
 
-            // Case 2:
-            // mosquitto_pub -m sends ASCII hex:
-            // "7b0005bd75a714a3c37d"
-            var asText = Encoding.ASCII.GetString(payloadBytes).Trim();
+            if (end == bytes.Length)
+                return bytes;
 
-            var normalizedHex = asText
+            return bytes[..end];
+        }
+
+        private static string NormalizeQrText(string value)
+        {
+            return value
+                .Trim()
+                .Trim('"')
                 .Replace("{", string.Empty)
                 .Replace("}", string.Empty)
                 .Replace(" ", string.Empty)
                 .Replace("-", string.Empty)
+                .Replace(":", string.Empty)
+                .Replace("\r", string.Empty)
+                .Replace("\n", string.Empty)
+                .Replace("0x", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .ToUpperInvariant();
+        }
+
+        private static string NormalizeHexText(string value)
+        {
+            return value
+                .Trim()
+                .Trim('"')
+                .Replace("{", string.Empty)
+                .Replace("}", string.Empty)
+                .Replace(" ", string.Empty)
+                .Replace("-", string.Empty)
+                .Replace(":", string.Empty)
+                .Replace("\r", string.Empty)
+                .Replace("\n", string.Empty)
                 .Replace("0x", string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
 
-            if (normalizedHex.Length > 0 &&
-                normalizedHex.Length % 2 == 0 &&
-                Regex.IsMatch(normalizedHex, "^[0-9a-fA-F]+$"))
-            {
-                return Convert.FromHexString(normalizedHex);
-            }
+        private static bool LooksLikeHexText(string value)
+        {
+            var normalized = NormalizeHexText(value);
 
-            return payloadBytes;
+            return normalized.Length > 0 &&
+                   normalized.Length % 2 == 0 &&
+                   Regex.IsMatch(normalized, "^[0-9a-fA-F]+$");
+        }
+
+        private static bool IsExactFiveByteQrHex(string value)
+        {
+            var normalized = NormalizeQrText(value);
+
+            return normalized.Length == 10 &&
+                   Regex.IsMatch(normalized, "^[0-9A-F]{10}$");
         }
 
         private static MqttExitQrPacketDecodeResult Fail(
