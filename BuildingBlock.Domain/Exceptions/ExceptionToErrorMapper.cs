@@ -19,6 +19,8 @@ namespace BuildingBlock.Domain.Exceptions
 #if NET8_0_OR_GREATER
             DbUpdateConcurrencyException
                 => Error.Conflict(ErrorCodes.Common.Conflict, "Concurrency conflict.", source: "EFCore"),
+            _ when IsSqlDeadlock(ex)
+                => Error.Conflict(ErrorCodes.Common.Conflict, "A concurrent database operation conflicted with this request.", source: "SQLServer"),
             DbUpdateException dbex when IsUniqueViolation(dbex)
                 => Error.Conflict(ErrorCodes.Common.Conflict, "Unique constraint violated.", source: "EFCore"),
 #endif
@@ -32,6 +34,16 @@ namespace BuildingBlock.Domain.Exceptions
 
         private static bool IsUniqueViolation(DbUpdateException ex)
             => ex.InnerException is SqlException sql && sql.Number is 2627 or 2601;
+
+        private static bool IsSqlDeadlock(Exception exception)
+        {
+            for (Exception? cause = exception; cause is not null; cause = cause.InnerException)
+            {
+                if (cause is SqlException { Number: 1205 })
+                    return true;
+            }
+            return false;
+        }
 
 #endif
     }

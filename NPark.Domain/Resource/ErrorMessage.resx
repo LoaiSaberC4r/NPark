@@ -657,9 +657,6 @@
   <data name="ParkingWorkflow_OvernightPenaltyRequired" xml:space="preserve">
     <value>The overnight penalty is due.</value>
   </data>
-  <data name="ParkingWorkflow_OvernightPenaltyConfigurationMissing" xml:space="preserve">
-    <value>The required overnight sanction is not configured.</value>
-  </data>
   <data name="ParkingWorkflow_EntryNotConfirmed" xml:space="preserve">
     <value>Entry gate opening is awaiting confirmation.</value>
   </data>
@@ -683,5 +680,26 @@
   </data>
   <data name="ParkingWorkflow_InvalidExitGate" xml:space="preserve">
     <value>The selected gate cannot authorize exit.</value>
+  </data>
+  <data name="ParkingWorkflow_Payment.ExpectedAmountRequired" xml:space="preserve">
+    <value>Confirm the quoted sanction amount before recording payment.</value>
+  </data>
+  <data name="ParkingWorkflow_Payment.AmountChanged" xml:space="preserve">
+    <value>The sanction amount changed. Refresh the quotation and confirm the new amount.</value>
+  </data>
+  <data name="ParkingWorkflow_Payment.AmountMustBePositive" xml:space="preserve">
+    <value>The selected sanctions must have a positive total.</value>
+  </data>
+  <data name="ParkingWorkflow_Payment.IdempotencyKeyRequired" xml:space="preserve">
+    <value>Supply a stable payment action key to renew overdue exit validity.</value>
+  </data>
+  <data name="ParkingWorkflow_Payment.IdempotencyConflict" xml:space="preserve">
+    <value>This payment key belongs to a different payment action.</value>
+  </data>
+  <data name="ParkingWorkflow_Payment.ValidityChanged" xml:space="preserve">
+    <value>Ticket validity changed or was already renewed today. Revalidate before confirming payment.</value>
+  </data>
+  <data name="ParkingWorkflow_Sanction.InvalidAmount" xml:space="preserve">
+    <value>A selected sanction has an invalid amount.</value>
   </data>
 </root>

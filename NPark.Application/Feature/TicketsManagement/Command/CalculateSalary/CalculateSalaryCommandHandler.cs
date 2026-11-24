@@ -14,7 +14,7 @@ using NPark.Domain.Resource;
 namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
 {
     public sealed class CalculateSalaryCommandHandler(IUnitOfWork db, IGenericRepository<OrderPricingSchema> schemas,
-        ILogger<CalculateSalaryCommandHandler> logger, ParkingBusinessClock clock, OvernightPenaltyPolicy overnight,
+        ILogger<CalculateSalaryCommandHandler> logger, ParkingBusinessClock clock, SanctionCatalogSelection catalog,
         ITicketExitEligibilityService eligibility, IHttpContextAccessor http, ITokenReader tokens)
         : ICommandHandler<CalculateSalaryCommand, CalculateSalaryCommandResponse>
     {
@@ -48,24 +48,13 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
                 }
             }
 
-            var quotedSanctions = 0m;
-            var selected = request.SanctionIds?.Distinct() ?? [];
-            var prior = await db.ListWithSpecAsync(new TicketSanctionsSpec(ticket.Id), ct);
-            var applied = prior.SelectMany(x => x.Sanctions).Select(x => x.Id).ToHashSet();
-            foreach (var id in selected)
-            {
-                if (id == overnight.SanctionId || applied.Contains(id))
-                    continue;
-                var sanction = await db.Repository<Sanction>().GetByIdAsync(id, ct);
-                if (sanction is null)
-                    return Result<CalculateSalaryCommandResponse>.Fail(
-                        new Error("Sanction.NotFound", ErrorMessage.Sanction_NotFound, ErrorType.NotFound));
-                quotedSanctions += sanction.Amount;
-            }
+            var selection = await catalog.LoadAsync(request.SanctionIds, ct);
+            if (selection.IsFailure)
+                return Result<CalculateSalaryCommandResponse>.Fail(selection.Errors);
 
             var assessment = await eligibility.EvaluateAsync(ticket, http.HttpContext?.User.GetGateId(tokens), ct);
             return Result<CalculateSalaryCommandResponse>.Ok(
-                CalculateSalaryCommandResponse.From(ticket, assessment, quotedSanctions));
+                CalculateSalaryCommandResponse.From(ticket, assessment, selection.Value.Sum(x => x.Amount)));
         }
 
         private async Task<decimal?> CalculateTotalSalaryAsync(

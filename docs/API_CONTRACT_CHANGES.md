@@ -28,8 +28,48 @@ Both routes return an operation. HTTP 202 contains a `Location` header for the p
 
 ## Eligibility and financial fields
 
-Text and vehicle validations return `isValidForExit`, `reasonCode`, and an `eligibility` breakdown when an active ticket matches. `ScanTicket` provides the same assessment on its existing result. Important codes include `Eligible`, `TicketNotFound`, `TicketArchived`, `TicketAlreadyExited`, `AmbiguousTicket`, `InvalidExitGate`, `EntryNotConfirmed`, `BasePaymentRequired`, `SanctionPaymentRequired`, `OvernightPenaltyConfigurationMissing`, `OvernightPenaltyRequired`, and `GateOperationPending`. An unresolved operation is discoverable via the response or operation listing. Authorization at the selected gate rechecks eligibility immediately before reservation.
+Text and vehicle validations return `isValidForExit`, `reasonCode`, and an `eligibility` breakdown when an active ticket matches. `ScanTicket` provides the same assessment on its existing result. Important codes include `Eligible`, `TicketNotFound`, `TicketArchived`, `TicketAlreadyExited`, `AmbiguousTicket`, `InvalidExitGate`, `EntryNotConfirmed`, `BasePaymentRequired`, `SanctionPaymentRequired`, `OvernightPenaltyRequired`, and `GateOperationPending`. An unresolved operation is discoverable via the response or operation listing. Authorization at the selected gate rechecks eligibility immediately before reservation.
 
-`CalculateQrCodeTicketSalary` and `CalculateSalaryForSubscriberCommand` retain the original response properties. `totalSalary` is now the base fee. `basePrice` and `exceedPrice` describe assessed amounts. `totalPrice` adds them. `paidAmount` and `outstandingAmount` describe the confirmed balance. `quotedSanctions` and `requiredOvernightAmount` are prospective amounts. `CollectCashier` optionally takes `expectedBasePrice` to check the amount the operator confirms.
+`CalculateQrCodeTicketSalary` and `CalculateSalaryForSubscriberCommand` retain the original response properties. `totalSalary` is now the base fee. `basePrice` and `exceedPrice` describe assessed amounts. `totalPrice` adds them. `paidAmount` and `outstandingAmount` describe the confirmed balance. `quotedSanctions` is the catalog total for the selected IDs. `requiredOvernightAmount` stays zero for compatibility because there is no predetermined quote. `requiresOvernightPenalty` indicates that a new payment is due. `CollectCashier` optionally takes `expectedBasePrice` to check the amount the operator confirms.
 
-`TicketExceedTransaction/Create` confirms receipt of the selected sanction payment. Send the same `idempotencyKey` for retries of one cashier action. The configured overnight sanction ID must appear in the selection when confirming an overnight charge. The response identifies the independent payment, original ticket and QR, amount, updated accumulated balance, and valid exit date. A conflicting selection or coverage produces an error. Administrative settlement has separate endpoints and returns the persisted transaction ID.
+### Confirm a sanction payment
+
+On `OvernightPenaltyRequired`, get the available sanctions from `GET /api/Sanction/GetAll`. Select any existing sanction or combination whose total is positive. Use the same selection and amount for the cashier's confirmation.
+
+Send the confirmed amount, the ticket's observed validity date, and one stable key for this payment action.
+
+```http
+POST /api/TicketExceedTransaction/Create
+```
+
+```json
+{
+  "ticketId": "a791f0ea-5823-4f94-9d35-97c19b08c964",
+  "sanctionIds": ["d027285e-7301-473a-9586-e0ca6ee75e33"],
+  "expectedAmount": 50,
+  "expectedValidExitDate": "2026-11-23",
+  "idempotencyKey": "payment-action-001"
+}
+```
+
+A successful first renewal returns these fields.
+
+```json
+{
+  "ticketExceedTransactionId": "182c0b45-5c60-4b61-8ba7-847be44b048e",
+  "ticketId": "a791f0ea-5823-4f94-9d35-97c19b08c964",
+  "exceedAmount": 50,
+  "exceedPrice": 50,
+  "ticketPrice": 20,
+  "totalPriceAfterExceed": 70,
+  "paidAmount": 70,
+  "outstandingAmount": 0,
+  "validExitDate": "2026-11-24",
+  "paymentStatus": "Confirmed"
+}
+```
+
+- `expectedAmount` is required for every new payment. The server totals the current catalog amounts and returns HTTP 409 with `Payment.AmountChanged` if confirmation no longer matches. Refresh the quote and obtain fresh confirmation.
+- `expectedValidExitDate` records the date shown to the cashier. A stale date is rejected with HTTP 409 and `Payment.ValidityChanged`. When a renewal has already been recorded today, a different action must include refreshed validity to be accepted as an ordinary payment. A replay returns the original transaction even if validity has since changed.
+- `idempotencyKey` is required for overdue renewal. Reuse it after lost responses, including after midnight. A new charge requires a new key and cashier confirmation. Conflicting selections or confirmed amounts for the same key return HTTP 409. Legacy keyless ordinary payment requests use a date-independent selection identity.
+- The response returns the same QR and the original amount for a replay. Revalidate eligibility before calling `ExitTicket`. Supervisor settlement remains separate.

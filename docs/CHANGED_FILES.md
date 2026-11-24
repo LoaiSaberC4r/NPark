@@ -148,3 +148,42 @@
 - `NPark.Application/Feature/TicketsManagement/Command/ExitTicketFromMqtt/ExitTicketFromMqttCommand/ExitTicketFromMqttCommandValidator.cs` — Replaced by the shared eligibility or acknowledged exit workflow
 - `NPark.Application/Feature/TicketsManagement/Query/ValidateExitByVehicleNumber/GetTodayTicketByVehicleNumberSpec.cs` — Replaced by the shared eligibility or acknowledged exit workflow
 - `NPark.Domain/DomainEvent/ExitTicketDomainEvent.cs` — Replaced by the shared eligibility or acknowledged exit workflow
+
+## Overnight penalty follow-up
+
+### Added
+
+- `NPark.Application/Services/SanctionCatalogSelection.cs`
+- `NPark.Tests/OvernightPenaltyIntegrationTests.cs`
+
+### Modified
+
+- `BuildingBlock.Domain/Exceptions/ExceptionToErrorMapper.cs`
+- `NPark.Api/appsettings.json`
+- `NPark.Application/Bootstrap/Bootstrap.cs`
+- `NPark.Application/Feature/TicketExceedTransactionsManagement/Command/Create/CreateTicketExceedTransactionCommand.cs`
+- `NPark.Application/Feature/TicketExceedTransactionsManagement/Command/Create/CreateTicketExceedTransactionCommandHandler.cs`
+- `NPark.Application/Feature/TicketExceedTransactionsManagement/Command/Create/CreateTicketExceedTransactionCommandValidation.cs`
+- `NPark.Application/Feature/TicketsManagement/Command/CalculateSalary/CalculateSalaryCommandHandler.cs`
+- `NPark.Application/Feature/TicketsManagement/Command/CalculateSalaryForSubscriber/CalculateSalaryForSubscriberCommand.cs`
+- `NPark.Application/Feature/TicketsManagement/Command/CalculateSalaryForSubscriber/CalculateSalaryForSubscriberCommandHandler.cs`
+- `NPark.Application/Feature/TicketsManagement/Command/ValidateExitByText/TicketByCardNumberSpecification.cs`
+- `NPark.Application/Feature/TicketsManagement/Command/ValidateExitByText/ValidateExitByTextCommandHandler.cs`
+- `NPark.Application/Options/ParkingWorkflowOptions.cs`
+- `NPark.Application/Services/OvernightPenaltyPolicy.cs`
+- `NPark.Application/Services/TicketExitEligibilityService.cs`
+- `NPark.Domain/Entities/TicketExceedTransaction.cs`
+- `NPark.Domain/Resource/ErrorMessage.ar.resx`
+- `NPark.Domain/Resource/ErrorMessage.resx`
+- `NPark.Infrastructure/Bootstrap/Bootstrap.cs`
+- `NPark.Tests/ParkingWorkflowIntegrationTests.cs`
+- `docs/API_CONTRACT_CHANGES.md`
+- `docs/CHANGED_FILES.md`
+- `docs/FINANCIAL_SETTLEMENT.md`
+- `docs/FRONTEND_INTEGRATION.md`
+- `docs/NPARK_REFACTORING_V2.md`
+- `docs/TEST_RESULTS.md`
+
+### Removed
+
+The configured overnight sanction, policy mode, and obsolete eligibility reason were removed from the existing source and configuration files. This follow-up removed no files.

@@ -6,7 +6,7 @@ Transaction-aware commands participate explicitly in the MediatR pipeline. Failu
 
 ## Rollout
 
-1. Review the [database migration](DATABASE_MIGRATION.md) and preflight a copy of production with representative data. Record the configured tariff mode and overnight sanction ID.
+1. Review the [database migration](DATABASE_MIGRATION.md) and preflight a copy of production with representative data. Verify the business time zone and that the existing sanction catalog contains valid positive amounts.
 2. Verify controller firmware and broker ACLs with the [hardware contract](MQTT_GATE_PROTOCOL.md). Keep retransmission disabled until firmware deduplication is demonstrated.
 3. Implement the [Angular handoff](FRONTEND_INTEGRATION.md) and deploy it with the compatible backend and firmware in a coordinated window.
 4. Verify ticket issuance, entry confirmation, same-day and overnight payment, exit timeout, late ACK, archive recovery, cashier settlement, and both supervisor reports. Reconcile unknown operations using recorded evidence when required.

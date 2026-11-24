@@ -45,7 +45,8 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
 
             if (ticket is null && !request.QrOnly)
             {
-                var candidates = await db.ListWithSpecAsync(new TicketByCardNumberSpecification(text), ct);
+                var cardText = request.Text.Trim().Trim('"');
+                var candidates = await db.ListWithSpecAsync(new TicketByCardNumberSpecification(cardText, text), ct);
                 match = "CardNumber";
                 if (candidates.Count == 0)
                 {

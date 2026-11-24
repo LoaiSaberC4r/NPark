@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -17,7 +16,7 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
 
 internal sealed class CreateTicketExceedTransactionCommandHandler(IUnitOfWork db, IQRCodeService qr,
     IByteVerificationService verification, IHttpContextAccessor http, ITokenReader tokens,
-    OvernightPenaltyPolicy overnight, ParkingBusinessClock clock)
+    OvernightPenaltyPolicy overnight, ParkingBusinessClock clock, SanctionCatalogSelection catalog)
     : ICommandHandler<CreateTicketExceedTransactionCommand, CreateTicketExceedTransactionCommandResponse>
 {
     public async Task<Result<CreateTicketExceedTransactionCommandResponse>> Handle(
@@ -40,69 +39,68 @@ internal sealed class CreateTicketExceedTransactionCommandHandler(IUnitOfWork db
             return Result<CreateTicketExceedTransactionCommandResponse>.Fail(TicketExitEligibilityService.AsError("TicketAlreadyExited"));
 
         var ids = request.SanctionIds.Order().ToArray();
-        var utc = clock.UtcNow;
-        var local = clock.ToBusinessTime(utc);
-        var day = DateOnly.FromDateTime(local);
-        var overnightSelected = overnight.SanctionId is Guid overnightId && ids.Contains(overnightId);
         var key = request.IdempotencyKey is string supplied
             ? "client:" + supplied.Trim()
-            : "selection:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
-                string.Join(",", ids) + (overnightSelected ? day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : ""))));
+            : "selection:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join(",", ids))));
 
         var prior = await db.ListWithSpecAsync(new TicketSanctionsSpec(ticket.Id), ct);
         var replay = prior.SingleOrDefault(x => x.IdempotencyKey == key);
-        if (replay != null)
+        if (replay is not null)
         {
-            if (replay.PaymentCashierId != cashierId || replay.PaymentGateId != gateId ||
-                !ids.SequenceEqual(replay.Sanctions.Select(x => x.Id).Order()))
-                return Fail("Payment.IdempotencyConflict", ErrorMessage.TicketExceedTransaction_AlreadyExists);
+            if (replay.PaymentStatus != SanctionPaymentStatus.Confirmed ||
+                replay.PaymentCashierId != cashierId || replay.PaymentGateId != gateId ||
+                !ids.SequenceEqual(replay.Sanctions.Select(x => x.Id).Order()) ||
+                request.ExpectedAmount is decimal expected && expected != replay.ExceedAmount)
+                return PaymentError("Payment.IdempotencyConflict");
+
             return Respond(ticket, replay, prior, ids);
         }
 
         if (await TicketExitEligibilityService.FindReservationAsync(db, ticket.Id, ct) != null)
             return Result<CreateTicketExceedTransactionCommandResponse>.Fail(TicketExitEligibilityService.AsError("GateOperationPending"));
 
-        var selection = new List<Sanction>();
-        foreach (var id in ids)
-        {
-            var sanction = await db.Repository<Sanction>().GetByIdAsync(id, ct);
-            if (sanction is null)
-                return Fail("Sanction.NotFound", ErrorMessage.Sanction_NotFound, ErrorType.NotFound);
-            if (id != overnight.SanctionId && prior.Any(x => x.Sanctions.Any(s => s.Id == id)))
-                return Fail("Sanction.AlreadyApplied", ErrorMessage.TicketExceedTransaction_AlreadyExists);
-            selection.Add(sanction);
-        }
+        var utc = clock.UtcNow;
+        var local = clock.ToBusinessTime(utc);
+        var day = DateOnly.FromDateTime(local);
+        var renewsValidity = overnight.RequiresPenalty(ticket, day);
+        if (renewsValidity && request.IdempotencyKey is null)
+            return PaymentError("Payment.IdempotencyKeyRequired");
 
-        var coverage = new OvernightRequirement(null, null, null);
-        if (overnightSelected)
-        {
-            coverage = await overnight.GetRequirementAsync(ticket, day, ct);
-            if (coverage.Error != null)
-                return Result<CreateTicketExceedTransactionCommandResponse>.Fail(coverage.Error);
-            if (coverage.Count == 0)
-                return Fail("OvernightPenaltyAlreadyCovered", ErrorMessage.TicketExceedTransaction_AlreadyExists);
-        }
+        if (request.ExpectedValidExitDate is DateOnly expectedDate && expectedDate != ticket.ValidExitDate)
+            return PaymentError("Payment.ValidityChanged");
 
-        var amounts = selection.Select(x => new
-        {
-            SanctionId = x.Id,
-            UnitAmount = x.Amount,
-            Units = x.Id == overnight.SanctionId ? coverage.Count : 1
-        }).ToArray();
-        if (amounts.Any(x => x.UnitAmount < 0))
-            return Fail("Sanction.InvalidAmount", "A sanction has an invalid amount.");
-        var amount = amounts.Sum(x => x.UnitAmount * x.Units);
-        var classification = !overnightSelected ? SanctionClassification.Ordinary :
-            selection.Count == 1 ? SanctionClassification.Overnight : SanctionClassification.Mixed;
+        // A request that did not submit the observed date cannot be distinguished from
+        // a stale renewal once another payment has renewed the ticket today.
+        if (!renewsValidity && request.ExpectedValidExitDate is null &&
+            await db.AnyWithSpecAsync(new Matching<OvernightPenaltyCoverage>(x =>
+                x.TicketIdSnapshot == ticket.Id && x.BusinessDate == day), ct))
+            return PaymentError("Payment.ValidityChanged");
+
+        var selected = await catalog.LoadAsync(ids, ct);
+        if (selected.IsFailure)
+            return Result<CreateTicketExceedTransactionCommandResponse>.Fail(selected.Errors);
+        var sanctions = selected.Value;
+        if (!renewsValidity && prior.Any(x => x.Sanctions.Any(s => ids.Contains(s.Id))))
+            return Fail("Sanction.AlreadyApplied", ErrorMessage.TicketExceedTransaction_AlreadyExists);
+
+        var amount = sanctions.Sum(x => x.Amount);
+        if (amount <= 0)
+            return PaymentError("Payment.AmountMustBePositive");
+        if (request.ExpectedAmount is null)
+            return PaymentError("Payment.ExpectedAmountRequired");
+        if (request.ExpectedAmount != amount)
+            return PaymentError("Payment.AmountChanged");
+
+        var amounts = sanctions.Select(x => new { SanctionId = x.Id, UnitAmount = x.Amount, Units = 1 });
+        var classification = renewsValidity ? SanctionClassification.Overnight : SanctionClassification.Ordinary;
+        DateOnly? penaltyDate = renewsValidity ? day : null;
         var payment = TicketExceedTransaction.Create(ticket, ticket.ExceedPrice, amount, gateId, cashierId,
-            selection, utc, local, key, classification, coverage.From, coverage.Through, JsonSerializer.Serialize(amounts));
+            sanctions, utc, local, key, classification, penaltyDate, penaltyDate, JsonSerializer.Serialize(amounts));
         ticket.AddExceedPrice(amount);
-        if (coverage.From is DateOnly from && coverage.Through is DateOnly through)
+        if (renewsValidity)
         {
-            for (var date = from.DayNumber; date <= through.DayNumber; date++)
-                await db.Repository<OvernightPenaltyCoverage>().AddAsync(
-                    new(ticket.Id, DateOnly.FromDayNumber(date), payment.Id), ct);
-            ticket.ExtendExitValidity(through);
+            await db.Repository<OvernightPenaltyCoverage>().AddAsync(new(ticket.Id, day, payment.Id), ct);
+            ticket.ExtendExitValidity(day);
         }
         await db.Repository<TicketExceedTransaction>().AddAsync(payment, ct);
         prior.Add(payment);
@@ -139,6 +137,9 @@ internal sealed class CreateTicketExceedTransactionCommandHandler(IUnitOfWork db
             QrCode = qr.GenerateQRCodeFromText(qrText)
         });
     }
+
+    private static Result<CreateTicketExceedTransactionCommandResponse> PaymentError(string code) =>
+        Fail(code, WorkflowMessages.Get(code));
 
     private static Result<CreateTicketExceedTransactionCommandResponse> Fail(
         string code, string message, ErrorType type = ErrorType.Conflict) =>

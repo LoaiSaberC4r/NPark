@@ -6,5 +6,6 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalaryFor
     public sealed record CalculateSalaryForSubscriberCommand : ICommand<CalculateSalaryCommandResponse>
     {
         public string CardNumber { get; init; } = string.Empty;
+        public IReadOnlyCollection<Guid>? SanctionIds { get; init; }
     }
 }

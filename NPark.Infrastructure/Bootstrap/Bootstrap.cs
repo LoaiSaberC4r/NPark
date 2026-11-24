@@ -61,9 +61,6 @@ namespace NPark.Infrastructure.Bootstrap
             services.AddOptions<ParkingBusinessOptions>().Bind(configuration.GetSection("ParkingBusiness"))
                 .Validate(x => TimeZoneInfo.TryFindSystemTimeZoneById(x.TimeZoneId, out _), "Invalid parking business time zone")
                 .ValidateOnStart();
-            services.AddOptions<OvernightParkingOptions>().Bind(configuration.GetSection("OvernightParking"))
-                .Validate(x => Enum.IsDefined(x.PenaltyMode) && x.RequireFullPenaltyPayment, "Invalid overnight payment policy")
-                .ValidateOnStart();
             services.AddOptions<GateOperationOptions>().Bind(configuration.GetSection("GateOperation"))
                 .Validate(x => x.RequireAcknowledgment && !x.Retain && x.CommandQos > 0 && x.CommandQos <= 2
                     && x.AckQos > 0 && x.AckQos <= 2 && x.AckTimeoutSeconds > 0 && x.RecoveryIntervalSeconds > 0
