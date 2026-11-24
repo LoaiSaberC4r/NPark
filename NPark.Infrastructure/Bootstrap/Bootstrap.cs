@@ -131,32 +131,80 @@ namespace NPark.Infrastructure.Bootstrap
             return services;
         }
 
-        private sealed class SeedingHostedService : IHostedService
+        private sealed class SeedingHostedService(
+            IServiceScopeFactory scopeFactory,
+            IConfiguration configuration,
+            ILogger<SeedingHostedService> logger) : IHostedLifecycleService
         {
-            private readonly IServiceScopeFactory _scopeFactory;
-            private readonly ILogger<SeedingHostedService> _logger;
+            private const string ApplyMigrationsKey = "Database:ApplyMigrationsOnStartup";
 
-            public SeedingHostedService(IServiceScopeFactory scopeFactory, ILogger<SeedingHostedService> logger)
+            // The host finishes StartingAsync for all services before calling any StartAsync,
+            // including when hosted services start concurrently.
+            public async Task StartingAsync(CancellationToken cancellationToken)
             {
-                _scopeFactory = scopeFactory;
-                _logger = logger;
-            }
+                await using var scope = scopeFactory.CreateAsyncScope();
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var db = scope.ServiceProvider.GetRequiredService<NParkDBContext>();
+                    var applyMigrations = configuration.GetValue(ApplyMigrationsKey, false);
+                    var pending = (await db.Database.GetPendingMigrationsAsync(cancellationToken)).ToArray();
 
-            public async Task StartAsync(CancellationToken cancellationToken)
-            {
-                using var scope = _scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<NParkDBContext>();
+                    if (pending.Length == 0)
+                    {
+                        logger.LogInformation("The NPark database schema is up to date.");
+                    }
+                    else
+                    {
+                        logger.LogInformation("Found {MigrationCount} pending NPark migrations: {Migrations}",
+                            pending.Length, string.Join(", ", pending));
 
-                if ((await db.Database.GetPendingMigrationsAsync(cancellationToken)).Any())
-                    throw new InvalidOperationException("Apply the reviewed NPark database migrations before starting the API.");
+                        if (!applyMigrations)
+                        {
+                            logger.LogWarning("Automatic NPark database migrations are disabled.");
+                            throw new InvalidOperationException(
+                                "Pending NPark database migrations exist and automatic migrations are disabled. " +
+                                $"Apply the migrations manually or enable {ApplyMigrationsKey}.");
+                        }
+
+                        logger.LogInformation("Applying NPark database migrations.");
+                        await db.Database.MigrateAsync(cancellationToken);
+
+                        var remaining = (await db.Database.GetPendingMigrationsAsync(cancellationToken)).ToArray();
+                        if (remaining.Length > 0)
+                        {
+                            throw new InvalidOperationException(
+                                $"Pending NPark database migrations remain after migration: {string.Join(", ", remaining)}.");
+                        }
+
+                        logger.LogInformation("NPark database migrations completed successfully.");
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    logger.LogWarning("NPark database migration initialization was canceled.");
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    logger.LogError(exception, "NPark database migration initialization failed.");
+                    throw;
+                }
 
                 var seeder = scope.ServiceProvider.GetRequiredService<IEnsureSeeding>();
-                _logger.LogInformation("Starting database seeding (HostedService)...");
+                logger.LogInformation("Starting database seeding (HostedService).");
                 await seeder.SeedDatabaseAsync();
-                _logger.LogInformation("Database seeding completed (HostedService).");
+                cancellationToken.ThrowIfCancellationRequested();
+                logger.LogInformation("Database seeding completed (HostedService).");
             }
 
+            public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+            public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+            public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
             public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+            public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         }
 
         #endregion Seeding Database

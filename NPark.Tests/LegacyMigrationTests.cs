@@ -1,5 +1,7 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using NPark.Domain.Entities;
 using NPark.Domain.Enums;
 using NPark.Infrastructure;
@@ -64,8 +66,15 @@ public sealed class LegacyMigrationTests
                        (NEWID(), @duplicate, @user, 3, @ticket, '01020304', @stamp, 20, 50, 50, 0, @gate, @stamp);
                 """);
 
-            var duplicateError = await Assert.ThrowsAsync<SqlException>(() => db.Database.MigrateAsync());
-            Assert.Equal(51002, duplicateError.Number);
+            var probe = new DatabaseStartupTests.StartupProbe();
+            using (var host = DatabaseStartupTests.CreateHost(connection.ConnectionString, true, probe))
+            {
+                var duplicateError = await Assert.ThrowsAsync<SqlException>(() => host.StartAsync());
+                Assert.Equal(51002, duplicateError.Number);
+                Assert.Contains(probe.Logs, l => l.Level == LogLevel.Error && ReferenceEquals(l.Exception, duplicateError));
+                Assert.False(probe.SeedingStarted);
+                Assert.False(probe.WorkerStarted);
+            }
             Assert.Equal(Baseline, (await db.Database.GetAppliedMigrationsAsync()).Last());
             Assert.Equal(2, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS [Value] FROM TicketCollectionTransactionTickets").SingleAsync());
 
