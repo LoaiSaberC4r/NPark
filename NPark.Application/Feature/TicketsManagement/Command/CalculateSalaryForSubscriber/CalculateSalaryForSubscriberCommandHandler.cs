@@ -22,18 +22,20 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalaryFor
         private readonly ParkingBusinessClock _clock;
         private readonly IHttpContextAccessor _http;
         private readonly ITokenReader _tokens;
+        private readonly SanctionCatalogSelection _catalog;
         private readonly ILogger<CalculateSalaryForSubscriberCommandHandler> _logger;
 
         public CalculateSalaryForSubscriberCommandHandler(
             IGenericRepository<ParkingMemberships> parkingMembershipsRepository,
             IGenericRepository<Ticket> ticketRepository,
             ILogger<CalculateSalaryForSubscriberCommandHandler> logger, ITicketExitEligibilityService eligibility,
-            ParkingBusinessClock clock, IHttpContextAccessor http, ITokenReader tokens)
+            ParkingBusinessClock clock, IHttpContextAccessor http, ITokenReader tokens, SanctionCatalogSelection catalog)
         {
             _eligibility = eligibility;
             _clock = clock;
             _http = http;
             _tokens = tokens;
+            _catalog = catalog;
             _parkingMembershipsRepository = parkingMembershipsRepository
                 ?? throw new ArgumentNullException(nameof(parkingMembershipsRepository));
             _ticketRepository = ticketRepository
@@ -110,8 +112,12 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalaryFor
                 // ---------------------------
                 // 4) Build response (subscriber = 0 total salary)
                 // ---------------------------
+                var selection = await _catalog.LoadAsync(request.SanctionIds, cancellationToken);
+                if (selection.IsFailure)
+                    return Result<CalculateSalaryCommandResponse>.Fail(selection.Errors);
+
                 var assessment = await _eligibility.EvaluateAsync(ticket, _http.HttpContext?.User.GetGateId(_tokens), cancellationToken);
-                var response = CalculateSalaryCommandResponse.From(ticket, assessment);
+                var response = CalculateSalaryCommandResponse.From(ticket, assessment, selection.Value.Sum(x => x.Amount));
 
                 return Result<CalculateSalaryCommandResponse>.Ok(response);
             }

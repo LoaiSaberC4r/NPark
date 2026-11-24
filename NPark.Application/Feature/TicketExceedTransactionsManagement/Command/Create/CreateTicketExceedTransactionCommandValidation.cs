@@ -15,6 +15,8 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
             RuleFor(x => x.IdempotencyKey).MaximumLength(100)
                 .Must(key => key is null || !string.IsNullOrWhiteSpace(key));
 
+            RuleFor(x => x.ExpectedAmount).GreaterThanOrEqualTo(0m);
+
             RuleFor(x => x.SanctionIds)
                 .NotNull()
                 .WithMessage(ErrorMessage.SanctionIds_Required);

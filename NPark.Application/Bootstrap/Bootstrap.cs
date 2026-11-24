@@ -36,6 +36,7 @@ namespace NPark.Application.Bootstrap
         {
             services.AddScoped<ParkingBusinessClock>();
             services.AddScoped<OvernightPenaltyPolicy>();
+            services.AddScoped<SanctionCatalogSelection>();
             services.AddScoped<ITicketExitEligibilityService, TicketExitEligibilityService>();
             services.AddScoped<ITicketArchiveService, TicketArchiveService>();
             services.AddScoped<GateOperationService>();

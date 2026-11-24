@@ -5,16 +5,6 @@ public sealed class ParkingBusinessOptions
     public string TimeZoneId { get; set; } = "Africa/Cairo";
 }
 
-public enum OvernightPenaltyMode { PerAuthorizationDate, PerOverdueBusinessDay }
-
-public sealed class OvernightParkingOptions
-{
-    public bool Enabled { get; set; } = true;
-    public OvernightPenaltyMode PenaltyMode { get; set; }
-    public Guid? OvernightSanctionId { get; set; }
-    public bool RequireFullPenaltyPayment { get; set; } = true;
-}
-
 public sealed class GateOperationOptions
 {
     public string CommandTopicTemplate { get; set; } = "sub/network/{controllerId}";

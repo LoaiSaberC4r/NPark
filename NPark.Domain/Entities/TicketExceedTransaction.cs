@@ -84,8 +84,8 @@ namespace NPark.Domain.Entities
             if (sanctions is null || sanctions.Count == 0)
                 throw new ArgumentException("Sanctions are required.", nameof(sanctions));
 
-            if (exceedAmount < 0)
-                throw new ArgumentOutOfRangeException(nameof(exceedAmount), "Exceed amount cannot be negative.");
+            if (exceedAmount <= 0)
+                throw new ArgumentOutOfRangeException(nameof(exceedAmount), "A confirmed sanction payment must be positive.");
 
             var transaction = new TicketExceedTransaction
             {

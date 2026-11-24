@@ -8,6 +8,8 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
         public Guid TicketId { get; init; }
 
         public string? IdempotencyKey { get; init; }
+        public decimal? ExpectedAmount { get; init; }
+        public DateOnly? ExpectedValidExitDate { get; init; }
         public IReadOnlyCollection<Guid> SanctionIds { get; init; } = Array.Empty<Guid>();
     }
 

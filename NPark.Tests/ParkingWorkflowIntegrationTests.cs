@@ -53,12 +53,13 @@ public sealed class SqlBrokerFactAttribute : FactAttribute
     }
 }
 
-public sealed class ParkingWorkflowIntegrationTests
+public sealed partial class ParkingWorkflowIntegrationTests
 {
     [SqlBrokerFact]
-    public async Task OvernightPaymentsSettleIndependentlyAndLateAckArchivesExactlyOnce()
+    public async Task OvernightRenewalAcrossMidnightAndLateAckArchiving()
     {
-        await using var fixture = await Fixture.StartAsync();
+        var time = new ManualParkingTime(new DateTimeOffset(2026, 11, 24, 10, 0, 0, TimeSpan.Zero));
+        await using var fixture = await Fixture.StartAsync(time);
         using var simulator = new MqttFactory().CreateMqttClient();
         var exitFrame = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         var publishCount = 0;
@@ -74,53 +75,96 @@ public sealed class ParkingWorkflowIntegrationTests
             MqttQualityOfServiceLevel.AtLeastOnce).Build());
 
         var data = await fixture.SeedAsync();
-        Assert.Equal("OvernightPenaltyRequired", (await fixture.SendAsync(
-            new ValidateExitByVehicleNumberQuery("TEST 123"), data.ExitGate, data.ExitCashier, "ExitCashier")).Value.ReasonCode);
+        var originalDate = new DateOnly(2026, 11, 23);
+        var firstDay = new DateOnly(2026, 11, 24);
+        var secondDay = new DateOnly(2026, 11, 25);
+        Assert.Equal(originalDate, DateOnly.FromDateTime(data.StartDate));
 
-        var ordinary = new CreateTicketExceedTransactionCommand
-            { TicketId = data.TicketId, SanctionIds = [data.OrdinaryId], IdempotencyKey = "ordinary" };
-        var first = await fixture.SendAsync(ordinary, data.ExitGate, data.ExitCashier, "ExitCashier");
-        first.ThrowIfFailed();
-        Assert.Equal(25, first.Value.ExceedAmount);
-        Assert.Equal(45, first.Value.TotalPriceAfterExceed);
-        var repeated = await fixture.SendAsync(ordinary, data.ExitGate, data.ExitCashier, "ExitCashier");
-        Assert.Equal(first.Value.TicketExceedTransactionId, repeated.Value.TicketExceedTransactionId);
-        Assert.Equal(DateOnly.FromDateTime(data.StartDate), repeated.Value.ValidExitDate);
-
-        var overnight = new CreateTicketExceedTransactionCommand
-            { TicketId = data.TicketId, SanctionIds = [data.OvernightId], IdempotencyKey = "overnight" };
-        var second = await fixture.SendAsync(overnight, data.ExitGate, data.ExitCashier, "ExitCashier");
-        second.ThrowIfFailed();
-        Assert.Equal(50, second.Value.ExceedAmount);
-        Assert.Equal(95, second.Value.TotalPriceAfterExceed);
-        Assert.Equal(first.Value.TicketInfo, second.Value.TicketInfo);
-
-        var assessed = await fixture.SendAsync(new ValidateExitByTextCommand { Text = second.Value.TicketInfo! },
-            data.ExitGate, data.ExitCashier, "ExitCashier");
-        Assert.True(assessed.Value.IsValidForExit);
-
-        var duplicate = await fixture.SendAsync(overnight with { IdempotencyKey = "another-charge" },
-            data.ExitGate, data.ExitCashier, "ExitCashier");
-        Assert.True(duplicate.IsFailure);
-
-        var sanctions = await fixture.SendAsync(new CollectTicketExceedTransactionCommand(),
-            data.ExitGate, data.Supervisor, "Supervisor");
-        sanctions.ThrowIfFailed();
-        Assert.Equal(2, sanctions.Value.TotalTransactionsCollected);
-        Assert.Equal(75, sanctions.Value.TotalExceedAmountCollected);
-        Assert.All(sanctions.Value.TicketExceedCollectDetails, item => Assert.Equal(data.ExitCashier, item.ResponsibleUserId));
-
-        var baseCollection = await fixture.SendAsync(new CollectEnterTicketsCommand(),
-            data.EntryGate, data.Supervisor, "Supervisor");
-        baseCollection.ThrowIfFailed();
-        Assert.Equal(20, baseCollection.Value.TotalOriginalPriceCollected);
-
+        var qrText = await fixture.GetTicketQrAsync(data.TicketId);
+        var scan = new ValidateExitByTextCommand { Text = qrText };
         var exitRequest = new ExitTicketCommand { TicketId = data.TicketId };
         var qrRequest = new ProcessMqttExitPacketCommand
         {
             DeviceId = "54321",
-            PayloadBytes = System.Text.Encoding.ASCII.GetBytes(second.Value.TicketInfo!)
+            PayloadBytes = System.Text.Encoding.ASCII.GetBytes(qrText)
         };
+        var initial = await fixture.SendAsync(scan, data.ExitGate, data.ExitCashier, "ExitCashier");
+        Assert.Equal("OvernightPenaltyRequired", initial.Value.ReasonCode);
+        Assert.False(initial.Value.RequiresBasePayment);
+        Assert.True(initial.Value.RequiresOvernightPenalty);
+        Assert.Equal(0, initial.Value.Eligibility!.RequiredOvernightAmount);
+        var blockedHttp = await fixture.ExecuteProblemAsync(
+            await fixture.ExitHttpAsync(exitRequest, data.ExitGate, data.ExitCashier));
+        Assert.Equal(409, blockedHttp.Status);
+        Assert.Contains("OvernightPenaltyRequired", blockedHttp.Body);
+        var blockedMqtt = await fixture.SendAsync(qrRequest, data.ExitGate, data.ExitCashier, "ExitCashier");
+        Assert.Equal("OvernightPenaltyRequired", blockedMqtt.Value.ErrorCode);
+        Assert.Null(blockedMqtt.Value.OperationId);
+
+        var payment = new CreateTicketExceedTransactionCommand
+        {
+            TicketId = data.TicketId,
+            SanctionIds = [data.CatalogSanctionId],
+            IdempotencyKey = "november-24-payment",
+            ExpectedAmount = 50,
+            ExpectedValidExitDate = originalDate
+        };
+        var first = await fixture.PayAsync(payment, data);
+        first.ThrowIfFailed();
+        Assert.Equal(50, first.Value.ExceedAmount);
+        Assert.Equal(50, first.Value.ExceedPrice);
+        Assert.Equal(20, first.Value.TicketPrice);
+        Assert.Equal(70, first.Value.TotalPriceAfterExceed);
+        Assert.Equal(70, first.Value.PaidAmount);
+        Assert.Equal(0, first.Value.OutstandingAmount);
+        Assert.Equal("Confirmed", first.Value.PaymentStatus);
+        Assert.Equal(firstDay, first.Value.ValidExitDate);
+        Assert.Equal(data.TicketId, first.Value.TicketId);
+        Assert.Equal(qrText, first.Value.TicketInfo);
+
+        var midnight = fixture.Clock.ToUtc(secondDay.ToDateTime(TimeOnly.MinValue));
+        time.SetUtc(new DateTimeOffset(midnight.AddSeconds(-1)));
+        var beforeMidnight = await fixture.SendAsync(scan, data.ExitGate, data.ExitCashier, "ExitCashier");
+        Assert.Equal("Eligible", beforeMidnight.Value.ReasonCode);
+        Assert.False(beforeMidnight.Value.RequiresOvernightPenalty);
+        Assert.Equal(firstDay, beforeMidnight.Value.ValidExitDate);
+        Assert.Equal(data.StartDate, beforeMidnight.Value.StartDate);
+
+        time.SetUtc(new DateTimeOffset(midnight));
+        var afterMidnight = await fixture.SendAsync(scan, data.ExitGate, data.ExitCashier, "ExitCashier");
+        Assert.Equal("OvernightPenaltyRequired", afterMidnight.Value.ReasonCode);
+        var replay = await fixture.PayAsync(payment, data);
+        replay.ThrowIfFailed();
+        Assert.Equal(first.Value.TicketExceedTransactionId, replay.Value.TicketExceedTransactionId);
+        Assert.Equal(50, replay.Value.ExceedPrice);
+        Assert.Equal(firstDay, replay.Value.ValidExitDate);
+        var stillOverdue = await fixture.SendAsync(scan, data.ExitGate, data.ExitCashier, "ExitCashier");
+        Assert.Equal("OvernightPenaltyRequired", stillOverdue.Value.ReasonCode);
+
+        var second = await fixture.PayAsync(payment with
+        {
+            IdempotencyKey = "november-25-payment",
+            ExpectedValidExitDate = firstDay
+        }, data);
+        second.ThrowIfFailed();
+        Assert.NotEqual(first.Value.TicketExceedTransactionId, second.Value.TicketExceedTransactionId);
+        Assert.Equal(100, second.Value.ExceedPrice);
+        Assert.Equal(120, second.Value.TotalPriceAfterExceed);
+        Assert.Equal(secondDay, second.Value.ValidExitDate);
+        Assert.Equal(qrText, second.Value.TicketInfo);
+
+        var eligible = await fixture.SendAsync(scan, data.ExitGate, data.ExitCashier, "ExitCashier");
+        Assert.Equal("Eligible", eligible.Value.ReasonCode);
+        await using (var beforeExit = fixture.OpenDb())
+        {
+            Assert.False(await beforeExit.Set<GateOperation>().AnyAsync());
+            Assert.False(await beforeExit.Set<TicketCollectionTransaction>().AnyAsync());
+            var coverage = await beforeExit.Set<OvernightPenaltyCoverage>().OrderBy(x => x.BusinessDate).ToListAsync();
+            Assert.Equal(new[] { firstDay, secondDay }, coverage.Select(x => x.BusinessDate));
+            Assert.Equal(first.Value.TicketExceedTransactionId, coverage[0].PaymentId);
+            Assert.Equal(second.Value.TicketExceedTransactionId, coverage[1].PaymentId);
+        }
+
         var httpTask = fixture.ExitHttpAsync(exitRequest, data.ExitGate, data.ExitCashier);
         var qrTask = fixture.SendAsync(qrRequest, data.ExitGate, data.ExitCashier, "ExitCashier");
         await Task.WhenAll(httpTask, qrTask);
@@ -138,6 +182,8 @@ public sealed class ParkingWorkflowIntegrationTests
         Assert.Equal(ushort.Parse("54321"), BinaryPrimitives.ReadUInt16BigEndian(frame.AsSpan(1, 2)));
         var command = BinaryPrimitives.ReadUInt64BigEndian(frame.AsSpan(3, 8));
         Assert.Equal(command.ToString(), pending.CommandId);
+        await fixture.WaitForStatusAsync(pending.OperationId, GateOperationStatus.Published);
+        time.Advance(TimeSpan.FromSeconds(3));
         await fixture.WaitForStatusAsync(pending.OperationId, GateOperationStatus.TimedOut);
         await using (var beforeAck = fixture.OpenDb())
         {
@@ -178,11 +224,33 @@ public sealed class ParkingWorkflowIntegrationTests
         Assert.Equal(data.UniqueCode, archive.UniqueCode);
         Assert.Equal(pending.OperationId, archive.ExitOperationId);
         Assert.Equal(firstAck, (await afterAck.Set<GateOperation>().SingleAsync(x => x.Id == pending.OperationId)).AcknowledgedAtUtc);
-        Assert.Equal(95, archive.TotalPrice);
-        Assert.Equal(data.Supervisor, archive.CollectedBy);
+        Assert.Equal(120, archive.TotalPrice);
+        Assert.Equal(secondDay, archive.ValidExitDate);
+        Assert.Null(archive.CollectedBy);
         Assert.Single(archive.TicketArchiveAttachments);
         Assert.False(await afterAck.Set<Ticket>().AnyAsync(x => x.Id == data.TicketId));
-        Assert.Equal(3, await afterAck.Set<TicketCollectionTransactionTicket>().CountAsync(x => x.TicketIdSnapshot == data.TicketId));
+        var archivedLookup = await fixture.SendAsync(scan, data.ExitGate, data.ExitCashier, "ExitCashier");
+        Assert.Equal("TicketArchived", archivedLookup.Value.ReasonCode);
+        Assert.False(archivedLookup.Value.IsValidForExit);
+
+        var sanctions = await fixture.SendAsync(new CollectTicketExceedTransactionCommand(),
+            data.ExitGate, data.Supervisor, "Supervisor");
+        sanctions.ThrowIfFailed();
+        Assert.Equal(2, sanctions.Value.TotalTransactionsCollected);
+        Assert.Equal(100, sanctions.Value.TotalExceedAmountCollected);
+        Assert.All(sanctions.Value.TicketExceedCollectDetails, item => Assert.Equal(data.ExitCashier, item.ResponsibleUserId));
+        var baseCollection = await fixture.SendAsync(new CollectEnterTicketsCommand(),
+            data.EntryGate, data.Supervisor, "Supervisor");
+        baseCollection.ThrowIfFailed();
+        Assert.Equal(20, baseCollection.Value.TotalOriginalPriceCollected);
+        Assert.Equal(120, baseCollection.Value.TotalOriginalPriceCollected + sanctions.Value.TotalExceedAmountCollected);
+        var snapshots = await afterAck.Set<TicketCollectionTransactionTicket>()
+            .Where(x => x.TicketIdSnapshot == data.TicketId).ToListAsync();
+        Assert.Equal(3, snapshots.Count);
+        Assert.Equal(data.TicketId, Assert.Single(snapshots.Where(x => x.FinancialItemType == FinancialItemType.BaseTicketPayment)).SourceRecordId);
+        Assert.Equal(
+            new[] { first.Value.TicketExceedTransactionId, second.Value.TicketExceedTransactionId }.Order(),
+            snapshots.Where(x => x.FinancialItemType == FinancialItemType.ExceedPayment).Select(x => x.SourceRecordId).Order());
         Assert.Equal(1, Volatile.Read(ref publishCount));
         Assert.True((await fixture.SendAsync(new CollectEnterTicketsCommand(),
             data.EntryGate, data.Supervisor, "Supervisor")).IsFailure);
@@ -339,14 +407,14 @@ public sealed class ParkingWorkflowIntegrationTests
         private readonly IHost host;
         private readonly string connection;
         public int Port { get; }
-        public ParkingBusinessClock Clock => new(TimeProvider.System,
-            Microsoft.Extensions.Options.Options.Create(new NPark.Application.Options.ParkingBusinessOptions()));
+        public ParkingBusinessClock Clock { get; }
 
-        private Fixture(IHost host, string connection, int port)
+        private Fixture(IHost host, string connection, int port, TimeProvider time)
         {
             this.host = host;
             this.connection = connection;
             Port = port;
+            Clock = new(time, Microsoft.Extensions.Options.Options.Create(new NPark.Application.Options.ParkingBusinessOptions()));
         }
 
         public NParkDBContext OpenDb() => OpenDb(connection);
@@ -354,21 +422,19 @@ public sealed class ParkingWorkflowIntegrationTests
         private static NParkDBContext OpenDb(string connection) =>
             new(new DbContextOptionsBuilder<NParkDBContext>().UseSqlServer(connection).Options);
 
-        public static async Task<Fixture> StartAsync()
+        public static async Task<Fixture> StartAsync(TimeProvider? time = null, bool seedCatalog = true,
+            bool includeObsoleteSettings = false)
         {
-            var port = int.Parse(Environment.GetEnvironmentVariable("NPARK_TEST_MQTT_PORT")!);
+            var port = int.TryParse(Environment.GetEnvironmentVariable("NPARK_TEST_MQTT_PORT"), out var configuredPort)
+                ? configuredPort : 1;
             var builder = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NPARK_TEST_SQL"))
                 { InitialCatalog = "NParkV2Test_" + Guid.NewGuid().ToString("N") };
             var sql = builder.ConnectionString;
             await using var db = OpenDb(sql);
             await db.Database.MigrateAsync();
 
-            var sanction = Sanction.Create("Test overnight", "", 50);
-            db.Add(sanction);
-            await db.SaveChangesAsync();
-
             var hostBuilder = Host.CreateApplicationBuilder();
-            hostBuilder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            var settings = new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Database"] = sql,
                 ["Mqtt:Host"] = "127.0.0.1",
@@ -378,18 +444,40 @@ public sealed class ParkingWorkflowIntegrationTests
                 ["MqttHeartbeat:Enabled"] = "false",
                 ["MqttNetworkSubscriber:Enabled"] = "false",
                 ["GateOperation:RecoveryIntervalSeconds"] = "1",
-                ["GateOperation:AckTimeoutSeconds"] = "2",
-                ["OvernightParking:OvernightSanctionId"] = sanction.Id.ToString()
-            });
+                ["GateOperation:AckTimeoutSeconds"] = "2"
+            };
+            if (includeObsoleteSettings)
+            {
+                settings["OvernightParking:PenaltyMode"] = "obsolete";
+                settings["OvernightParking:OvernightSanctionId"] = Guid.NewGuid().ToString();
+            }
+            hostBuilder.Configuration.AddInMemoryCollection(settings);
             hostBuilder.Services.AddHttpContextAccessor();
             NPark.Application.Bootstrap.Bootstrap.AddApplicationBootstrap(hostBuilder.Services);
             NPark.Infrastructure.Bootstrap.Bootstrap.InfrastructureInjection(hostBuilder.Services, hostBuilder.Configuration);
+            hostBuilder.Services.AddSingleton(time ?? TimeProvider.System);
             hostBuilder.Services.AddSingleton<IRealtimeNotifier, TestNotifications>();
             hostBuilder.Services.AddSingleton<IMqttCaptureSignalRNotifier, TestNotifications>();
             hostBuilder.Services.AddTransient<IRequestHandler<RollbackProbe, Result<int>>, RollbackProbeHandler>();
             var host = hostBuilder.Build();
             await host.StartAsync();
-            return new(host, sql, port);
+            return new(host, sql, port, time ?? TimeProvider.System) { SeedCatalog = seedCatalog };
+        }
+
+        private bool SeedCatalog { get; init; }
+
+        public Task<Result<CreateTicketExceedTransactionCommandResponse>> PayAsync(
+            CreateTicketExceedTransactionCommand request, Seed data) =>
+            SendAsync(request, data.ExitGate, data.ExitCashier, "ExitCashier");
+
+        public async Task<string> GetTicketQrAsync(Guid ticketId)
+        {
+            await using var db = OpenDb();
+            await using var scope = host.Services.CreateAsyncScope();
+            var verification = scope.ServiceProvider.GetRequiredService<IByteVerificationService>();
+            var ticket = await db.Set<Ticket>().SingleAsync(x => x.Id == ticketId);
+            return Convert.ToHexString(ticket.UniqueGuidPart.Concat(
+                [verification.GenerateComplexByte5FromGuid(ticket.UniqueGuidPart)]).ToArray());
         }
 
         public async Task<T> SendAsync<T>(IRequest<T> request, Guid gate, Guid user, string role)
@@ -413,6 +501,16 @@ public sealed class ParkingWorkflowIntegrationTests
                 return await controller.ExitTicket(request, CancellationToken.None);
             }
             finally { http.HttpContext = null; }
+        }
+
+        public async Task<(int Status, string Body)> ExecuteProblemAsync(IActionResult result)
+        {
+            await using var scope = host.Services.CreateAsyncScope();
+            using var body = new MemoryStream();
+            var http = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+            http.Response.Body = body;
+            await result.ExecuteResultAsync(new ActionContext(http, new(), new()));
+            return (http.Response.StatusCode, System.Text.Encoding.UTF8.GetString(body.ToArray()));
         }
 
         private static HttpContext Context(Guid gate, Guid user, string role)
@@ -439,7 +537,10 @@ public sealed class ParkingWorkflowIntegrationTests
             var exitCashier = NewUser("test-exit", SystemRoles.ExitCashierRoleId);
             var supervisor = NewUser("test-supervisor", SystemRoles.SupervisorRoleId);
             var ordinary = Sanction.Create("Test ordinary", "", 25);
-            db.AddRange(entry, exit, entryCashier, exitCashier, supervisor, ordinary);
+            var catalogSanction = Sanction.Create("Test catalog sanction", "", 50);
+            db.AddRange(entry, exit, entryCashier, exitCashier, supervisor);
+            if (SeedCatalog)
+                db.AddRange(ordinary, catalogSanction);
             await db.SaveChangesAsync();
             using var scope = host.Services.CreateScope();
             var clock = scope.ServiceProvider.GetRequiredService<ParkingBusinessClock>();
@@ -451,8 +552,8 @@ public sealed class ParkingWorkflowIntegrationTests
             ticket.ConfirmEntry(clock.UtcNow.AddDays(-1));
             db.Add(ticket);
             await db.SaveChangesAsync();
-            var overnight = await db.Set<Sanction>().SingleAsync(x => x.Name == "Test overnight");
-            return new(entry.Id, exit.Id, entryCashier.Id, exitCashier.Id, supervisor.Id, ticket.Id, ticket.UniqueCode, start, ordinary.Id, overnight.Id);
+            return new(entry.Id, exit.Id, entryCashier.Id, exitCashier.Id, supervisor.Id,
+                ticket.Id, ticket.UniqueCode, start, ordinary.Id, catalogSanction.Id);
         }
 
         public async Task WaitForStatusAsync(Guid id, GateOperationStatus status)
@@ -490,7 +591,17 @@ public sealed class ParkingWorkflowIntegrationTests
     }
 
     private sealed record Seed(Guid EntryGate, Guid ExitGate, Guid EntryCashier, Guid ExitCashier, Guid Supervisor,
-        Guid TicketId, string UniqueCode, DateTime StartDate, Guid OrdinaryId, Guid OvernightId);
+        Guid TicketId, string UniqueCode, DateTime StartDate, Guid OrdinaryId, Guid CatalogSanctionId);
+
+    private sealed class ManualParkingTime(DateTimeOffset initial) : TimeProvider
+    {
+        private long utcTicks = initial.UtcTicks;
+
+        public override DateTimeOffset GetUtcNow() => new(Interlocked.Read(ref utcTicks), TimeSpan.Zero);
+
+        public void SetUtc(DateTimeOffset utc) => Interlocked.Exchange(ref utcTicks, utc.UtcTicks);
+        public void Advance(TimeSpan duration) => Interlocked.Add(ref utcTicks, duration.Ticks);
+    }
 
     private sealed class TestNotifications : IRealtimeNotifier, IMqttCaptureSignalRNotifier
     {

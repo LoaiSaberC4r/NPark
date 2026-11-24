@@ -1,8 +1,6 @@
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
 using BuildingBlock.Domain.Specification;
-using Microsoft.Extensions.Options;
-using NPark.Application.Options;
 using NPark.Domain.Entities;
 using NPark.Domain.Enums;
 using NPark.Domain.Resource;
@@ -13,13 +11,14 @@ public sealed record ExitEligibility(
     bool IsValidForExit, string ReasonCode, DateOnly? ValidExitDate = null,
     bool RequiresOvernightPenalty = false, decimal BasePrice = 0, decimal ExceedPrice = 0,
     decimal PaidAmount = 0, decimal OutstandingAmount = 0, Guid? OperationId = null,
-    decimal RequiredOvernightAmount = 0, bool RequiresBasePayment = false,
+    bool RequiresBasePayment = false,
     bool HasOutstandingSanctions = false, [property: System.Text.Json.Serialization.JsonIgnore] IReadOnlyList<ExitEligibilityFailure>? Reasons = null)
 {
     public string ReasonMessage => WorkflowMessages.Get(ReasonCode);
     public IReadOnlyList<ExitEligibilityFailure> FailureReasons => IsValidForExit ? [] :
         Reasons ?? [new(ReasonCode, ReasonMessage)];
     public Guid? ExistingOperationId => OperationId;
+    public decimal RequiredOvernightAmount => 0;
     public decimal TotalPrice => BasePrice + ExceedPrice;
 }
 
@@ -59,7 +58,7 @@ public sealed class TicketExitEligibilityService(
 
         var payment = await GetBalanceAsync(db, ticket, ct);
         var businessDate = clock.BusinessDate;
-        var required = await overnight.GetRequirementAsync(ticket, businessDate, ct);
+        var requiresOvernightPenalty = overnight.RequiresPenalty(ticket, businessDate);
         var operation = await FindReservationAsync(db, ticket.Id, ct);
         var gate = gateId is Guid id ? await db.Repository<ParkingGate>().GetByIdAsync(id, ct) : null;
         var archived = await db.AnyWithSpecAsync(new Matching<TicketArchive>(x => x.Id == ticket.Id), ct);
@@ -78,16 +77,13 @@ public sealed class TicketExitEligibilityService(
         Add(operation != null, "GateOperationPending");
         Add(ticket.EntryConfirmationStatus == EntryConfirmationStatus.Pending, "EntryNotConfirmed");
         Add(!ticket.IsCashierCollected, "BasePaymentRequired");
-        if (required.Error != null)
-            Add(true, required.Error.Code);
-        else
-            Add(required.Count > 0, "OvernightPenaltyRequired");
+        Add(requiresOvernightPenalty, "OvernightPenaltyRequired");
         Add(ticket.ValidExitDate > businessDate, "InvalidExitDate");
         Add(unpaidSanction, "SanctionPaymentRequired");
 
         return new(failures.Count == 0, failures.FirstOrDefault()?.Code ?? "Eligible",
-            ticket.ValidExitDate, required.Count > 0, ticket.Price, ticket.ExceedPrice,
-            payment.Paid, payment.Outstanding, operation?.Id, required.Count * (required.Sanction?.Amount ?? 0),
+            ticket.ValidExitDate, requiresOvernightPenalty, ticket.Price, ticket.ExceedPrice,
+            payment.Paid, payment.Outstanding, operation?.Id,
             !ticket.IsCashierCollected, unpaidSanction, failures);
     }
 

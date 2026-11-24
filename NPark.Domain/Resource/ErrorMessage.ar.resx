@@ -659,9 +659,6 @@
   <data name="ParkingWorkflow_OvernightPenaltyRequired" xml:space="preserve">
     <value>يجب دفع غرامة المبيت.</value>
   </data>
-  <data name="ParkingWorkflow_OvernightPenaltyConfigurationMissing" xml:space="preserve">
-    <value>إعداد غرامة المبيت غير مكتمل.</value>
-  </data>
   <data name="ParkingWorkflow_EntryNotConfirmed" xml:space="preserve">
     <value>لم يتم تأكيد فتح بوابة الدخول.</value>
   </data>
@@ -685,5 +682,26 @@
   </data>
   <data name="ParkingWorkflow_InvalidExitGate" xml:space="preserve">
     <value>بوابة الخروج غير صالحة.</value>
+  </data>
+  <data name="ParkingWorkflow_Payment.ExpectedAmountRequired" xml:space="preserve">
+    <value>أكد مبلغ الغرامة المعروض قبل تسجيل الدفع.</value>
+  </data>
+  <data name="ParkingWorkflow_Payment.AmountChanged" xml:space="preserve">
+    <value>تغير مبلغ الغرامة. حدّث العرض وأكد المبلغ الجديد.</value>
+  </data>
+  <data name="ParkingWorkflow_Payment.AmountMustBePositive" xml:space="preserve">
+    <value>يجب أن يكون إجمالي الغرامات المختارة أكبر من صفر.</value>
+  </data>
+  <data name="ParkingWorkflow_Payment.IdempotencyKeyRequired" xml:space="preserve">
+    <value>استخدم مفتاح دفع ثابتًا لتجديد صلاحية الخروج المنتهية.</value>
+  </data>
+  <data name="ParkingWorkflow_Payment.IdempotencyConflict" xml:space="preserve">
+    <value>مفتاح الدفع هذا مستخدم لعملية دفع مختلفة.</value>
+  </data>
+  <data name="ParkingWorkflow_Payment.ValidityChanged" xml:space="preserve">
+    <value>تغيرت صلاحية التذكرة أو جُددت اليوم. أعد التحقق قبل تأكيد الدفع.</value>
+  </data>
+  <data name="ParkingWorkflow_Sanction.InvalidAmount" xml:space="preserve">
+    <value>إحدى الغرامات المختارة لها مبلغ غير صالح.</value>
   </data>
 </root>
