@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -32,6 +32,9 @@ namespace NPark.Application.Feature.Reports.Query.GetEntranceCashierTicketsRepor
     {
         public int TotalEnteredTicketsCount { get; init; }
 
+        public int PendingEntryTicketsCount { get; init; }
+        public int AcknowledgedExitPendingArchiveCount { get; init; }
+        public decimal ConfirmedBasePaidToCashier { get; init; }
         public int InsideParkTicketsCount { get; init; }
         public int OutsideParkTicketsCount { get; init; }
 
@@ -101,7 +104,7 @@ namespace NPark.Application.Feature.Reports.Query.GetEntranceCashierTicketsRepor
 
         public Guid? CollectedBy { get; init; }
         public string? CollectorName { get; init; }
-        public DateTime CollectedDate { get; init; }
+        public DateTime? CollectedDate { get; init; }
 
         public IReadOnlyList<TicketArchiveAttachmentResponse> Attachments { get; init; }
             = Array.Empty<TicketArchiveAttachmentResponse>();

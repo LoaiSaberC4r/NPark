@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MQTTnet;
 using MQTTnet.Client;
@@ -49,7 +49,9 @@ namespace NPark.Infrastructure.Services
                 .WithRetainFlag(options.Retain)
                 .Build();
 
-            await _client.PublishAsync(message, ct);
+            var result = await _client.PublishAsync(message, ct);
+            if (!result.IsSuccess)
+                throw new InvalidOperationException($"MQTT publication was rejected with result {result.ReasonCode}.");
 
             _logger.LogInformation(
                 "MQTT message published. Topic={Topic}, Qos={Qos}, Retain={Retain}, PayloadSize={PayloadSize}",

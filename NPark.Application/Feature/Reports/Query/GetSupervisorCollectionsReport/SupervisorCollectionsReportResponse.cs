@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -70,6 +70,7 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionsReport
 
         public decimal SupervisorExceedCollectionsAmount { get; init; }
 
+        public bool PendingExceedSummaryIsGlobal => true;
         public int PendingExceedCollectionsCount { get; init; }
 
         public decimal PendingExceedCollectionsAmount { get; init; }
@@ -110,6 +111,9 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionsReport
 
         public string? CollectorName { get; init; }
 
+        public Guid? ResponsibleCashierId { get; init; }
+        public Guid? PaymentGateId { get; init; }
+
         public decimal CollectionAmount { get; init; }
 
         public string? VehicleNumber { get; init; }
@@ -135,11 +139,14 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionsReport
 
         public DateTime EndDate { get; init; }
 
-        public DateTime CollectedDate { get; init; }
+        public DateTime? CollectedDate { get; init; }
 
         public Guid? CollectedBy { get; init; }
 
         public string? CollectorName { get; init; }
+
+        public Guid? ResponsibleCashierId { get; init; }
+        public Guid? PaymentGateId { get; init; }
 
         public decimal CollectionAmount { get; init; }
 

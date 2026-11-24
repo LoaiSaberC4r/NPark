@@ -1,5 +1,6 @@
-﻿using BuildingBlock.Domain.Specification;
+using BuildingBlock.Domain.Specification;
 using NPark.Domain.Entities;
+using NPark.Domain.Enums;
 
 namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTickets
 {
@@ -10,7 +11,9 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
             Include(t => t.User);
 
             AddCriteria(t =>
-                t.GateId == gateId &&
+                (t.BasePaymentGateId ?? t.GateId) == gateId &&
+                (t.PricingModeSnapshot == null || t.PricingModeSnapshot == PriceType.Enter) &&
+                t.IsCashierCollected && t.Price > 0 &&
                 t.CollectedBy == null &&
                 t.IsCollected == false);
         }

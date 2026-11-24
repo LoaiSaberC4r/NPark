@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -644,5 +644,44 @@
   </data>
   <data name="User_MustBeSupervisor" xml:space="preserve">
     <value>User must be a supervisor.</value>
+  </data>
+  <data name="ParkingWorkflow_Eligible" xml:space="preserve">
+    <value>Ticket is eligible for exit.</value>
+  </data>
+  <data name="ParkingWorkflow_BasePaymentRequired" xml:space="preserve">
+    <value>Confirm the base parking fee payment.</value>
+  </data>
+  <data name="ParkingWorkflow_SanctionPaymentRequired" xml:space="preserve">
+    <value>Sanction payments are outstanding.</value>
+  </data>
+  <data name="ParkingWorkflow_OvernightPenaltyRequired" xml:space="preserve">
+    <value>The overnight penalty is due.</value>
+  </data>
+  <data name="ParkingWorkflow_OvernightPenaltyConfigurationMissing" xml:space="preserve">
+    <value>The required overnight sanction is not configured.</value>
+  </data>
+  <data name="ParkingWorkflow_EntryNotConfirmed" xml:space="preserve">
+    <value>Entry gate opening is awaiting confirmation.</value>
+  </data>
+  <data name="ParkingWorkflow_GateOperationPending" xml:space="preserve">
+    <value>A gate operation is unresolved.</value>
+  </data>
+  <data name="ParkingWorkflow_TicketAlreadyExited" xml:space="preserve">
+    <value>The ticket has already exited.</value>
+  </data>
+  <data name="ParkingWorkflow_TicketArchived" xml:space="preserve">
+    <value>The ticket has already been archived.</value>
+  </data>
+  <data name="ParkingWorkflow_InvalidExitDate" xml:space="preserve">
+    <value>The ticket is not valid on the current business date.</value>
+  </data>
+  <data name="ParkingWorkflow_AmbiguousTicket" xml:space="preserve">
+    <value>There is more than one matching active ticket.</value>
+  </data>
+  <data name="ParkingWorkflow_EntryNotAuthorized" xml:space="preserve">
+    <value>Entry is unavailable for this ticket and gate.</value>
+  </data>
+  <data name="ParkingWorkflow_InvalidExitGate" xml:space="preserve">
+    <value>The selected gate cannot authorize exit.</value>
   </data>
 </root>

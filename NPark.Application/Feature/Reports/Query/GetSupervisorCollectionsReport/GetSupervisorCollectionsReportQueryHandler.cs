@@ -1,4 +1,4 @@
-﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
 using NPark.Domain.Entities;
@@ -65,11 +65,11 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionsReport
             var toDateExclusive = toDate.AddDays(1);
 
             var activeTicketCollections = await _ticketRepository.ListWithSpecAsync(
-                new GetActiveTicketCollectionsSpec(fromDate, toDateExclusive),
+                new GetActiveTicketCollectionsSpec(request.SupervisorId, fromDate, toDateExclusive),
                 cancellationToken);
 
             var archivedTicketCollections = await _ticketArchiveRepository.ListWithSpecAsync(
-                new GetArchivedTicketCollectionsSpec(fromDate, toDateExclusive),
+                new GetArchivedTicketCollectionsSpec(request.SupervisorId, fromDate, toDateExclusive),
                 cancellationToken);
 
             var supervisorExceedCollections = await _ticketExceedTransactionRepository.ListWithSpecAsync(
@@ -88,6 +88,9 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionsReport
 
             var archivedTickets = archivedTicketCollections?.ToList()
                 ?? new List<ArchivedTicketCollectionResponse>();
+
+            var archivedIds = archivedTickets.Select(x => x.TicketId).ToHashSet();
+            activeTickets.RemoveAll(x => archivedIds.Contains(x.TicketId));
 
             var collectedExceeds = supervisorExceedCollections?.ToList()
                 ?? new List<SupervisorExceedCollectionResponse>();

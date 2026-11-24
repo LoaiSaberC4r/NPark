@@ -1,26 +1,24 @@
-﻿using BuildingBlock.Domain.Specification;
+using BuildingBlock.Domain.Specification;
 using NPark.Application.Feature.TicketsManagement.Query.GetExitTicketForAdmin;
 using NPark.Domain.Entities;
 
 namespace NPark.Application.Specifications.TicketSpecification
 {
-    public sealed class GetAllTicketsExitForTodaySpecification : Specification<Ticket, GetExitTicketForAdminQueryResponse>
+    public sealed class GetAllTicketsExitForTodaySpecification : Specification<TicketArchive, GetExitTicketForAdminQueryResponse>
     {
-        public GetAllTicketsExitForTodaySpecification()
+        public GetAllTicketsExitForTodaySpecification(DateTime start)
         {
-            var date = DateTime.Now.Date;
-            var start = date;
-            var end = date.AddDays(1);
-            AddCriteria(t => t.CreatedOnUtc >= start && t.CreatedOnUtc < end);
-            AddCriteria(x => x.EndDate != null && x.EndDate.HasValue);
+            var end = start.AddDays(1);
+            AddCriteria(t => t.EndDate >= start && t.EndDate < end);
             UseNoTracking();
             Select(x => new GetExitTicketForAdminQueryResponse
             {
                 Id = x.Id,
-                isCollectedByCashier = x.IsCollected,
+                isCollectedByCashier = x.IsCashierCollected,
                 Price = x.Price,
-                TicketNumber = BitConverter.ToString(x.UniqueGuidPart).Replace("-", ""),
-                StartDate = x.CreatedOnUtc,
+                TicketNumber = x.UniqueCode,
+                StartDate = x.StartDate,
+                EndDate = x.EndDate,
                 TicketInfo = x.VehicleNumber
             });
         }

@@ -1,9 +1,10 @@
-﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction;
 
 namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
 {
     public sealed record ValidateExitByTextCommand : ICommand<ValidateExitByTextCommandResponse>
     {
+        internal bool QrOnly { get; init; }
         public string Text { get; init; } = string.Empty;
     }
 }

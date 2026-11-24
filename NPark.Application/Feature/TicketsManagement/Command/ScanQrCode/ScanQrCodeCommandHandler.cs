@@ -1,4 +1,5 @@
-﻿using BuildingBlock.Application.Abstraction;
+using NPark.Application.Services;
+using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
 using NPark.Application.Abstraction.Security;
@@ -11,7 +12,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ScanQrCode
 {
     internal sealed class ScanQrCodeCommandHandler
         (IByteVerificationService _byteVerificationService,
-    IGenericRepository<Ticket> _ticketRepository)
+    IGenericRepository<Ticket> _ticketRepository, ITicketExitEligibilityService eligibility)
         : ICommandHandler<ScanQrCodeCommand, GetExitTicketForAdminQueryResponse>
     {
         public async Task<Result<GetExitTicketForAdminQueryResponse>> Handle(ScanQrCodeCommand request, CancellationToken cancellationToken)
@@ -66,6 +67,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ScanQrCode
             var response = new GetExitTicketForAdminQueryResponse
             {
                 Id = ticketEntity.Id,
+                Eligibility = await eligibility.EvaluateAsync(ticketEntity, null, cancellationToken),
                 Price = ticketEntity.Price,
                 StartDate = ticketEntity.StartDate,
                 isCollectedByCashier = ticketEntity.IsCashierCollected,

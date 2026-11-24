@@ -1,4 +1,4 @@
-﻿namespace NPark.Application.Feature.MqttNetworkManagement
+namespace NPark.Application.Feature.MqttNetworkManagement
 {
     public sealed record MqttCaptureDetectedResponse
     {
@@ -15,6 +15,9 @@
         public string ActualQrHex { get; init; } = string.Empty;
 
         public string QrString { get; init; } = string.Empty;
+
+        public Guid? OperationId { get; init; }
+        public string? OperationStatus { get; init; }
 
         public Guid? TicketId { get; init; }
 

@@ -1,7 +1,8 @@
-﻿namespace NPark.Application.Feature.TicketsManagement.Command.CollectDailyTicket
+namespace NPark.Application.Feature.TicketsManagement.Command.CollectDailyTicket
 {
     public sealed record CollectDailyTicketResponse
     {
+        public Guid TransactionId { get; init; }
         public decimal TotalPriceCollected { get; init; }
         public int TotalTicketsCollected { get; init; }
         public List<TicketCollectDetails> TicketCollectDetails { get; init; } = new();

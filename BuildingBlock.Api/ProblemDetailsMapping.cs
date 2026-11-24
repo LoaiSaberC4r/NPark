@@ -1,4 +1,5 @@
-﻿using BuildingBlock.Domain.Results;
+using IResult = Microsoft.AspNetCore.Http.IResult;
+using BuildingBlock.Domain.Results;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;

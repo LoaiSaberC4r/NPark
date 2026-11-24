@@ -1,4 +1,5 @@
-﻿using BuildingBlock.Domain.EntitiesHelper;
+using NPark.Domain.Enums;
+using BuildingBlock.Domain.EntitiesHelper;
 
 namespace NPark.Domain.Entities
 {
@@ -6,6 +7,16 @@ namespace NPark.Domain.Entities
     {
         private readonly List<TicketArchiveAttachment> _ticketArchiveAttachments = new();
 
+        public DateOnly ValidExitDate { get; private set; }
+        public EntryConfirmationStatus EntryConfirmationStatus { get; private set; }
+        public DateTime? EntryConfirmedAtUtc { get; private set; }
+        public BasePaymentStatus BasePaymentStatus { get; private set; }
+        public DateTime? BasePaymentConfirmedAtUtc { get; private set; }
+        public Guid? BasePaymentCashierId { get; private set; }
+        public Guid? BasePaymentGateId { get; private set; }
+        public PriceType? PricingModeSnapshot { get; private set; }
+        public byte[] RowVersion { get; private set; } = [];
+        public Guid? ExitOperationId { get; private set; }
         public DateTime StartDate { get; private set; }
 
         public DateTime EndDate { get; private set; }
@@ -22,7 +33,7 @@ namespace NPark.Domain.Entities
 
         public bool IsCollected { get; private set; }
 
-        public DateTime CollectedDate { get; private set; }
+        public DateTime? CollectedDate { get; private set; }
 
         public byte[] UniqueGuidPart { get; private set; } = Array.Empty<byte>();
 
@@ -56,25 +67,37 @@ namespace NPark.Domain.Entities
         {
         }
 
-        public static TicketArchive CreateFromTicket(Ticket ticket)
+        public static TicketArchive CreateFromTicket(Ticket ticket, Guid operationId)
         {
             ArgumentNullException.ThrowIfNull(ticket);
+
+            if (ticket.EndDate is null || ticket.ExitGateId is not Guid gateId || gateId == Guid.Empty || operationId == Guid.Empty)
+                throw new InvalidOperationException("A confirmed exit operation is required.");
 
             var ticketArchive = new TicketArchive
             {
                 Id = ticket.Id,
                 StartDate = ticket.StartDate,
-                EndDate = ticket.EndDate ?? DateTime.Now,
+                EndDate = ticket.EndDate.Value,
+                ExitOperationId = operationId,
+                ValidExitDate = ticket.ValidExitDate,
+                EntryConfirmationStatus = ticket.EntryConfirmationStatus,
+                EntryConfirmedAtUtc = ticket.EntryConfirmedAtUtc,
+                BasePaymentStatus = ticket.BasePaymentStatus,
+                BasePaymentConfirmedAtUtc = ticket.BasePaymentConfirmedAtUtc,
+                BasePaymentCashierId = ticket.BasePaymentCashierId,
+                BasePaymentGateId = ticket.BasePaymentGateId,
+                PricingModeSnapshot = ticket.PricingModeSnapshot,
                 Price = ticket.Price,
                 VehicleNumber = ticket.VehicleNumber,
                 ExceedPrice = ticket.ExceedPrice,
                 CollectedBy = ticket.CollectedBy,
                 IsCollected = ticket.IsCollected,
-                CollectedDate = ticket.CollectedDate ?? DateTime.Now,
+                CollectedDate = ticket.CollectedDate,
                 UniqueGuidPart = ticket.UniqueGuidPart,
                 UniqueCode = ticket.UniqueCode,
                 GateId = ticket.GateId,
-                ExitGateId = ticket.ExitGateId ?? Guid.Empty,
+                ExitGateId = gateId,
                 UserId = ticket.UserId,
                 IsCashierCollected = ticket.IsCashierCollected,
 

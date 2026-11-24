@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -53,19 +53,19 @@ namespace NPark.Infrastructure.Services.Mqtt
 
             ConfigureClientHandlers();
 
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await ConnectAndSubscribeAsync(stoppingToken);
-
-                await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                // Normal shutdown.
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "MQTT Network Subscriber stopped unexpectedly.");
+                try
+                {
+                    await ConnectAndSubscribeAsync(stoppingToken);
+                }
+                catch (Exception error) when (!stoppingToken.IsCancellationRequested)
+                {
+                    _logger.LogWarning(error, "MQTT QR capture subscription is unavailable");
+                    if (_client.IsConnected)
+                        await _client.DisconnectAsync(cancellationToken: stoppingToken);
+                }
+                await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, _subscriberOptions.ReconnectSeconds)), stoppingToken);
             }
         }
 
@@ -77,37 +77,12 @@ namespace NPark.Infrastructure.Services.Mqtt
                 {
                     await HandleMessageAsync(args);
                 }
-                catch (Exception ex)
+                catch (OperationCanceledException) when (_stoppingToken.IsCancellationRequested)
                 {
-                    _logger.LogError(ex, "Error while handling MQTT message.");
-                }
-            };
-
-            _client.DisconnectedAsync += async args =>
-            {
-                if (_stoppingToken.IsCancellationRequested)
-                    return;
-
-                _logger.LogWarning(
-                    "MQTT subscriber disconnected. Reason={Reason}. Reconnecting in {ReconnectSeconds} seconds...",
-                    args.Reason,
-                    _subscriberOptions.ReconnectSeconds);
-
-                try
-                {
-                    await Task.Delay(
-                        TimeSpan.FromSeconds(_subscriberOptions.ReconnectSeconds),
-                        _stoppingToken);
-
-                    await ConnectAndSubscribeAsync(_stoppingToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    // Normal shutdown.
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "MQTT subscriber reconnect failed.");
+                    _logger.LogError(ex, "Error while handling MQTT QR capture.");
                 }
             };
         }
@@ -151,7 +126,9 @@ namespace NPark.Infrastructure.Services.Mqtt
                 })
                 .Build();
 
-            await _client.SubscribeAsync(subscribeOptions, cancellationToken);
+            var result = await _client.SubscribeAsync(subscribeOptions, cancellationToken);
+            if (!result.Items.Any(item => (int)item.ResultCode < 128))
+                throw new InvalidOperationException("The broker rejected the MQTT QR capture subscription.");
 
             _logger.LogInformation(
                 "MQTT subscriber connected. Host={Host}, Port={Port}, ClientId={ClientId}, TopicFilter={TopicFilter}",
@@ -186,6 +163,9 @@ namespace NPark.Infrastructure.Services.Mqtt
 
                 return;
             }
+
+            if (args.ApplicationMessage.Retain)
+                return;
 
             var payloadBytes = args.ApplicationMessage.PayloadSegment.ToArray();
             var rawPayloadSpacedHex = ToSpacedHex(payloadBytes);
@@ -264,6 +244,8 @@ namespace NPark.Infrastructure.Services.Mqtt
                     ActualQrHex = ToSpacedHex(workflow.ActualQrHex),
                     QrString = workflow.QrString,
                     TicketId = workflow.TicketId,
+                    OperationId = workflow.OperationId,
+                    OperationStatus = workflow.OperationStatus,
                     IsValidForExit = workflow.IsValidForExit,
                     TicketExited = workflow.TicketExited,
                     GateOpened = workflow.GateOpened,
@@ -295,7 +277,7 @@ namespace NPark.Infrastructure.Services.Mqtt
 
             // Expected:
             // publish/network/{deviceId}
-            if (parts.Length < 3)
+            if (parts.Length != 3)
                 return false;
 
             if (!parts[0].Equals("publish", StringComparison.OrdinalIgnoreCase))

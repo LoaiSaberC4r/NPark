@@ -1,14 +1,21 @@
-﻿using BuildingBlock.Domain.Results;
+using BuildingBlock.Application.Behaviors;
+using BuildingBlock.Domain.Results;
 using MediatR;
 
 namespace BuildingBlock.Application.Abstraction
 {
-    public interface ICommand<TResponse> : IRequest<Result<TResponse>>
+    public interface ICommand<TResponse> : ICommandRequest, IRequest<Result<TResponse>>
     { }
 
     // Command بدون قيمة (نجاح/فشل فقط)
-    public interface ICommand : IRequest<Result>
+    public interface ICommand : ICommandRequest, IRequest<Result>
     { }
+
+    public interface ICommandRequest { }
+
+    public interface ITransactionalCommand : ICommand, ITransactionalRequest { }
+
+    public interface ITransactionalCommand<TResponse> : ICommand<TResponse>, ITransactionalRequest { }
 
     // Query بيرجع قيمة
     public interface IQuery<TResponse> : IRequest<Result<TResponse>>

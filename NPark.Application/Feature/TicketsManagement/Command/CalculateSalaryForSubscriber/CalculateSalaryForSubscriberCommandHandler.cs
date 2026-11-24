@@ -1,4 +1,7 @@
-﻿using BuildingBlock.Application.Abstraction;
+using Microsoft.AspNetCore.Http;
+using NPark.Application.Abstraction.Security;
+using NPark.Application.Services;
+using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
 using Microsoft.Extensions.Logging;
@@ -15,13 +18,22 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalaryFor
     {
         private readonly IGenericRepository<ParkingMemberships> _parkingMembershipsRepository;
         private readonly IGenericRepository<Ticket> _ticketRepository;
+        private readonly ITicketExitEligibilityService _eligibility;
+        private readonly ParkingBusinessClock _clock;
+        private readonly IHttpContextAccessor _http;
+        private readonly ITokenReader _tokens;
         private readonly ILogger<CalculateSalaryForSubscriberCommandHandler> _logger;
 
         public CalculateSalaryForSubscriberCommandHandler(
             IGenericRepository<ParkingMemberships> parkingMembershipsRepository,
             IGenericRepository<Ticket> ticketRepository,
-            ILogger<CalculateSalaryForSubscriberCommandHandler> logger)
+            ILogger<CalculateSalaryForSubscriberCommandHandler> logger, ITicketExitEligibilityService eligibility,
+            ParkingBusinessClock clock, IHttpContextAccessor http, ITokenReader tokens)
         {
+            _eligibility = eligibility;
+            _clock = clock;
+            _http = http;
+            _tokens = tokens;
             _parkingMembershipsRepository = parkingMembershipsRepository
                 ?? throw new ArgumentNullException(nameof(parkingMembershipsRepository));
             _ticketRepository = ticketRepository
@@ -60,7 +72,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalaryFor
                 // ---------------------------
                 // 2) Validate card date (active period)
                 // ---------------------------
-                var now = DateTime.Now;
+                var now = _clock.LocalNow;
 
                 if (now < subscriber.CreatedAt || now >= subscriber.EndDate)
                 {
@@ -98,14 +110,8 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalaryFor
                 // ---------------------------
                 // 4) Build response (subscriber = 0 total salary)
                 // ---------------------------
-                var response = new CalculateSalaryCommandResponse
-                {
-                    EnterDate = ticket.StartDate,
-                    IsCollectByCashier = ticket.IsCashierCollected,
-                    IsExitValid = true,
-                    TotalSalary = 0m,
-                    TicketId = ticket.Id
-                };
+                var assessment = await _eligibility.EvaluateAsync(ticket, _http.HttpContext?.User.GetGateId(_tokens), cancellationToken);
+                var response = CalculateSalaryCommandResponse.From(ticket, assessment);
 
                 return Result<CalculateSalaryCommandResponse>.Ok(response);
             }

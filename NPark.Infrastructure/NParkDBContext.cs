@@ -1,4 +1,4 @@
-﻿using BuildingBlock.Infrastracture.Extensions;
+using BuildingBlock.Infrastracture.Extensions;
 using Microsoft.EntityFrameworkCore;
 
 namespace NPark.Infrastructure
@@ -10,6 +10,7 @@ namespace NPark.Infrastructure
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.HasSequence<long>("GateCommandIds").StartsAt(1).HasMin(1).HasMax(long.MaxValue);
             modelBuilder.ApplySoftDeleteQueryFilter();
             modelBuilder.ApplyConfigurationsFromAssembly(typeof(NParkDBContext).Assembly);
         }

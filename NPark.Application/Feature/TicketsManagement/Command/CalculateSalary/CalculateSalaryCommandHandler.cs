@@ -1,7 +1,10 @@
-﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using NPark.Application.Abstraction.Security;
+using NPark.Application.Services;
 using NPark.Application.Specifications.OrderPriceSchemaSpecification;
 using NPark.Application.Specifications.ParkingSystemConfigurationSpec;
 using NPark.Domain.Entities;
@@ -10,156 +13,62 @@ using NPark.Domain.Resource;
 
 namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
 {
-    public sealed class CalculateSalaryCommandHandler
-       : ICommandHandler<CalculateSalaryCommand, CalculateSalaryCommandResponse>
+    public sealed class CalculateSalaryCommandHandler(IUnitOfWork db, IGenericRepository<OrderPricingSchema> schemas,
+        ILogger<CalculateSalaryCommandHandler> logger, ParkingBusinessClock clock, OvernightPenaltyPolicy overnight,
+        ITicketExitEligibilityService eligibility, IHttpContextAccessor http, ITokenReader tokens)
+        : ICommandHandler<CalculateSalaryCommand, CalculateSalaryCommandResponse>
     {
-        private readonly IGenericRepository<Ticket> _ticketRepository;
-        private readonly IGenericRepository<ParkingSystemConfiguration> _parkingSystemConfigurationRepository;
-        private readonly IGenericRepository<OrderPricingSchema> _orderPricingSchemaRepository;
-        private readonly IGenericRepository<Sanction> _repo;
-
-        private readonly ILogger<CalculateSalaryCommandHandler> _logger;
-
-        public CalculateSalaryCommandHandler(
-            IGenericRepository<Ticket> ticketRepository,
-            IGenericRepository<OrderPricingSchema> orderPricingSchemaRepository,
-            IGenericRepository<Sanction> repo,
-            ILogger<CalculateSalaryCommandHandler> logger,
-            IGenericRepository<ParkingSystemConfiguration> parkingSystemConfigurationRepository)
+        public async Task<Result<CalculateSalaryCommandResponse>> Handle(CalculateSalaryCommand request, CancellationToken ct)
         {
-            _ticketRepository = ticketRepository ?? throw new ArgumentNullException(nameof(ticketRepository));
-            _orderPricingSchemaRepository = orderPricingSchemaRepository ?? throw new ArgumentNullException(nameof(orderPricingSchemaRepository));
-            _parkingSystemConfigurationRepository = parkingSystemConfigurationRepository ?? throw new ArgumentNullException(nameof(parkingSystemConfigurationRepository));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _repo = repo ?? throw new ArgumentNullException(nameof(repo));
-        }
+            var ticket = await db.Repository<Ticket>().GetByIdAsync(request.TicketId, ct);
+            if (ticket is null)
+                return Result<CalculateSalaryCommandResponse>.Fail(TicketExitEligibilityService.AsError("TicketNotFound"));
+            if (ticket.EndDate.HasValue)
+                return Result<CalculateSalaryCommandResponse>.Fail(TicketExitEligibilityService.AsError("TicketAlreadyExited"));
 
-        public async Task<Result<CalculateSalaryCommandResponse>> Handle(
-            CalculateSalaryCommand request,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            try
+            if (!ticket.IsCashierCollected)
             {
-                // ---------------------------
-                // 2) Retrieve Ticket
-                // Unique part = first 4 bytes of QR
-                // ---------------------------
-                var ticketEntity = await _ticketRepository.GetByIdAsync(request.TicketId, cancellationToken);
-                if (ticketEntity is null)
-                {
-                    _logger.LogWarning("Ticket not found for QR bytes.");
+                if (await TicketExitEligibilityService.FindReservationAsync(db, ticket.Id, ct) is { })
+                    return Result<CalculateSalaryCommandResponse>.Fail(TicketExitEligibilityService.AsError("GateOperationPending"));
 
-                    return Result<CalculateSalaryCommandResponse>.Fail(
-                        new Error(
-                            Code: "Ticket.NotFound",
-                            Message: ErrorMessage.Ticket_NotFound,
-                            Type: ErrorType.NotFound));
-                }
-
-                // ---------------------------
-                // 3) Get Parking System Configuration
-                // ---------------------------
-                var configuration = await GetParkingSystemConfiguration(cancellationToken);
+                var configuration = await db.FirstOrDefaultWithSpecAsync(
+                    new GetParkingSystemConfigurationForUpdateSpecification(), ct);
                 if (configuration is null)
-                {
-                    _logger.LogWarning("Parking system configuration not found while calculating salary.");
-
                     return Result<CalculateSalaryCommandResponse>.Fail(
-                        new Error(
-                            Code: "Configuration.NotFound",
-                            Message: ErrorMessage.Configuration_NotFound,
-                            Type: ErrorType.NotFound));
-                }
-
-                // ---------------------------
-                // 4) Calculate Total Salary
-                // ---------------------------
-                var now = DateTime.Now;
-                var duration = now - ticketEntity.StartDate;
-                decimal totalSalary;
-
-                if (configuration.PriceType == PriceType.Enter)
+                        new Error("Configuration.NotFound", ErrorMessage.Configuration_NotFound, ErrorType.NotFound));
+                if ((ticket.PricingModeSnapshot ?? configuration.PriceType) == PriceType.Exit)
                 {
-                    totalSalary = ticketEntity.Price;
+                    var duration = clock.LocalNow - ticket.StartDate;
+                    decimal? price = IsWithinGracePeriod(duration, configuration.GracePeriod) ? 0 :
+                        await CalculateTotalSalaryAsync(duration, ct);
+                    if (price is null)
+                        return Result<CalculateSalaryCommandResponse>.Fail(new Error("PricingSchema.NotConfigured",
+                            ErrorMessage.PricingSchema_NotFound, ErrorType.Conflict));
+                    ticket.SetPrice(price.Value);
                 }
-                else
-                {
-                    if (IsWithinGracePeriod(duration, configuration.GracePeriod))
-                    {
-                        totalSalary = 0m;
-                    }
-                    else
-                    {
-                        totalSalary = await CalculateTotalSalaryAsync(duration, cancellationToken);
-                        if (request.SanctionIds is not null && request.SanctionIds is { Count: > 0 })
-                        {
-                            foreach (var sanction in request.SanctionIds.Distinct())
-                            {
-                                var entity = await _repo.GetByIdAsync(sanction, cancellationToken);
-                                if (entity is null)
-                                {
-                                    return Result<CalculateSalaryCommandResponse>.Fail(new Error(
-                                        Code: "Sanction.NotFound",
-                                        Message: ErrorMessage.Sanction_NotFound,
-                                        Type: ErrorType.NotFound));
-                                }
-                                totalSalary += entity.Amount;
-                            }
-                        }
-                    }
-                }
-
-                // ---------------------------
-                // 5) Set New Price
-                // ---------------------------
-                ticketEntity.SetPrice(totalSalary);
-                await _ticketRepository.SaveChangesAsync(cancellationToken);
-
-                // ---------------------------
-                // 6) Build Response
-                // ---------------------------
-                var response = new CalculateSalaryCommandResponse
-                {
-                    TotalSalary = totalSalary,
-                    EnterDate = ticketEntity.StartDate,
-                    IsCollectByCashier = ticketEntity.IsCashierCollected,
-                    IsExitValid = true,
-                    TicketId = ticketEntity.Id
-                };
-
-                return Result<CalculateSalaryCommandResponse>.Ok(response);
             }
-            catch (OperationCanceledException)
+
+            var quotedSanctions = 0m;
+            var selected = request.SanctionIds?.Distinct() ?? [];
+            var prior = await db.ListWithSpecAsync(new TicketSanctionsSpec(ticket.Id), ct);
+            var applied = prior.SelectMany(x => x.Sanctions).Select(x => x.Id).ToHashSet();
+            foreach (var id in selected)
             {
-                _logger.LogWarning("CalculateSalary operation was canceled.");
-                throw;
+                if (id == overnight.SanctionId || applied.Contains(id))
+                    continue;
+                var sanction = await db.Repository<Sanction>().GetByIdAsync(id, ct);
+                if (sanction is null)
+                    return Result<CalculateSalaryCommandResponse>.Fail(
+                        new Error("Sanction.NotFound", ErrorMessage.Sanction_NotFound, ErrorType.NotFound));
+                quotedSanctions += sanction.Amount;
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error while calculating salary.");
-                return Result<CalculateSalaryCommandResponse>.Fail(
-                    new Error(
-                        Code: "Salary.Calculate.Unexpected",
-                        Message: ErrorMessage.SalaryCalculate_Unexpected,
-                        Type: ErrorType.Infrastructure));
-            }
+
+            var assessment = await eligibility.EvaluateAsync(ticket, http.HttpContext?.User.GetGateId(tokens), ct);
+            return Result<CalculateSalaryCommandResponse>.Ok(
+                CalculateSalaryCommandResponse.From(ticket, assessment, quotedSanctions));
         }
 
-        // --------------------------------------------------------
-        // Helper: Get configuration
-        // --------------------------------------------------------
-        private async Task<ParkingSystemConfiguration?> GetParkingSystemConfiguration(CancellationToken cancellationToken)
-        {
-            var spec = new GetParkingSystemConfigurationForUpdateSpecification();
-            return await _parkingSystemConfigurationRepository.FirstOrDefaultWithSpecAsync(spec, cancellationToken);
-        }
-
-        // --------------------------------------------------------
-        // Helper: Calculate total salary for duration (EXIT pricing)
-        // --------------------------------------------------------
-        private async Task<decimal> CalculateTotalSalaryAsync(
+        private async Task<decimal?> CalculateTotalSalaryAsync(
     TimeSpan duration,
     CancellationToken cancellationToken)
         {
@@ -168,13 +77,13 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
                 return 0m;
             }
 
-            var orderPricingSchemas = await _orderPricingSchemaRepository
+            var orderPricingSchemas = await schemas
                 .ListWithSpecAsync(new OrderPriceSchemaSpec(), cancellationToken);
 
             if (orderPricingSchemas is null || !orderPricingSchemas.Any())
             {
-                _logger.LogWarning("No order pricing schemas found while calculating salary.");
-                return 0m;
+                logger.LogWarning("No order pricing schemas found while calculating salary.");
+                return null;
             }
 
             var orderedSchemas = orderPricingSchemas
@@ -185,8 +94,8 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
 
             if (!orderedSchemas.Any())
             {
-                _logger.LogWarning("No valid pricing schemas (with TotalHours > 0) found.");
-                return 0m;
+                logger.LogWarning("No valid pricing schemas (with TotalHours > 0) found.");
+                return null;
             }
 
             decimal totalSalary = 0m;
@@ -201,7 +110,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
 
                 if (hours <= 0)
                 {
-                    _logger.LogWarning("Single pricing schema has non-positive TotalHours.");
+                    logger.LogWarning("Single pricing schema has non-positive TotalHours.");
                     return 0m;
                 }
 
@@ -238,7 +147,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CalculateSalary
 
             if (lastHours <= 0)
             {
-                _logger.LogWarning("Last pricing schema has non-positive TotalHours.");
+                logger.LogWarning("Last pricing schema has non-positive TotalHours.");
                 return totalSalary;
             }
 

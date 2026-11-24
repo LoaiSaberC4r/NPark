@@ -1,4 +1,4 @@
-﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
 using Microsoft.Extensions.Logging;
@@ -94,6 +94,7 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionReport
                 var responsibleUserIds = transactions
                     .SelectMany(x => x.Lines.Select(line => line.ResponsibleUserId))
                     .Concat(transactions.SelectMany(x => x.Tickets.Select(ticket => ticket.ResponsibleUserId)))
+                    .OfType<Guid>()
                     .Concat(transactions.Select(x => x.CollectedBy))
                     .Append(request.SupervisorId)
                     .Where(id => id != Guid.Empty)
@@ -151,6 +152,8 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionReport
                             .Select(ticket => new SupervisorCollectionTicketReportItem
                             {
                                 ItemId = ticket.Id,
+                                SourceRecordId = ticket.SourceRecordId,
+                                FinancialItemType = ticket.FinancialItemType.ToString(),
                                 ResponsibleUserId = ticket.ResponsibleUserId,
                                 ResponsibleUserName = GetUserName(userNames, ticket.ResponsibleUserId),
                                 Source = ticket.Source.ToString(),
@@ -195,6 +198,8 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionReport
                     TotalEnterTicketsCollected = enterTransactions.Sum(x => x.TotalItemsCollected),
                     TotalEnterTicketsAmount = enterTransactions.Sum(x => x.TotalAmountCollected),
 
+                    TotalExitTicketsCollected = transactions.Where(x => x.Type == TicketCollectionTransactionType.ExitTickets).Sum(x => x.TotalItemsCollected),
+                    TotalExitTicketsAmount = transactions.Where(x => x.Type == TicketCollectionTransactionType.ExitTickets).Sum(x => x.TotalAmountCollected),
                     TotalExceedTransactionsCollected = exceedTransactions.Sum(x => x.TotalItemsCollected),
                     TotalExceedAmount = exceedTransactions.Sum(x => x.TotalAmountCollected),
 
@@ -228,9 +233,9 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionReport
 
         private static string GetUserName(
             IReadOnlyDictionary<Guid, string> userNames,
-            Guid userId)
+            Guid? userId)
         {
-            return userNames.TryGetValue(userId, out var name)
+            return userId is Guid id && userNames.TryGetValue(id, out var name)
                 ? name
                 : string.Empty;
         }

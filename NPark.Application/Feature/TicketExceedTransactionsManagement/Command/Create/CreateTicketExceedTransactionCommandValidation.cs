@@ -1,4 +1,4 @@
-﻿using FluentValidation;
+using FluentValidation;
 using NPark.Domain.Resource;
 
 namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.Create
@@ -11,6 +11,9 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
             RuleFor(x => x.TicketId)
                 .NotEmpty()
                 .WithMessage(ErrorMessage.TicketId_Required);
+
+            RuleFor(x => x.IdempotencyKey).MaximumLength(100)
+                .Must(key => key is null || !string.IsNullOrWhiteSpace(key));
 
             RuleFor(x => x.SanctionIds)
                 .NotNull()

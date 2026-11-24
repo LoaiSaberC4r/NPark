@@ -1,10 +1,16 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Diagnostics;
 
 namespace BuildingBlock.Domain.Results
 {
+    public interface IResult
+    {
+        bool IsSuccess { get; }
+        bool IsFailure { get; }
+    }
+
     [DebuggerDisplay("{DebuggerDisplay,nq}")]
-    public readonly struct Result
+    public readonly struct Result : IResult
     {
         public bool IsSuccess { get; }
         public bool IsFailure => !IsSuccess;
@@ -55,7 +61,7 @@ namespace BuildingBlock.Domain.Results
     }
 
     [DebuggerDisplay("{DebuggerDisplay,nq}")]
-    public readonly struct Result<T>
+    public readonly struct Result<T> : IResult
     {
         public bool IsSuccess { get; }
         public bool IsFailure => !IsSuccess;

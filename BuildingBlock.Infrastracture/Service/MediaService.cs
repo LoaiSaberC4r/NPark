@@ -1,4 +1,4 @@
-﻿using BuildingBlock.Application.Abstraction.Media;
+using BuildingBlock.Application.Abstraction.Media;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
@@ -35,6 +35,14 @@ namespace BuildingBlock.Infrastracture.Service
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error saving file: {FileName}", mediaFile.FileName);
+                try
+                {
+                    Remove(filePath);
+                }
+                catch (Exception cleanup)
+                {
+                    _logger.LogWarning(cleanup, "Could not remove an incomplete upload at {FilePath}", filePath);
+                }
                 throw;
             }
         }
@@ -119,6 +127,12 @@ namespace BuildingBlock.Infrastracture.Service
             {
                 File.Delete(filePath);
             }
+        }
+
+        public void RemoveFromFolder(string fileName, string folderName)
+        {
+            if (!string.IsNullOrEmpty(fileName) && Path.GetFileName(fileName) == fileName)
+                Remove(Path.Combine(_fileSavePath, folderName, fileName));
         }
 
         public void RemoveRange(IEnumerable<string> filePaths)

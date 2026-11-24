@@ -1,9 +1,7 @@
-﻿using BuildingBlock.Application.Repositories;
+using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Specification;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
-using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Concurrent;
 using System.Data;
 
@@ -13,27 +11,18 @@ namespace BuildingBlock.Infrastracture.Repositories
 
     {
         private readonly DbContext _context;
+        private readonly IDbContextProvider _provider;
         private readonly ConcurrentDictionary<Type, object> _repos = new();
 
-        public EfUnitOfWork(IDbContextProvider provider) => _context = provider.Context;
+        public EfUnitOfWork(IDbContextProvider provider)
+        {
+            _provider = provider;
+            _context = provider.Context;
+        }
 
         // ------------ Repositories ------------
         public IGenericRepository<TEntity> Repository<TEntity>() where TEntity : class
-        {
-            var type = typeof(TEntity);
-            if (_repos.TryGetValue(type, out var repo))
-                return (IGenericRepository<TEntity>)repo;
-
-            var closedRepoType = typeof(EfGenericRepository<>).MakeGenericType(typeof(TEntity));
-            var instance = (IGenericRepository<TEntity>)ActivatorUtilities.CreateInstance(
-                _context.GetService<IServiceProvider>(),
-                closedRepoType,
-                _context
-            );
-
-            _repos[type] = instance;
-            return instance;
-        }
+            => (IGenericRepository<TEntity>)_repos.GetOrAdd(typeof(TEntity), _ => new EfGenericRepository<TEntity>(_provider));
 
         // ------------ Save ------------
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

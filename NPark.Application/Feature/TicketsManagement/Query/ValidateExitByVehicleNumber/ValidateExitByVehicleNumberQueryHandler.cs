@@ -1,43 +1,27 @@
-﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
-using NPark.Domain.Entities;
+using NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText;
+using NPark.Application.Services;
 
-namespace NPark.Application.Feature.TicketsManagement.Query.ValidateExitByVehicleNumber
+namespace NPark.Application.Feature.TicketsManagement.Query.ValidateExitByVehicleNumber;
+
+internal sealed class ValidateExitByVehicleNumberQueryHandler(IUnitOfWork db,
+    ITicketExitEligibilityService eligibility)
+    : IQueryHandler<ValidateExitByVehicleNumberQuery, ValidateExitByVehicleNumberQueryResponse>
 {
-    internal sealed class ValidateExitByVehicleNumberQueryHandler
-           : IQueryHandler<ValidateExitByVehicleNumberQuery, ValidateExitByVehicleNumberQueryResponse>
+    public async Task<Result<ValidateExitByVehicleNumberQueryResponse>> Handle(ValidateExitByVehicleNumberQuery request, CancellationToken ct)
     {
-        private readonly IGenericRepository<Ticket> _ticketReadRepository;
-
-        public ValidateExitByVehicleNumberQueryHandler(IGenericRepository<Ticket> repository)
+        var tickets = await db.ListWithSpecAsync(new TicketByVehicleNumberSpecification(request.VehicleNumber), ct);
+        if (tickets.Count > 1)
+            return Result<ValidateExitByVehicleNumberQueryResponse>.Ok(new() { ReasonCode = "AmbiguousTicket" });
+        var ticket = tickets.SingleOrDefault();
+        var assessment = await eligibility.EvaluateAsync(ticket, null, ct);
+        return Result<ValidateExitByVehicleNumberQueryResponse>.Ok(new()
         {
-            _ticketReadRepository = repository ?? throw new ArgumentNullException(nameof(repository));
-        }
-
-        public async Task<Result<ValidateExitByVehicleNumberQueryResponse>> Handle(ValidateExitByVehicleNumberQuery request, CancellationToken cancellationToken)
-        {
-            var normalizedVehicleNumber = request.VehicleNumber.Trim();
-            var now = DateTime.Now;
-            var dayStart = now.Date;
-            var dayEnd = dayStart.AddDays(1);
-
-            var spec = new GetTodayTicketByVehicleNumberSpec(
-         normalizedVehicleNumber,
-         dayStart,
-         dayEnd);
-            var ticket = await _ticketReadRepository.FirstOrDefaultWithSpecAsync(spec, cancellationToken);
-            if (ticket is null)
-            {
-                return Result<ValidateExitByVehicleNumberQueryResponse>.Ok
-                        (new ValidateExitByVehicleNumberQueryResponse
-
-                        { IsValidForExit = false });
-            }
-
-            return Result<ValidateExitByVehicleNumberQueryResponse>.Ok
-                    (new ValidateExitByVehicleNumberQueryResponse
-                    { IsValidForExit = true });
-        }
+            TicketId = ticket?.Id, VehicleNumber = ticket?.VehicleNumber, StartDate = ticket?.StartDate,
+            IsValidForExit = assessment.IsValidForExit,
+            ReasonCode = assessment.ReasonCode, Eligibility = assessment
+        });
     }
 }

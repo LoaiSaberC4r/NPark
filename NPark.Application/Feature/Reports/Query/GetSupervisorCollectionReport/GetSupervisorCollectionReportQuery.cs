@@ -1,4 +1,4 @@
-﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -36,6 +36,9 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionReport
         public int TotalEnterTicketsCollected { get; init; }
 
         public decimal TotalEnterTicketsAmount { get; init; }
+
+        public int TotalExitTicketsCollected { get; init; }
+        public decimal TotalExitTicketsAmount { get; init; }
 
         public int TotalExceedTransactionsCollected { get; init; }
 
@@ -76,7 +79,7 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionReport
 
     public sealed record SupervisorCollectionLineReportItem
     {
-        public Guid ResponsibleUserId { get; init; }
+        public Guid? ResponsibleUserId { get; init; }
 
         public string ResponsibleUserName { get; init; } = string.Empty;
 
@@ -87,9 +90,11 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionReport
 
     public sealed record SupervisorCollectionTicketReportItem
     {
+        public Guid SourceRecordId { get; init; }
+        public string FinancialItemType { get; init; } = string.Empty;
         public Guid ItemId { get; init; }
 
-        public Guid ResponsibleUserId { get; init; }
+        public Guid? ResponsibleUserId { get; init; }
 
         public string ResponsibleUserName { get; init; } = string.Empty;
 

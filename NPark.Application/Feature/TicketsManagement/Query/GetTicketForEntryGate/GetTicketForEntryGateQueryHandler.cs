@@ -1,4 +1,5 @@
-﻿using BuildingBlock.Application.Abstraction;
+using NPark.Application.Services;
+using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
 using Microsoft.AspNetCore.Http;
@@ -10,15 +11,17 @@ namespace NPark.Application.Feature.TicketsManagement.Query.GetTicketForEntryGat
 {
     public sealed class GetTicketForEntryGateQueryHandler : IQueryHandler<GetTicketForEntryGateQuery, GetTicketForEntryGateQueryResponse>
     {
+        private readonly ParkingBusinessClock _clock;
         private readonly IGenericRepository<Ticket> _repo;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly ITokenReader _tokenReader;
 
         public GetTicketForEntryGateQueryHandler(IGenericRepository<Ticket> repository,
-            IHttpContextAccessor httpContextAccessor, ITokenReader tokenReader)
+            IHttpContextAccessor httpContextAccessor, ITokenReader tokenReader, ParkingBusinessClock clock)
         {
             _repo = repository ?? throw new ArgumentNullException(nameof(repository));
             _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
+            _clock = clock;
             _tokenReader = tokenReader ?? throw new ArgumentNullException(nameof(tokenReader));
         }
 
@@ -29,7 +32,7 @@ namespace NPark.Application.Feature.TicketsManagement.Query.GetTicketForEntryGat
             {
                 return Result<GetTicketForEntryGateQueryResponse>.Fail(new Error("GateId not found", "GateId not found", ErrorType.NotFound));
             }
-            var spec = new TicketsCreatedTodayForEntryGateSpec(tokenInfo.GateId.Value);
+            var spec = new TicketsCreatedTodayForEntryGateSpec(tokenInfo.GateId.Value, _clock.LocalNow.Date);
             var ticketsInfo = await _repo.ListWithSpecAsync(spec);
             var result = new GetTicketForEntryGateQueryResponse
             {

@@ -1,4 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
+using NPark.Application.Services;
+using NPark.Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 using NPark.Domain.Entities;
 
 namespace NPark.Infrastructure.Services
@@ -15,8 +17,11 @@ namespace NPark.Infrastructure.Services
     {
         private readonly NParkDBContext _context;
 
-        public DashboardService(NParkDBContext context)
+        private readonly ParkingBusinessClock _clock;
+
+        public DashboardService(NParkDBContext context, ParkingBusinessClock clock)
         {
+            _clock = clock;
             _context = context ?? throw new ArgumentNullException(nameof(context));
         }
 
@@ -25,7 +30,7 @@ namespace NPark.Infrastructure.Services
             DateOnly? to = null,
             CancellationToken cancellationToken = default)
         {
-            var today = DateOnly.FromDateTime(DateTime.Now);
+            var today = _clock.BusinessDate;
 
             var fromDate = from ?? today;
             var toDate = to ?? fromDate;
@@ -45,20 +50,31 @@ namespace NPark.Infrastructure.Services
             var archivedTicketsQuery = _context.Set<TicketArchive>().AsNoTracking();
             var ticketExceedTransactionsQuery = _context.Set<TicketExceedTransaction>().AsNoTracking();
 
-            var liveEnteredInPeriodQuery = liveTicketsQuery
-                .Where(t => t.StartDate >= start && t.StartDate < end);
+            var successfulExitsPendingArchive = _context.Set<GateOperation>().AsNoTracking()
+                .Where(o => o.Type == GateOperationType.Exit && o.Status == GateOperationStatus.Acknowledged);
+            var operationalInside = liveTicketsQuery.Where(t => t.EndDate == null &&
+                t.EntryConfirmationStatus != EntryConfirmationStatus.Pending &&
+                !successfulExitsPendingArchive.Any(o => o.TicketIdSnapshot == t.Id));
+            var utcStart = _clock.ToUtc(start);
+            var utcEnd = _clock.ToUtc(end);
+            var liveEnteredInPeriodQuery = liveTicketsQuery.Where(t =>
+                t.EntryConfirmedAtUtc != null ? t.EntryConfirmedAtUtc >= utcStart && t.EntryConfirmedAtUtc < utcEnd :
+                t.EntryConfirmationStatus == EntryConfirmationStatus.Legacy && t.StartDate >= start && t.StartDate < end);
 
-            var archivedEnteredInPeriodQuery = archivedTicketsQuery
-                .Where(t => t.StartDate >= start && t.StartDate < end);
+            var archivedEnteredInPeriodQuery = archivedTicketsQuery.Where(t =>
+                t.EntryConfirmedAtUtc != null ? t.EntryConfirmedAtUtc >= utcStart && t.EntryConfirmedAtUtc < utcEnd :
+                t.EntryConfirmationStatus == EntryConfirmationStatus.Legacy && t.StartDate >= start && t.StartDate < end);
 
             var archivedExitedInPeriodQuery = archivedTicketsQuery
                 .Where(t => t.EndDate >= start && t.EndDate < end);
 
-            var ticketsEnteredBeforePeriodAndStillInsideQuery = liveTicketsQuery
-                .Where(t => t.StartDate < start);
+            var ticketsEnteredBeforePeriodAndStillInsideQuery = operationalInside
+                .Where(t => t.EntryConfirmedAtUtc != null ? t.EntryConfirmedAtUtc < utcStart : t.StartDate < start);
 
             var exceedTransactionsInPeriodQuery = ticketExceedTransactionsQuery
-                .Where(t => t.CreatedAt >= start && t.CreatedAt < end);
+                .Where(t => t.PaymentStatus != SanctionPaymentStatus.Assessed &&
+                    (t.PaymentConfirmedAtUtc != null ? t.PaymentConfirmedAtUtc >= utcStart && t.PaymentConfirmedAtUtc < utcEnd :
+                    t.CreatedAt >= start && t.CreatedAt < end));
 
             // =========================================================
             // 2) TICKETS COUNTS
@@ -80,10 +96,18 @@ namespace NPark.Infrastructure.Services
             // =========================================================
             // 3) CURRENT VEHICLES INSIDE + OCCUPANCY
             // =========================================================
-            var currentVehiclesInside = await liveTicketsQuery
+            var currentVehiclesInside = await operationalInside
                 .CountAsync(cancellationToken);
 
-            var activeTicketsCount = currentVehiclesInside;
+            var issuedInPeriod = await liveTicketsQuery.CountAsync(t => t.StartDate >= start && t.StartDate < end, cancellationToken)
+                + await archivedTicketsQuery.CountAsync(t => t.StartDate >= start && t.StartDate < end, cancellationToken);
+            var activeTicketsCount = await liveTicketsQuery.CountAsync(cancellationToken);
+            var pendingEntryCount = await liveTicketsQuery.CountAsync(
+                t => t.EntryConfirmationStatus == EntryConfirmationStatus.Pending, cancellationToken);
+            var unresolvedExitCount = await _context.Set<GateOperation>().CountAsync(o =>
+                o.Type == GateOperationType.Exit && o.ReservedTicketId != null &&
+                o.Status != GateOperationStatus.Acknowledged, cancellationToken);
+            var awaitingArchiveCount = await successfulExitsPendingArchive.CountAsync(cancellationToken);
 
             var parkingConfig = await _context.Set<ParkingSystemConfiguration>()
                 .AsNoTracking()
@@ -104,7 +128,9 @@ namespace NPark.Infrastructure.Services
             // =========================================================
             // 4) TICKET BASE REVENUE DATASET
             // =========================================================
-            var revenueLiveRows = await liveEnteredInPeriodQuery
+            var revenueLiveRows = await liveTicketsQuery.Where(t => t.IsCashierCollected &&
+                (t.BasePaymentConfirmedAtUtc != null ? t.BasePaymentConfirmedAtUtc >= utcStart && t.BasePaymentConfirmedAtUtc < utcEnd :
+                t.StartDate >= start && t.StartDate < end))
                 .Select(t => new RevenueRow
                 {
                     IsCollected = t.IsCollected,
@@ -116,7 +142,9 @@ namespace NPark.Infrastructure.Services
                 })
                 .ToListAsync(cancellationToken);
 
-            var revenueArchiveRows = await archivedEnteredInPeriodQuery
+            var revenueArchiveRows = await archivedTicketsQuery.Where(t => t.IsCashierCollected &&
+                (t.BasePaymentConfirmedAtUtc != null ? t.BasePaymentConfirmedAtUtc >= utcStart && t.BasePaymentConfirmedAtUtc < utcEnd :
+                t.StartDate >= start && t.StartDate < end))
                 .Select(t => new RevenueRow
                 {
                     IsCollected = t.IsCollected,
@@ -541,6 +569,10 @@ namespace NPark.Infrastructure.Services
 
                 CurrentVehiclesInside = currentVehiclesInside,
                 ActiveTicketsCount = activeTicketsCount,
+                TicketsIssuedInPeriod = issuedInPeriod,
+                PendingEntryCount = pendingEntryCount,
+                UnresolvedExitCount = unresolvedExitCount,
+                AcknowledgedExitAwaitingArchiveCount = awaitingArchiveCount,
                 OccupancyPercentage = occupancyPercentage,
                 EstimatedFreeSlots = estimatedFreeSlots,
 
@@ -681,6 +713,10 @@ namespace NPark.Infrastructure.Services
         public int CurrentVehiclesInside { get; init; }
 
         public int ActiveTicketsCount { get; init; }
+        public int TicketsIssuedInPeriod { get; init; }
+        public int PendingEntryCount { get; init; }
+        public int UnresolvedExitCount { get; init; }
+        public int AcknowledgedExitAwaitingArchiveCount { get; init; }
 
         public decimal OccupancyPercentage { get; init; }
 

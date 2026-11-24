@@ -1,4 +1,5 @@
-﻿using BuildingBlock.Domain.Specification;
+using NPark.Domain.Enums;
+using BuildingBlock.Domain.Specification;
 using NPark.Domain.Entities;
 using System;
 using System.Collections.Generic;
@@ -17,6 +18,7 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionsReport
             DateTime toDateExclusive)
         {
             AddCriteria(x =>
+                x.PaymentStatus != SanctionPaymentStatus.Assessed &&
                 x.SuperVisorCollectorId == supervisorId &&
                 x.SuperVisorCollectedAt != null &&
                 x.SuperVisorCollectedAt >= fromDate &&
@@ -42,7 +44,7 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionsReport
                 IsSubscriber = x.IsSubscriber,
                 SubscriberNationalId = x.SubscriberNationalId,
 
-                ExceedCreatedById = x.UserCollectId,
+                ExceedCreatedById = x.PaymentCashierId ?? x.UserCollectId,
                 ExceedCreatedByName = x.UserCollector.Name,
 
                 SupervisorCollectorId = x.SuperVisorCollectorId!.Value,
@@ -53,7 +55,7 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionsReport
                 SupervisorCollectedAt = x.SuperVisorCollectedAt,
                 CreatedAt = x.CreatedAt,
 
-                GateId = x.GateId,
+                GateId = x.PaymentGateId ?? x.GateId,
                 GateNumber = x.Gate.GateNumber,
 
                 TicketGateId = x.TicketGateId,
