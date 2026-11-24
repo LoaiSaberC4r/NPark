@@ -131,7 +131,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectDailyTicket
 
                     foreach (var ticket in ticketList)
                     {
-                        ticket.SetCollected(userId);
+                        ticket.SetCollected(userId, null);
                     }
 
                     var fallbackCollectedAt = DateTime.Now;

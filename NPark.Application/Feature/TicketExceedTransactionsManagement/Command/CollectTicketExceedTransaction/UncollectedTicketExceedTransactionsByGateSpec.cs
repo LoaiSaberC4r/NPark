@@ -8,6 +8,8 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
     {
         public UncollectedTicketExceedTransactionsByGateSpec(Guid gateId)
         {
+            Include(x => x.UserCollector);
+
             AddCriteria(x =>
                 x.GateId == gateId &&
                 x.SuperVisorCollectorId == null);

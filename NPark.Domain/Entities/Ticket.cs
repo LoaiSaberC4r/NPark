@@ -53,11 +53,11 @@ namespace NPark.Domain.Entities
             return ticket;
         }
 
-        public void SetCollected(Guid Id)
+        public void SetCollected(Guid Id, DateTime? now)
         {
             IsCollected = true;
             CollectedBy = Id;
-            CollectedDate = DateTime.Now;
+            CollectedDate = now ?? DateTime.Now;
         }
 
         public void SetExitGate(Guid exitGateId) => ExitGateId = exitGateId;

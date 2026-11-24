@@ -94,11 +94,11 @@ namespace NPark.Domain.Entities
             return ticketArchive;
         }
 
-        public void SetCollected(Guid id)
+        public void SetCollected(Guid id, DateTime? now = null)
         {
             IsCollected = true;
             CollectedBy = id;
-            CollectedDate = DateTime.Now;
+            CollectedDate = now ?? DateTime.Now;
         }
 
         private void CopyAttachmentsFromTicket(Ticket ticket)

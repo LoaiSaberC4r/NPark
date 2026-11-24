@@ -109,7 +109,7 @@ namespace NPark.Domain.Entities
             return transaction;
         }
 
-        public void SetSupervisorCollected(Guid supervisorId)
+        public void SetSupervisorCollected(Guid supervisorId, DateTime? now)
         {
             if (supervisorId == Guid.Empty)
                 throw new ArgumentException("Supervisor id is required.", nameof(supervisorId));
@@ -118,7 +118,7 @@ namespace NPark.Domain.Entities
                 throw new InvalidOperationException("Ticket exceed transaction is already collected by supervisor.");
 
             SuperVisorCollectorId = supervisorId;
-            SuperVisorCollectedAt = DateTime.Now;
+            SuperVisorCollectedAt = now ?? DateTime.Now;
         }
     }
 }

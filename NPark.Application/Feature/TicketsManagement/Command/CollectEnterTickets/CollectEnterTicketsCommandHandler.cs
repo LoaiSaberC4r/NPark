@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using NPark.Application.Abstraction.Security;
 using NPark.Application.Shared.Dto;
 using NPark.Domain.Entities;
+using NPark.Domain.Enums;
 using NPark.Domain.Resource;
 
 namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTickets
@@ -17,8 +18,10 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
         private const string TicketArchiveSource = "TicketArchive";
 
         private readonly IGenericRepository<Ticket> _ticketRepository;
+        private readonly IGenericRepository<User> _userRepository;
         private readonly IGenericRepository<TicketArchive> _ticketArchiveRepository;
         private readonly IGenericRepository<ParkingGate> _parkingGateRepository;
+        private readonly IGenericRepository<TicketCollectionTransaction> _ticketCollectionTransactionRepository;
         private readonly ITokenReader _tokenReader;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IAuditLogger _auditLogger;
@@ -28,6 +31,8 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
             IGenericRepository<Ticket> ticketRepository,
             IGenericRepository<TicketArchive> ticketArchiveRepository,
             IGenericRepository<ParkingGate> parkingGateRepository,
+            IGenericRepository<User> userRepository,
+            IGenericRepository<TicketCollectionTransaction> ticketCollectionTransactionRepository,
             ITokenReader tokenReader,
             IHttpContextAccessor httpContextAccessor,
             IAuditLogger auditLogger,
@@ -42,6 +47,9 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
             _parkingGateRepository = parkingGateRepository
                 ?? throw new ArgumentNullException(nameof(parkingGateRepository));
 
+            _ticketCollectionTransactionRepository = ticketCollectionTransactionRepository
+                ?? throw new ArgumentNullException(nameof(ticketCollectionTransactionRepository));
+
             _tokenReader = tokenReader
                 ?? throw new ArgumentNullException(nameof(tokenReader));
 
@@ -51,8 +59,9 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
             _auditLogger = auditLogger
                 ?? throw new ArgumentNullException(nameof(auditLogger));
 
-            _logger = logger
+            _logger = logger 
                 ?? throw new ArgumentNullException(nameof(logger));
+            _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
         }
 
         public async Task<Result<CollectEnterTicketsResponse>> Handle(
@@ -78,17 +87,24 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
                 }
 
                 var gateId = tokenInfo.GateId.Value;
-                var userId = tokenInfo.UserId.Value;
-                if (tokenInfo.Role != "Supervisor")
+                var supervisorId = tokenInfo.UserId.Value;
+                var user = await _userRepository.GetByIdAsync(
+    supervisorId,
+    cancellationToken);
+
+                if (!string.Equals(tokenInfo.Role, "Supervisor", StringComparison.OrdinalIgnoreCase)  || user is null)
                 {
                     return Result<CollectEnterTicketsResponse>.Fail(
                        new Error(
                            Code: "User.NotSupervisor",
                            Message: ErrorMessage.Supervisor_OnlyCanCollectTicketExceedTransactions,
                            Type: ErrorType.Security));
-                }
+                } 
 
-                var gate = await _parkingGateRepository.GetByIdAsync(gateId, cancellationToken);
+
+                var gate = await _parkingGateRepository.GetByIdAsync(
+                    gateId,
+                    cancellationToken);
 
                 if (gate is null)
                 {
@@ -109,7 +125,6 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
                     .ListWithSpecAsync(archivedTicketsSpec, cancellationToken);
 
                 var liveTicketList = liveTickets?.ToList() ?? new List<Ticket>();
-
                 var archivedTicketList = archivedTickets?.ToList() ?? new List<TicketArchive>();
 
                 if (liveTicketList.Count == 0 && archivedTicketList.Count == 0)
@@ -125,17 +140,55 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
                             Type: ErrorType.Conflict));
                 }
 
+                var collectedAt = DateTime.Now;
+
+                var collectionTransaction = TicketCollectionTransaction.Create(
+                    type: TicketCollectionTransactionType.EnterTickets,
+                    gateId: gateId,
+                    collectedBy: supervisorId,
+                    collectedAt: collectedAt);
+
                 foreach (var ticket in liveTicketList)
                 {
-                    ticket.SetCollected(userId);
+                    var ticketSnapshot = TicketCollectionTransactionTicket.CreateFromTicket(
+                        transactionId: collectionTransaction.Id,
+                        ticket: ticket);
+
+                    collectionTransaction.AddTicket(ticketSnapshot);
+
+                    ticket.SetCollected(supervisorId, collectedAt);
                 }
 
-                foreach (var ticket in archivedTicketList)
+                foreach (var ticketArchive in archivedTicketList)
                 {
-                    ticket.SetCollected(userId);
+                    var ticketSnapshot = TicketCollectionTransactionTicket.CreateFromTicketArchive(
+                        transactionId: collectionTransaction.Id,
+                        ticketArchive: ticketArchive);
+
+                    collectionTransaction.AddTicket(ticketSnapshot);
+
+                    ticketArchive.SetCollected(supervisorId, collectedAt);
                 }
 
-                var fallbackCollectedAt = DateTime.Now;
+                collectionTransaction.BuildLinesFromTickets();
+
+                var responsibleUserNames = liveTicketList
+                    .Select(t => new
+                    {
+                        UserId = t.UserId,
+                        UserName = t.User?.Name ?? string.Empty
+                    })
+                    .Concat(
+                        archivedTicketList.Select(t => new
+                        {
+                            UserId = t.UserId,
+                            UserName = t.User?.Name ?? string.Empty
+                        }))
+                    .GroupBy(x => x.UserId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(x => x.UserName)
+                              .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)) ?? string.Empty);
 
                 var liveTicketDetails = liveTicketList
                     .Select(t => new CollectedEnterTicketDetails
@@ -145,7 +198,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
                         Source = TicketSource,
                         StartDate = t.StartDate,
                         EndDate = t.EndDate,
-                        CollectedAt = t.CollectedDate ?? fallbackCollectedAt,
+                        CollectedAt = t.CollectedDate ?? collectedAt,
                         OriginalPrice = t.Price,
                         VehicleNumber = t.VehicleNumber,
                         CardNumber = t.CardNumber,
@@ -180,19 +233,40 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
                 var response = new CollectEnterTicketsResponse
                 {
                     GateId = gateId,
-                    CollectedBy = userId,
-                    CollectedAt = fallbackCollectedAt,
+                    CollectedName = user.Name , 
+                    CollectedBy = supervisorId,
+                    CollectedAt = collectedAt,
                     TotalTicketsCollected = details.Count,
                     TotalOriginalPriceCollected = details.Sum(x => x.OriginalPrice),
+
+                    Lines = collectionTransaction.Lines
+                        .Select(x => new CollectedEnterTicketLine
+                        {
+                            ResponsibleUserId = x.ResponsibleUserId,
+                            ResponsibleUserName = responsibleUserNames.TryGetValue(
+                                x.ResponsibleUserId,
+                                out var responsibleUserName)
+                                    ? responsibleUserName
+                                    : string.Empty,
+                            TicketsCount = x.ItemsCount,
+                            TotalOriginalPrice = x.TotalAmount
+                        })
+                        .OrderByDescending(x => x.TotalOriginalPrice)
+                        .ToList(),
+
                     Tickets = details
                 };
 
-                await _ticketRepository.SaveChangesAsync(cancellationToken);
-                await _ticketArchiveRepository.SaveChangesAsync(cancellationToken);
+                await _ticketCollectionTransactionRepository.AddAsync(
+                    collectionTransaction,
+                    cancellationToken);
+
+                await _ticketCollectionTransactionRepository.SaveChangesAsync(cancellationToken);
 
                 await SafeAuditAsync(
                     response,
-                    userId,
+                    collectionTransaction.Id,
+                    supervisorId,
                     gateId,
                     cancellationToken);
 
@@ -212,13 +286,14 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
                 return Result<CollectEnterTicketsResponse>.Fail(
                     new Error(
                         Code: "Tickets.CollectEnterTickets.Unexpected",
-                        Message: $"{ex}" + ErrorMessage.Tickets_CollectEnterTicketsUnexpected,
+                        Message: ErrorMessage.Tickets_CollectEnterTicketsUnexpected,
                         Type: ErrorType.Infrastructure));
             }
         }
 
         private async Task SafeAuditAsync(
             CollectEnterTicketsResponse response,
+            Guid transactionId,
             Guid userId,
             Guid gateId,
             CancellationToken cancellationToken)
@@ -235,8 +310,10 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
                         GateId: gateId,
                         Extra: new
                         {
+                            TransactionId = transactionId,
                             response.TotalTicketsCollected,
                             response.TotalOriginalPriceCollected,
+                            LinesCount = response.Lines.Count,
                             TicketsDetailsCount = response.Tickets.Count,
                             CollectedByUserId = userId,
                             GateId = gateId
@@ -247,9 +324,10 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
             {
                 _logger.LogWarning(
                     ex,
-                    "Audit logging failed for CollectEnterTickets. UserId: {UserId}, GateId: {GateId}",
+                    "Audit logging failed for CollectEnterTickets. UserId: {UserId}, GateId: {GateId}, TransactionId: {TransactionId}",
                     userId,
-                    gateId);
+                    gateId,
+                    transactionId);
             }
         }
     }

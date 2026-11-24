@@ -1276,11 +1276,29 @@ namespace NPark.Domain.Resource {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Supervisor was not found..
+        /// </summary>
+        public static string Supervisor_NotFound {
+            get {
+                return ResourceManager.GetString("Supervisor_NotFound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Only supervisor can collect ticket exceed transactions..
         /// </summary>
         public static string Supervisor_OnlyCanCollectTicketExceedTransactions {
             get {
                 return ResourceManager.GetString("Supervisor_OnlyCanCollectTicketExceedTransactions", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Supervisor is required..
+        /// </summary>
+        public static string SupervisorId_Required {
+            get {
+                return ResourceManager.GetString("SupervisorId_Required", resourceCulture);
             }
         }
         
@@ -1497,6 +1515,15 @@ namespace NPark.Domain.Resource {
         public static string User_MustBeEntranceCashier {
             get {
                 return ResourceManager.GetString("User_MustBeEntranceCashier", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to User must be a supervisor..
+        /// </summary>
+        public static string User_MustBeSupervisor {
+            get {
+                return ResourceManager.GetString("User_MustBeSupervisor", resourceCulture);
             }
         }
         

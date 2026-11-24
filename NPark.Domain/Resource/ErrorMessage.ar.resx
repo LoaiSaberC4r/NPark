@@ -638,4 +638,13 @@
   <data name="ToDate_Required" xml:space="preserve">
     <value>تاريخ النهاية مطلوب.</value>
   </data>
+  <data name="SupervisorId_Required" xml:space="preserve">
+    <value>يجب اختيار المشرف.</value>
+  </data>
+  <data name="Supervisor_NotFound" xml:space="preserve">
+    <value>المشرف غير موجود.</value>
+  </data>
+  <data name="User_MustBeSupervisor" xml:space="preserve">
+    <value>المستخدم يجب أن يكون مشرفًا.</value>
+  </data>
 </root>

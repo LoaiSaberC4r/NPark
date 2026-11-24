@@ -7,15 +7,17 @@ using Microsoft.Extensions.Logging;
 using NPark.Application.Abstraction.Security;
 using NPark.Application.Shared.Dto;
 using NPark.Domain.Entities;
+using NPark.Domain.Enums;
 using NPark.Domain.FileNames;
 using NPark.Domain.Resource;
 
 namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.CollectTicketExceedTransaction
 {
     internal sealed class CollectTicketExceedTransactionCommandHandler
-     : ICommandHandler<CollectTicketExceedTransactionCommand, CollectTicketExceedTransactionResponse>
+        : ICommandHandler<CollectTicketExceedTransactionCommand, CollectTicketExceedTransactionResponse>
     {
         private readonly IGenericRepository<TicketExceedTransaction> _ticketExceedTransactionRepository;
+        private readonly IGenericRepository<TicketCollectionTransaction> _ticketCollectionTransactionRepository;
         private readonly IGenericRepository<ParkingGate> _parkingGateRepository;
         private readonly IGenericRepository<User> _userRepository;
         private readonly ITokenReader _tokenReader;
@@ -25,6 +27,7 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
 
         public CollectTicketExceedTransactionCommandHandler(
             IGenericRepository<TicketExceedTransaction> ticketExceedTransactionRepository,
+            IGenericRepository<TicketCollectionTransaction> ticketCollectionTransactionRepository,
             IGenericRepository<ParkingGate> parkingGateRepository,
             IGenericRepository<User> userRepository,
             ITokenReader tokenReader,
@@ -34,6 +37,9 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
         {
             _ticketExceedTransactionRepository = ticketExceedTransactionRepository
                 ?? throw new ArgumentNullException(nameof(ticketExceedTransactionRepository));
+
+            _ticketCollectionTransactionRepository = ticketCollectionTransactionRepository
+                ?? throw new ArgumentNullException(nameof(ticketCollectionTransactionRepository));
 
             _parkingGateRepository = parkingGateRepository
                 ?? throw new ArgumentNullException(nameof(parkingGateRepository));
@@ -78,16 +84,19 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
 
                 var gateId = tokenInfo.GateId.Value;
                 var supervisorId = tokenInfo.UserId.Value;
-                if (tokenInfo.Role != "Supervisor")
+                if (!string.Equals(tokenInfo.Role, "Supervisor", StringComparison.OrdinalIgnoreCase) )
                 {
                     return Result<CollectTicketExceedTransactionResponse>.Fail(
                         new Error(
                             Code: "User.NotSupervisor",
                             Message: ErrorMessage.Supervisor_OnlyCanCollectTicketExceedTransactions,
                             Type: ErrorType.Security));
-                }
+                } 
+                
 
-                var gate = await _parkingGateRepository.GetByIdAsync(gateId, cancellationToken);
+                var gate = await _parkingGateRepository.GetByIdAsync(
+                    gateId,
+                    cancellationToken);
 
                 if (gate is null)
                 {
@@ -98,7 +107,9 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
                             Type: ErrorType.NotFound));
                 }
 
-                var supervisor = await _userRepository.GetByIdAsync(supervisorId, cancellationToken);
+                var supervisor = await _userRepository.GetByIdAsync(
+                    supervisorId,
+                    cancellationToken);
 
                 if (supervisor is null)
                 {
@@ -128,7 +139,8 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
                 var transactions = await _ticketExceedTransactionRepository
                     .ListWithSpecAsync(spec, cancellationToken);
 
-                var transactionList = transactions?.ToList() ?? new List<TicketExceedTransaction>();
+                var transactionList = transactions?.ToList()
+                    ?? new List<TicketExceedTransaction>();
 
                 if (transactionList.Count == 0)
                 {
@@ -143,25 +155,79 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
                             Type: ErrorType.Conflict));
                 }
 
+                var collectedAt = DateTime.Now;
+
+                var collectionTransaction = TicketCollectionTransaction.Create(
+                    type: TicketCollectionTransactionType.ExceedTransactions,
+                    gateId: gateId,
+                    collectedBy: supervisorId,
+                    collectedAt: collectedAt);
+
                 foreach (var transaction in transactionList)
                 {
-                    transaction.SetSupervisorCollected(supervisorId);
+                    var ticketSnapshot = TicketCollectionTransactionTicket.CreateFromExceedTransaction(
+                        transactionId: collectionTransaction.Id,
+                        exceedTransaction: transaction);
+
+                    collectionTransaction.AddTicket(ticketSnapshot);
+
+                    transaction.SetSupervisorCollected(supervisorId, collectedAt);
                 }
 
-                var collectedAt = DateTime.Now;
+                collectionTransaction.BuildLinesFromTickets();
+
+                var responsibleUserNames = transactionList
+                    .Select(x => new
+                    {
+                        UserId = x.UserCollectId,
+                        UserName = x.UserCollector?.Name ?? string.Empty
+                    })
+                    .GroupBy(x => x.UserId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(x => x.UserName)
+                              .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)) ?? string.Empty);
 
                 var response = new CollectTicketExceedTransactionResponse
                 {
+                    CollectionTransactionId = collectionTransaction.Id,
+                    GateId = gateId,
+                    CollectedBy = supervisorId,
+                    CollectedName = supervisor.Name,
+                    CollectedAt = collectedAt,
+
                     TotalTransactionsCollected = transactionList.Count,
                     TotalExceedAmountCollected = transactionList.Sum(x => x.ExceedAmount),
+
+                    Lines = collectionTransaction.Lines
+                        .Select(x => new TicketExceedCollectLine
+                        {
+                            ResponsibleUserId = x.ResponsibleUserId,
+                            ResponsibleUserName = responsibleUserNames.TryGetValue(
+                                x.ResponsibleUserId,
+                                out var responsibleUserName)
+                                    ? responsibleUserName
+                                    : string.Empty,
+                            TransactionsCount = x.ItemsCount,
+                            TotalExceedAmount = x.TotalAmount
+                        })
+                        .OrderByDescending(x => x.TotalExceedAmount)
+                        .ToList(),
+
                     TicketExceedCollectDetails = transactionList
                         .Select(x => new TicketExceedCollectDetails
                         {
                             TransactionId = x.Id,
                             TicketIdSnapshot = x.TicketIdSnapshot,
                             TicketUniqueCode = x.TicketUniqueCode,
+                            ResponsibleUserId = x.UserCollectId,
+                            ResponsibleUserName = responsibleUserNames.TryGetValue(
+                                x.UserCollectId,
+                                out var responsibleUserName)
+                                    ? responsibleUserName
+                                    : string.Empty,
                             TransactionCreatedAt = x.CreatedAt,
-                            SupervisorCollectedAt = collectedAt,
+                            SupervisorCollectedAt = x.SuperVisorCollectedAt ?? collectedAt,
                             TicketPrice = x.TicketPrice,
                             TicketOldExceedPrice = x.TicketOldExceedPrice,
                             ExceedAmount = x.ExceedAmount,
@@ -170,10 +236,16 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
                             CardNumber = x.CardNumber,
                             IsSubscriber = x.IsSubscriber
                         })
+                        .OrderByDescending(x => x.SupervisorCollectedAt)
+                        .ThenByDescending(x => x.TransactionCreatedAt)
                         .ToList()
                 };
 
-                await _ticketExceedTransactionRepository.SaveChangesAsync(cancellationToken);
+                await _ticketCollectionTransactionRepository.AddAsync(
+                    collectionTransaction,
+                    cancellationToken);
+
+                await _ticketCollectionTransactionRepository.SaveChangesAsync(cancellationToken);
 
                 await SafeAuditAsync(
                     response,
@@ -220,8 +292,10 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
                         GateId: gateId,
                         Extra: new
                         {
+                            response.CollectionTransactionId,
                             response.TotalTransactionsCollected,
                             response.TotalExceedAmountCollected,
+                            LinesCount = response.Lines.Count,
                             TicketExceedDetailsCount = response.TicketExceedCollectDetails.Count,
                             SupervisorCollectorId = supervisorId,
                             GateId = gateId
@@ -232,9 +306,10 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
             {
                 _logger.LogWarning(
                     ex,
-                    "Audit logging failed for CollectTicketExceedTransaction. SupervisorId: {SupervisorId}, GateId: {GateId}",
+                    "Audit logging failed for CollectTicketExceedTransaction. SupervisorId: {SupervisorId}, GateId: {GateId}, CollectionTransactionId: {CollectionTransactionId}",
                     supervisorId,
-                    gateId);
+                    gateId,
+                    response.CollectionTransactionId);
             }
         }
     }

@@ -636,4 +636,13 @@
   <data name="ToDate_Required" xml:space="preserve">
     <value>To date is required.</value>
   </data>
+  <data name="SupervisorId_Required" xml:space="preserve">
+    <value>Supervisor is required.</value>
+  </data>
+  <data name="Supervisor_NotFound" xml:space="preserve">
+    <value>Supervisor was not found.</value>
+  </data>
+  <data name="User_MustBeSupervisor" xml:space="preserve">
+    <value>User must be a supervisor.</value>
+  </data>
 </root>

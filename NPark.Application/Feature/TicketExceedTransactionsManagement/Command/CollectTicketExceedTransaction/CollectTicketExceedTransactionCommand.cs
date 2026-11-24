@@ -6,13 +6,39 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
         : ICommand<CollectTicketExceedTransactionResponse>
     {
     }
+
     public sealed record CollectTicketExceedTransactionResponse
     {
+        public Guid CollectionTransactionId { get; init; }
+
+        public Guid GateId { get; init; }
+
+        public Guid CollectedBy { get; init; }
+        public string CollectedName { get; init; } = string.Empty;
+
+        public DateTime CollectedAt { get; init; }
+
         public decimal TotalExceedAmountCollected { get; init; }
 
         public int TotalTransactionsCollected { get; init; }
 
+        public List<TicketExceedCollectLine> Lines { get; init; } = new();
+
         public List<TicketExceedCollectDetails> TicketExceedCollectDetails { get; init; } = new();
+    }
+
+    public sealed record TicketExceedCollectLine
+    {
+        /// <summary>
+        /// User who created/collected the exceed transaction.
+        /// </summary>
+        public Guid ResponsibleUserId { get; init; }
+
+        public string ResponsibleUserName { get; init; } = string.Empty;
+
+        public int TransactionsCount { get; init; }
+
+        public decimal TotalExceedAmount { get; init; }
     }
 
     public sealed record TicketExceedCollectDetails
@@ -22,6 +48,10 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
         public Guid TicketIdSnapshot { get; init; }
 
         public string TicketUniqueCode { get; init; } = string.Empty;
+
+        public Guid ResponsibleUserId { get; init; }
+
+        public string ResponsibleUserName { get; init; } = string.Empty;
 
         public DateTime TransactionCreatedAt { get; init; }
 

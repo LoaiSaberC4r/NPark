@@ -7,6 +7,8 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
     {
         public UncollectedEnterTicketsByGateSpec(Guid gateId)
         {
+            Include(t => t.User);
+
             AddCriteria(t =>
                 t.GateId == gateId &&
                 t.CollectedBy == null &&

@@ -764,6 +764,155 @@ namespace NPark.Infrastructure.Migrations
                     b.ToTable("TicketAttachments", (string)null);
                 });
 
+            modelBuilder.Entity("NPark.Domain.Entities.TicketCollectionTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CollectedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("CollectedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("GateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ModifiedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("TotalAmountCollected")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("TotalItemsCollected")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CollectedBy");
+
+                    b.HasIndex("GateId");
+
+                    b.HasIndex("Type", "GateId", "CollectedAt");
+
+                    b.ToTable("TicketCollectionTransactions", (string)null);
+                });
+
+            modelBuilder.Entity("NPark.Domain.Entities.TicketCollectionTransactionLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ItemsCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ModifiedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("ResponsibleUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TicketCollectionTransactionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ResponsibleUserId");
+
+                    b.HasIndex("TicketCollectionTransactionId", "ResponsibleUserId")
+                        .IsUnique();
+
+                    b.ToTable("TicketCollectionTransactionLines", (string)null);
+                });
+
+            modelBuilder.Entity("NPark.Domain.Entities.TicketCollectionTransactionTicket", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("AmountCollected")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("CardNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("ExceedAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsSubscriber")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedOnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("OriginalPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("ResponsibleUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SubscriberNationalId")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("TicketCollectionTransactionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("TicketEndDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("TicketExitGateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TicketGateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TicketIdSnapshot")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("TicketStartDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("TicketUniqueCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("VehicleNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ResponsibleUserId");
+
+                    b.HasIndex("TicketUniqueCode");
+
+                    b.HasIndex("TicketCollectionTransactionId", "Source", "TicketIdSnapshot")
+                        .IsUnique();
+
+                    b.ToTable("TicketCollectionTransactionTickets", (string)null);
+                });
+
             modelBuilder.Entity("NPark.Domain.Entities.TicketExceedTransaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1105,6 +1254,63 @@ namespace NPark.Infrastructure.Migrations
                     b.Navigation("Ticket");
                 });
 
+            modelBuilder.Entity("NPark.Domain.Entities.TicketCollectionTransaction", b =>
+                {
+                    b.HasOne("NPark.Domain.Entities.User", "Collector")
+                        .WithMany()
+                        .HasForeignKey("CollectedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NPark.Domain.Entities.ParkingGate", "Gate")
+                        .WithMany()
+                        .HasForeignKey("GateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Collector");
+
+                    b.Navigation("Gate");
+                });
+
+            modelBuilder.Entity("NPark.Domain.Entities.TicketCollectionTransactionLine", b =>
+                {
+                    b.HasOne("NPark.Domain.Entities.User", "ResponsibleUser")
+                        .WithMany()
+                        .HasForeignKey("ResponsibleUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NPark.Domain.Entities.TicketCollectionTransaction", "Transaction")
+                        .WithMany("Lines")
+                        .HasForeignKey("TicketCollectionTransactionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ResponsibleUser");
+
+                    b.Navigation("Transaction");
+                });
+
+            modelBuilder.Entity("NPark.Domain.Entities.TicketCollectionTransactionTicket", b =>
+                {
+                    b.HasOne("NPark.Domain.Entities.User", "ResponsibleUser")
+                        .WithMany()
+                        .HasForeignKey("ResponsibleUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NPark.Domain.Entities.TicketCollectionTransaction", "Transaction")
+                        .WithMany("Tickets")
+                        .HasForeignKey("TicketCollectionTransactionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ResponsibleUser");
+
+                    b.Navigation("Transaction");
+                });
+
             modelBuilder.Entity("NPark.Domain.Entities.TicketExceedTransaction", b =>
                 {
                     b.HasOne("NPark.Domain.Entities.ParkingGate", "Gate")
@@ -1190,6 +1396,13 @@ namespace NPark.Infrastructure.Migrations
             modelBuilder.Entity("NPark.Domain.Entities.TicketArchive", b =>
                 {
                     b.Navigation("TicketArchiveAttachments");
+                });
+
+            modelBuilder.Entity("NPark.Domain.Entities.TicketCollectionTransaction", b =>
+                {
+                    b.Navigation("Lines");
+
+                    b.Navigation("Tickets");
                 });
 #pragma warning restore 612, 618
         }
