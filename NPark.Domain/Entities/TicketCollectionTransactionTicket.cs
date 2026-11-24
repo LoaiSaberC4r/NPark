@@ -1,4 +1,4 @@
-﻿using BuildingBlock.Domain.EntitiesHelper;
+using BuildingBlock.Domain.EntitiesHelper;
 using NPark.Domain.Enums;
 using System;
 using System.Collections.Generic;
@@ -22,15 +22,19 @@ namespace NPark.Domain.Entities
         /// In EnterTickets: Ticket.UserId.
         /// In ExceedTransactions: TicketExceedTransaction.UserCollectId.
         /// </summary>
-        public Guid ResponsibleUserId { get; private set; }
+        public Guid? ResponsibleUserId { get; private set; }
 
-        public User ResponsibleUser { get; private set; } = null!;
+        public User? ResponsibleUser { get; private set; }
 
         public TicketCollectionItemSource Source { get; private set; }
 
         // -----------------------------
         // Ticket Snapshot
         // -----------------------------
+        public Guid SourceRecordId { get; private set; }
+
+        public FinancialItemType FinancialItemType { get; private set; }
+
         public Guid TicketIdSnapshot { get; private set; }
 
         public string TicketUniqueCode { get; private set; } = string.Empty;
@@ -69,7 +73,8 @@ namespace NPark.Domain.Entities
 
             return Create(
                 transactionId: transactionId,
-                responsibleUserId: ticket.UserId,
+                responsibleUserId: ticket.BasePaymentCashierId,
+                sourceRecordId: ticket.Id,
                 source: TicketCollectionItemSource.Ticket,
                 ticketIdSnapshot: ticket.Id,
                 ticketUniqueCode: ticket.UniqueCode,
@@ -94,7 +99,8 @@ namespace NPark.Domain.Entities
 
             return Create(
                 transactionId: transactionId,
-                responsibleUserId: ticketArchive.UserId,
+                responsibleUserId: ticketArchive.BasePaymentCashierId,
+                sourceRecordId: ticketArchive.Id,
                 source: TicketCollectionItemSource.TicketArchive,
                 ticketIdSnapshot: ticketArchive.Id,
                 ticketUniqueCode: ticketArchive.UniqueCode,
@@ -121,7 +127,8 @@ namespace NPark.Domain.Entities
 
             return Create(
                 transactionId: transactionId,
-                responsibleUserId: exceedTransaction.UserCollectId,
+                responsibleUserId: exceedTransaction.PaymentCashierId ?? exceedTransaction.UserCollectId,
+                sourceRecordId: exceedTransaction.Id,
                 source: TicketCollectionItemSource.TicketExceedTransaction,
                 ticketIdSnapshot: exceedTransaction.TicketIdSnapshot,
                 ticketUniqueCode: exceedTransaction.TicketUniqueCode,
@@ -140,7 +147,8 @@ namespace NPark.Domain.Entities
 
         private static TicketCollectionTransactionTicket Create(
             Guid transactionId,
-            Guid responsibleUserId,
+            Guid? responsibleUserId,
+            Guid sourceRecordId,
             TicketCollectionItemSource source,
             Guid ticketIdSnapshot,
             string ticketUniqueCode,
@@ -160,7 +168,7 @@ namespace NPark.Domain.Entities
                 throw new ArgumentException("Transaction id is required.", nameof(transactionId));
 
             if (responsibleUserId == Guid.Empty)
-                throw new ArgumentException("Responsible user id is required.", nameof(responsibleUserId));
+                throw new ArgumentException("Responsible user id must be valid when known.", nameof(responsibleUserId));
 
             if (ticketIdSnapshot == Guid.Empty)
                 throw new ArgumentException("Ticket snapshot id is required.", nameof(ticketIdSnapshot));
@@ -186,6 +194,9 @@ namespace NPark.Domain.Entities
                 TicketCollectionTransactionId = transactionId,
                 ResponsibleUserId = responsibleUserId,
                 Source = source,
+                SourceRecordId = sourceRecordId,
+                FinancialItemType = source == TicketCollectionItemSource.TicketExceedTransaction
+                    ? FinancialItemType.ExceedPayment : FinancialItemType.BaseTicketPayment,
                 TicketIdSnapshot = ticketIdSnapshot,
                 TicketUniqueCode = ticketUniqueCode,
                 TicketStartDate = ticketStartDate,

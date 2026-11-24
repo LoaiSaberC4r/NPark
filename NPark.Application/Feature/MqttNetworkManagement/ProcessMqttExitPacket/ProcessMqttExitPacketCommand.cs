@@ -1,4 +1,4 @@
-﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction;
 
 namespace NPark.Application.Feature.MqttNetworkManagement.ProcessMqttExitPacket
 {
@@ -23,6 +23,9 @@ namespace NPark.Application.Feature.MqttNetworkManagement.ProcessMqttExitPacket
         public string ActualQrHex { get; init; } = string.Empty;
 
         public string QrString { get; init; } = string.Empty;
+
+        public Guid? OperationId { get; init; }
+        public string? OperationStatus { get; init; }
 
         public Guid? TicketId { get; init; }
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -12,4 +12,8 @@ namespace NPark.Domain.Enums
         TicketArchive = 2,
         TicketExceedTransaction = 3
     }
+}
+namespace NPark.Domain.Enums
+{
+    public enum FinancialItemType { BaseTicketPayment = 1, ExceedPayment = 2 }
 }

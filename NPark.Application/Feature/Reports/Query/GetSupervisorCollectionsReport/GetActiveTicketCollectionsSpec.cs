@@ -1,4 +1,4 @@
-﻿using BuildingBlock.Domain.Specification;
+using BuildingBlock.Domain.Specification;
 using NPark.Domain.Entities;
 using System;
 using System.Collections.Generic;
@@ -12,12 +12,13 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionsReport
         : Specification<Ticket, ActiveTicketCollectionResponse>
     {
         public GetActiveTicketCollectionsSpec(
+            Guid supervisorId,
             DateTime fromDate,
             DateTime toDateExclusive)
         {
             AddCriteria(x =>
                 x.IsCollected &&
-                x.CollectedBy != null &&
+                x.CollectedBy == supervisorId &&
                 x.CollectedDate != null &&
                 x.CollectedDate >= fromDate &&
                 x.CollectedDate < toDateExclusive);
@@ -33,6 +34,8 @@ namespace NPark.Application.Feature.Reports.Query.GetSupervisorCollectionsReport
                 CollectorName = x.UserCollector != null ? x.UserCollector.Name : null,
 
                 CollectionAmount = x.Price,
+                ResponsibleCashierId = x.BasePaymentCashierId,
+                PaymentGateId = x.BasePaymentGateId,
 
                 VehicleNumber = x.VehicleNumber,
 

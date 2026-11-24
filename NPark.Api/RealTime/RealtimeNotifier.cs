@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.SignalR;
+using NPark.Application.Services;
+using Microsoft.AspNetCore.SignalR;
 using NPark.Application.Abstraction;
 using NPark.Application.Shared.Dto;
 
@@ -16,6 +17,9 @@ namespace NPark.Api.RealTime
         {
             _hub = hub ?? throw new ArgumentNullException(nameof(hub));
         }
+
+        public Task NotifyGateOperationAsync(GateOperationResponse payload)
+            => _hub.Clients.Group(NotificationsHub.GateGroup(payload.GateId)).GateOperationStatusChanged(payload);
 
         public Task NotifyTicketAddedAsync(TicketAddedNotification payload)
             => _hub.Clients.All.TicketAdded(payload);

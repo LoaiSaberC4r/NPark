@@ -1,4 +1,4 @@
-﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Domain.Results;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -65,7 +65,7 @@ namespace BuildingBlock.Application.Behaviors
             // ----------------- COMMAND INVALIDATION (TAG-ONLY) -----------------
             var response = await next();
 
-            if (request is ICommand && IsSuccess(response))
+            if (request is ICommandRequest && response is IResult { IsSuccess: true })
             {
                 if (request is ICacheInvalidator invalidator)
                 {
@@ -76,7 +76,14 @@ namespace BuildingBlock.Application.Behaviors
 
                     if (tags.Length > 0)
                     {
-                        await _cache.InvalidateByTagsAsync(tags, ct);
+                        try
+                        {
+                            await _cache.InvalidateByTagsAsync(tags, CancellationToken.None);
+                        }
+                        catch (Exception ex)
+                        {
+                            _log.LogWarning(ex, "Post-commit cache invalidation failed for {RequestType}", typeof(TRequest).Name);
+                        }
                         _log.LogInformation("CACHE INVALIDATE tags=[{Tags}]", string.Join(",", tags));
                     }
                     else
@@ -124,39 +131,6 @@ namespace BuildingBlock.Application.Behaviors
             };
         }
 
-        private static bool ShouldCache(TResponse res)
-        {
-            // Cache only successful Result/Result<T>; otherwise cache raw DTOs/primitives.
-            var type = res?.GetType();
-            if (type is null) return true;
-
-            if (type == typeof(Result))
-                return ((Result)(object)res!).IsSuccess;
-
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Result<>))
-            {
-                var isSuccessProp = type.GetProperty("IsSuccess")!;
-                return (bool)(isSuccessProp.GetValue(res) ?? false);
-            }
-
-            return true;
-        }
-
-        private static bool IsSuccess(TResponse res)
-        {
-            var type = res?.GetType();
-            if (type is null) return true;
-
-            if (type == typeof(Result))
-                return ((Result)(object)res!).IsSuccess;
-
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Result<>))
-            {
-                var isSuccessProp = type.GetProperty("IsSuccess")!;
-                return (bool)(isSuccessProp.GetValue(res) ?? false);
-            }
-
-            return true;
-        }
+        private static bool ShouldCache(TResponse response) => response is not IResult { IsFailure: true };
     }
 }

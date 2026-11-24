@@ -1,4 +1,4 @@
-﻿using BuildingBlock.Domain.Exceptions;
+using BuildingBlock.Domain.Exceptions;
 using BuildingBlock.Domain.Results;
 using MediatR;
 
@@ -12,7 +12,7 @@ namespace BuildingBlock.Application.Behaviors
             {
                 return await next();
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // لو TResponse هو Result/Result<T> رجّع Failure بدل ما ترمي، وإلا ارمِ وخلي الميدلوير يعالج
                 var tResp = typeof(TResponse);

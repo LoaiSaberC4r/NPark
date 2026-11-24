@@ -1,4 +1,4 @@
-﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction;
 
 namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTickets
 {
@@ -34,7 +34,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
         /// <summary>
         /// The user who created the tickets.
         /// </summary>
-        public Guid ResponsibleUserId { get; init; }
+        public Guid? ResponsibleUserId { get; init; }
         public string ResponsibleUserName { get; init; } = string.Empty;
 
         public int TicketsCount { get; init; }
@@ -56,7 +56,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.CollectEnterTicket
         /// <summary>
         /// The user who created the ticket.
         /// </summary>
-        public Guid ResponsibleUserId { get; init; }
+        public Guid? ResponsibleUserId { get; init; }
 
         public DateTime StartDate { get; init; }
 

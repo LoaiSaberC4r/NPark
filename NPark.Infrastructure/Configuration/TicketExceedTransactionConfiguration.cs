@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using NPark.Domain.Entities;
 
@@ -11,6 +11,7 @@ namespace NPark.Infrastructure.Configuration
         {
             builder.ToTable("TicketExceedTransactions");
 
+            builder.Property(x => x.RowVersion).IsRowVersion();
             builder.HasKey(x => x.Id);
 
             // -----------------------------
@@ -125,8 +126,9 @@ namespace NPark.Infrastructure.Configuration
             builder.Navigation(x => x.Sanctions)
                 .UsePropertyAccessMode(PropertyAccessMode.Field);
 
-            builder.HasIndex(x => x.TicketIdSnapshot)
-                .IsUnique();
+            builder.HasIndex(x => new { x.TicketIdSnapshot, x.IdempotencyKey }).IsUnique().HasFilter("[IdempotencyKey] IS NOT NULL");
+            builder.Property(x => x.IdempotencyKey).HasMaxLength(128);
+            builder.HasIndex(x => x.TicketIdSnapshot);
 
             builder.HasIndex(x => x.GateId);
             builder.HasIndex(x => x.UserCollectId);

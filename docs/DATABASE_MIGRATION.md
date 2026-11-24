@@ -1,0 +1,10 @@
+# SQL Server migration
+
+Apply from the last committed migration, `20260505150257_AddingSuperVisorRecord`, using [preflight SQL](NPARK_FINANCIAL_INTEGRITY_V2_PREFLIGHT.sql) and the [idempotent upgrade](NPARK_FINANCIAL_INTEGRITY_V2.sql). Use SQLCMD with `-b` so an error stops the script. Run against a rehearsal database before rollout and review the database backup and migration history.
+
+- Legacy `ValidExitDate` is backfilled from the calendar date of the original `StartDate`, which was stored as business-local time. Ticket IDs, QR values, original dates, and source relationships stay unchanged.
+- Existing entries use `Legacy` confirmation status. Historical ACK and cash payment timestamps remain unknown. A valid legacy cashier-paid flag satisfies the base requirement. Historical exceed Create records retain their legacy paid interpretation. Overdue legacy records still need coverage under the configured policy.
+- Base collection items backfill the original `TicketIdSnapshot` into `SourceRecordId`. Exceed items are backfilled only after the existing payment is verified to have the historical matching ID and ticket ID. The migration stops on unresolved references or duplicate financial identities and rolls back. The preflight identifies individual items and collection batches for investigation.
+- Review duplicates with finance staff and compare receipts, supervisor batches, and historical sanction references. Preserve the evidence and agree on a reviewed data-repair script for the specific records before restarting migration. Review pre-existing active/archive overlaps and suspicious historical base values individually. Migration leaves historical amounts unchanged.
+- API startup now requires applied migrations. Apply the migration before starting the new API. Verify the migration history, unique indexes, and report totals after upgrade.
+- The down migration refuses when it would lose acknowledged gate history or transaction metadata or when multiple exceed payments for one ticket cannot be represented in the previous schema. Use a reviewed backup and replay process or a forward repair once the new workflow has been used.

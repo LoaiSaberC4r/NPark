@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 
 namespace BuildingBlock.Application.Abstraction.Media
 {
@@ -13,6 +13,7 @@ namespace BuildingBlock.Application.Abstraction.Media
         void Remove(string filePath);
 
         void RemoveRange(IEnumerable<string> filePaths);
+        void RemoveFromFolder(string fileName, string folderName);
 
         Task<string> SaveVideoAsync(IFormFile videoFile, string folderName);
     }

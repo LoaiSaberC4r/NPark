@@ -1,4 +1,6 @@
-﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Behaviors;
+using NPark.Application.Services;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Infrastracture.Bootstrap;
 using BuildingBlock.Infrastracture.Interceptors;
@@ -40,7 +42,7 @@ namespace NPark.Infrastructure.Bootstrap
             services.AddSecurity();
             services.AddEfInfrastructure();
             services.AddBuildingBlockAuditingAndSoftDelete();
-            services.EnsureDatabaseInitializationAndUpToDate();
+
             services.AddHttpClient();
             services.AddSingleton<ICacheService, MemoryCacheService>();
             services.AddSingleton<IByteVerificationService, ByteVerificationService>();
@@ -55,6 +57,29 @@ namespace NPark.Infrastructure.Bootstrap
             services.AddScoped<ISendProtocol, SendProtocol>();
             services.AddScoped<ITokenReader, JwtReader>();
 
+            services.AddSingleton(TimeProvider.System);
+            services.AddOptions<ParkingBusinessOptions>().Bind(configuration.GetSection("ParkingBusiness"))
+                .Validate(x => TimeZoneInfo.TryFindSystemTimeZoneById(x.TimeZoneId, out _), "Invalid parking business time zone")
+                .ValidateOnStart();
+            services.AddOptions<OvernightParkingOptions>().Bind(configuration.GetSection("OvernightParking"))
+                .Validate(x => Enum.IsDefined(x.PenaltyMode) && x.RequireFullPenaltyPayment, "Invalid overnight payment policy")
+                .ValidateOnStart();
+            services.AddOptions<GateOperationOptions>().Bind(configuration.GetSection("GateOperation"))
+                .Validate(x => x.RequireAcknowledgment && !x.Retain && x.CommandQos > 0 && x.CommandQos <= 2
+                    && x.AckQos > 0 && x.AckQos <= 2 && x.AckTimeoutSeconds > 0 && x.RecoveryIntervalSeconds > 0
+                    && x.MaxRetries >= 0 && x.RetryIntervalMilliseconds >= 0
+                    && (!x.EnableAutomaticRetry || x.HardwareDeduplicationConfirmed)
+                    && x.CommandTopicTemplate.Split("{controllerId}").Length == 2
+                    && !x.CommandTopicTemplate.Contains('+') && !x.CommandTopicTemplate.Contains('#')
+                    && (x.AckTopicFilter == "ack/network/+" || x.AckTopicFilter == "ack/network/#"),
+                    "Invalid acknowledged gate configuration")
+                .ValidateOnStart();
+            services.AddScoped<IVerifyTransactionCommit, TransactionCommitVerifier>();
+            services.AddSingleton<GateAckSubscriptionState>();
+            services.AddSingleton<GateOperationRecoveryService>();
+            services.AddSingleton<IGateOperationDispatcher>(sp => sp.GetRequiredService<GateOperationRecoveryService>());
+            services.AddHostedService(sp => sp.GetRequiredService<GateOperationRecoveryService>());
+            services.AddHostedService<GateAckSubscriber>();
             services.Configure<MqttOptions>(configuration.GetSection("Mqtt"));
             services.Configure<MqttHeartbeatOptions>(configuration.GetSection("MqttHeartbeat"));
             services.AddHostedService<MqttNetworkHeartbeatService>();
@@ -92,98 +117,6 @@ namespace NPark.Infrastructure.Bootstrap
             return services;
         }
 
-        #region Database ifnitialization
-
-        private static void EnsureDatabaseInitializationAndUpToDate(this IServiceCollection services)
-        {
-            using var serviceProvider = services.BuildServiceProvider();
-            var dbContext = serviceProvider.GetRequiredService<NParkDBContext>();
-            var logger = serviceProvider.GetRequiredService<ILogger<NParkDBContext>>();
-
-            try
-            {
-                if (!dbContext.Database.CanConnect())
-                {
-                    dbContext.Database.EnsureCreated();
-                    EnsureMigrationHistoryTableExists(dbContext, logger);
-                    MarkMigrationsAsApplied(dbContext, logger);
-                    logger.LogInformation("Database created, and migrations marked as applied.");
-                    return;
-                }
-
-                ApplyOrMarkPendingMigrations(dbContext, logger);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError($"An error occurred during database initialization: {ex.Message}");
-            }
-        }
-
-        private static void EnsureMigrationHistoryTableExists(NParkDBContext dbContext, ILogger<NParkDBContext> logger)
-        {
-            const string checkTableQuery = @"
-                IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES
-                               WHERE TABLE_NAME = '__EFMigrationsHistory')
-                BEGIN
-                    CREATE TABLE __EFMigrationsHistory (
-                        MigrationId NVARCHAR(150) NOT NULL PRIMARY KEY,
-                        ProductVersion NVARCHAR(32) NOT NULL
-                    );
-                END";
-
-            dbContext.Database.ExecuteSqlRaw(checkTableQuery);
-            logger.LogInformation("Verified or created the __EFMigrationsHistory table.");
-        }
-
-        private static void MarkMigrationsAsApplied(NParkDBContext dbContext, ILogger<NParkDBContext> logger)
-        {
-            var pendingMigrations = dbContext.Database.GetPendingMigrations();
-
-            if (pendingMigrations.Any())
-            {
-                logger.LogInformation($"Marking migrations as applied: {string.Join(", ", pendingMigrations)}");
-                var efCurrenVersion = GetCurrentEfVersion();
-                foreach (var migrationId in pendingMigrations)
-                {
-                    dbContext.Database.ExecuteSqlInterpolated($@"
-                            INSERT INTO __EFMigrationsHistory (MigrationId, ProductVersion)
-                            VALUES ({migrationId}, {efCurrenVersion})");
-                }
-
-                logger.LogInformation("Migrations marked as applied successfully.");
-            }
-            else
-            {
-                logger.LogInformation("No migrations to mark as applied.");
-            }
-        }
-
-        private static string GetCurrentEfVersion()
-        {
-            var efAssembly = typeof(DbContext).Assembly;
-            var version = efAssembly.GetName().Version;
-            return version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "Unknown";
-        }
-
-        private static void ApplyOrMarkPendingMigrations(NParkDBContext dbContext, ILogger<NParkDBContext> logger)
-        {
-            var pendingMigrations = dbContext.Database.GetPendingMigrations();
-
-            if (pendingMigrations.Any())
-            {
-                logger.LogInformation($"Pending migrations detected: {string.Join(", ", pendingMigrations)}");
-
-                dbContext.Database.Migrate();
-                logger.LogInformation($"Applied migrations: {string.Join(", ", pendingMigrations)}");
-            }
-            else
-            {
-                logger.LogInformation("No pending migrations.");
-            }
-        }
-
-        #endregion Database ifnitialization
-
         #region Seeding Database
 
         private static IServiceCollection AddSeeding(this IServiceCollection services)
@@ -214,7 +147,8 @@ namespace NPark.Infrastructure.Bootstrap
                 using var scope = _scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<NParkDBContext>();
 
-                //await db.Database.MigrateAsync(cancellationToken); if want to ensure!
+                if ((await db.Database.GetPendingMigrationsAsync(cancellationToken)).Any())
+                    throw new InvalidOperationException("Apply the reviewed NPark database migrations before starting the API.");
 
                 var seeder = scope.ServiceProvider.GetRequiredService<IEnsureSeeding>();
                 _logger.LogInformation("Starting database seeding (HostedService)...");
@@ -240,6 +174,16 @@ namespace NPark.Infrastructure.Bootstrap
             services.AddAuthentication(defaultScheme: JwtBearerDefaults.AuthenticationScheme)
                         .AddJwtBearer(options =>
                         {
+                            options.Events = new JwtBearerEvents
+                            {
+                                OnMessageReceived = context =>
+                                {
+                                    if (context.HttpContext.Request.Path.StartsWithSegments("/hubs/notifications") &&
+                                        string.IsNullOrEmpty(context.Request.Headers.Authorization))
+                                        context.Token = context.Request.Query["access_token"].FirstOrDefault();
+                                    return Task.CompletedTask;
+                                }
+                            };
                             options.TokenValidationParameters = new TokenValidationParameters
                             {
                                 ValidateIssuer = true,

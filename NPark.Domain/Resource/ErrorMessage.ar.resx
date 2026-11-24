@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -646,5 +646,44 @@
   </data>
   <data name="User_MustBeSupervisor" xml:space="preserve">
     <value>المستخدم يجب أن يكون مشرفًا.</value>
+  </data>
+  <data name="ParkingWorkflow_Eligible" xml:space="preserve">
+    <value>التذكرة صالحة للخروج.</value>
+  </data>
+  <data name="ParkingWorkflow_BasePaymentRequired" xml:space="preserve">
+    <value>يجب تأكيد دفع رسوم الانتظار.</value>
+  </data>
+  <data name="ParkingWorkflow_SanctionPaymentRequired" xml:space="preserve">
+    <value>توجد غرامات غير مدفوعة.</value>
+  </data>
+  <data name="ParkingWorkflow_OvernightPenaltyRequired" xml:space="preserve">
+    <value>يجب دفع غرامة المبيت.</value>
+  </data>
+  <data name="ParkingWorkflow_OvernightPenaltyConfigurationMissing" xml:space="preserve">
+    <value>إعداد غرامة المبيت غير مكتمل.</value>
+  </data>
+  <data name="ParkingWorkflow_EntryNotConfirmed" xml:space="preserve">
+    <value>لم يتم تأكيد فتح بوابة الدخول.</value>
+  </data>
+  <data name="ParkingWorkflow_GateOperationPending" xml:space="preserve">
+    <value>توجد عملية غير مكتملة للبوابة.</value>
+  </data>
+  <data name="ParkingWorkflow_TicketAlreadyExited" xml:space="preserve">
+    <value>تم خروج التذكرة بالفعل.</value>
+  </data>
+  <data name="ParkingWorkflow_TicketArchived" xml:space="preserve">
+    <value>تمت أرشفة التذكرة بالفعل.</value>
+  </data>
+  <data name="ParkingWorkflow_InvalidExitDate" xml:space="preserve">
+    <value>تاريخ الخروج غير صالح.</value>
+  </data>
+  <data name="ParkingWorkflow_AmbiguousTicket" xml:space="preserve">
+    <value>يوجد أكثر من تذكرة مطابقة.</value>
+  </data>
+  <data name="ParkingWorkflow_EntryNotAuthorized" xml:space="preserve">
+    <value>الدخول غير متاح لهذه التذكرة والبوابة.</value>
+  </data>
+  <data name="ParkingWorkflow_InvalidExitGate" xml:space="preserve">
+    <value>بوابة الخروج غير صالحة.</value>
   </data>
 </root>

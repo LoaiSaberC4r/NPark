@@ -1,4 +1,5 @@
-﻿using BuildingBlock.Domain.Specification;
+using NPark.Domain.Enums;
+using BuildingBlock.Domain.Specification;
 using NPark.Domain.Entities;
 
 namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.CollectTicketExceedTransaction
@@ -11,7 +12,7 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
             Include(x => x.UserCollector);
 
             AddCriteria(x =>
-                x.GateId == gateId &&
+                (x.PaymentGateId ?? x.GateId) == gateId && x.PaymentStatus != SanctionPaymentStatus.Assessed && x.ExceedAmount > 0 &&
                 x.SuperVisorCollectorId == null);
 
             AddOrderBy(x => x.CreatedAt);

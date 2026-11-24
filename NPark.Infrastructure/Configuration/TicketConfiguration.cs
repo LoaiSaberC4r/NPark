@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using NPark.Domain.Entities;
 
@@ -9,6 +9,7 @@ namespace NPark.Infrastructure.Configuration
         public void Configure(EntityTypeBuilder<Ticket> builder)
         {
             builder.ToTable("Tickets");
+            builder.Property(x => x.RowVersion).IsRowVersion();
             builder.HasKey(t => t.Id);
             builder.Property(t => t.Id).ValueGeneratedOnAdd();
             builder.Property(t => t.StartDate).IsRequired();

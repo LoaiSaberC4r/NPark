@@ -1,215 +1,78 @@
-﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
 using Microsoft.Extensions.Logging;
 using NPark.Application.Abstraction.Security;
+using NPark.Application.Services;
 using NPark.Domain.Entities;
 using NPark.Domain.Resource;
 using System.Text.RegularExpressions;
 
 namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
 {
-    internal sealed class ValidateExitByTextCommandHandler
-       : ICommandHandler<ValidateExitByTextCommand, ValidateExitByTextCommandResponse>
+    internal sealed class ValidateExitByTextCommandHandler(IByteVerificationService verification, IUnitOfWork db,
+        ITicketExitEligibilityService eligibility,
+        ILogger<ValidateExitByTextCommandHandler> logger)
+        : ICommandHandler<ValidateExitByTextCommand, ValidateExitByTextCommandResponse>
     {
-        private readonly IByteVerificationService _byteVerificationService;
-        private readonly IGenericRepository<Ticket> _ticketRepository;
-        private readonly ILogger<ValidateExitByTextCommandHandler> _logger;
-
-        public ValidateExitByTextCommandHandler(
-            IByteVerificationService byteVerificationService,
-            IGenericRepository<Ticket> ticketRepository,
-            ILogger<ValidateExitByTextCommandHandler> logger)
-        {
-            _byteVerificationService = byteVerificationService
-                ?? throw new ArgumentNullException(nameof(byteVerificationService));
-
-            _ticketRepository = ticketRepository
-                ?? throw new ArgumentNullException(nameof(ticketRepository));
-
-            _logger = logger
-                ?? throw new ArgumentNullException(nameof(logger));
-        }
-
-        public async Task<Result<ValidateExitByTextCommandResponse>> Handle(
-            ValidateExitByTextCommand request,
-            CancellationToken cancellationToken)
+        public async Task<Result<ValidateExitByTextCommandResponse>> Handle(ValidateExitByTextCommand request, CancellationToken ct)
         {
             var text = NormalizeInputText(request.Text);
-
-            _logger.LogInformation(
-                "ValidateExitByText started. TextLength={TextLength}, LooksLikeQrHex={LooksLikeQrHex}, LooksLikeBase64={LooksLikeBase64}",
-                text.Length,
-                LooksLikeExactFiveByteHex(text),
-                LooksLikeBase64(text));
-
             if (string.IsNullOrWhiteSpace(text))
-            {
-                _logger.LogWarning("ValidateExitByText stopped. Text is required.");
+                return Result<ValidateExitByTextCommandResponse>.Fail(new Error("ExitValidation.TextRequired",
+                    ErrorMessage.QrCode_Require, ErrorType.Validation));
 
-                return Result<ValidateExitByTextCommandResponse>.Fail(
-                    new Error(
-                        Code: "ExitValidation.TextRequired",
-                        Message: ErrorMessage.QrCode_Require,
-                        Type: ErrorType.Validation));
-            }
-
+            var response = new ValidateExitByTextCommandResponse { InputText = text };
             Ticket? ticket = null;
-            string? matchType = null;
-
-            // 1) Try QR first:
-            // New expected text:
-            // CA692015F4
+            var match = "QrCode";
             if (LooksLikeExactFiveByteHex(text) || LooksLikeBase64(text))
             {
-                ticket = await GetTicketByQrAsync(text, cancellationToken);
-
-                if (ticket is not null)
+                var bytes = NormalizeQrBytes(text);
+                if (bytes is { Length: 5 } && verification.VerifyByte5(bytes))
                 {
-                    matchType = LooksLikeExactFiveByteHex(text)
-                        ? "QrCodeHex"
-                        : "QrCode";
-                }
-            }
-
-            // 2) Fallback to CardNumber
-            if (ticket is null)
-            {
-                ticket = await GetTicketByCardNumberAsync(text, cancellationToken);
-
-                if (ticket is not null)
-                {
-                    matchType = "CardNumber";
-                }
-            }
-
-            // 3) Fallback to VehicleNumber
-            if (ticket is null)
-            {
-                ticket = await GetTicketByVehicleNumberAsync(text, cancellationToken);
-
-                if (ticket is not null)
-                {
-                    matchType = "VehicleNumber";
-                }
-            }
-
-            if (ticket is null)
-            {
-                _logger.LogWarning(
-                    "ValidateExitByText stopped. No ticket found. Text={Text}",
-                    text);
-
-                return Result<ValidateExitByTextCommandResponse>.Ok(
-                    new ValidateExitByTextCommandResponse
+                    var code = Convert.ToHexString(bytes.AsSpan(0, 4));
+                    ticket = await db.FirstOrDefaultWithSpecAsync(new Matching<Ticket>(t => t.UniqueCode == code), ct);
+                    if (ticket is null)
                     {
-                        InputText = text,
-                        MatchType = null,
-                        TicketId = null,
-                        TicketNumber = null,
-                        CardNumber = null,
-                        VehicleNumber = null,
-                        StartDate = null,
-                        EndDate = null,
-                        IsValidForExit = false
-                    });
+                        var archive = await db.FirstOrDefaultWithSpecAsync(new Matching<TicketArchive>(x => x.UniqueCode == code), ct);
+                        if (archive != null)
+                            return Result<ValidateExitByTextCommandResponse>.Ok(response with
+                                { ReasonCode = "TicketArchived", TicketId = archive.Id, EndDate = archive.EndDate });
+                    }
+                    match = LooksLikeExactFiveByteHex(text) ? "QrCodeHex" : "QrCode";
+                }
             }
 
-            var now = DateTime.Now;
-
-            var isValidForExit =
-                ticket.StartDate.Date == now.Date &&
-                ticket.EndDate is null;
-
-            _logger.LogInformation(
-                "ValidateExitByText completed. TicketId={TicketId}, MatchType={MatchType}, TicketNumber={TicketNumber}, StartDate={StartDate}, EndDate={EndDate}, Now={Now}, IsValidForExit={IsValidForExit}",
-                ticket.Id,
-                matchType,
-                ticket.UniqueCode,
-                ticket.StartDate,
-                ticket.EndDate,
-                now,
-                isValidForExit);
-
-            return Result<ValidateExitByTextCommandResponse>.Ok(
-                new ValidateExitByTextCommandResponse
+            if (ticket is null && !request.QrOnly)
+            {
+                var candidates = await db.ListWithSpecAsync(new TicketByCardNumberSpecification(text), ct);
+                match = "CardNumber";
+                if (candidates.Count == 0)
                 {
-                    InputText = text,
-                    MatchType = matchType,
-                    TicketId = ticket.Id,
-                    TicketNumber = ticket.UniqueCode,
-                    CardNumber = ticket.CardNumber,
-                    VehicleNumber = ticket.VehicleNumber,
-                    StartDate = ticket.StartDate,
-                    EndDate = ticket.EndDate,
-                    IsValidForExit = isValidForExit
-                });
-        }
-
-        private async Task<Ticket?> GetTicketByQrAsync(
-            string qrCode,
-            CancellationToken cancellationToken)
-        {
-            var bytes = NormalizeQrBytes(qrCode);
-
-            if (bytes is null)
-            {
-                _logger.LogWarning(
-                    "QR normalization failed. QR could not be converted to valid 5-byte format. Input={Input}",
-                    qrCode);
-
-                return null;
+                    candidates = await db.ListWithSpecAsync(new TicketByVehicleNumberSpecification(text), ct);
+                    match = "VehicleNumber";
+                }
+                if (candidates.Count > 1)
+                    return Result<ValidateExitByTextCommandResponse>.Ok(response with { ReasonCode = "AmbiguousTicket" });
+                ticket = candidates.SingleOrDefault();
             }
+            if (ticket is null)
+                return Result<ValidateExitByTextCommandResponse>.Ok(response);
 
-            _logger.LogInformation(
-                "QR normalized successfully. NormalizedBytesHex={NormalizedBytesHex}, BytesLength={BytesLength}",
-                ToSpacedHex(bytes),
-                bytes.Length);
-
-            if (bytes.Length != 5)
+            var assessment = await eligibility.EvaluateAsync(ticket, null, ct);
+            return Result<ValidateExitByTextCommandResponse>.Ok(response with
             {
-                _logger.LogWarning(
-                    "QR rejected. Normalized bytes must be exactly 5 bytes. BytesLength={BytesLength}, BytesHex={BytesHex}",
-                    bytes.Length,
-                    ToSpacedHex(bytes));
-
-                return null;
-            }
-
-            var isByte5Valid = _byteVerificationService.VerifyByte5(bytes);
-
-            _logger.LogInformation(
-                "QR byte verification completed. IsByte5Valid={IsByte5Valid}, BytesHex={BytesHex}",
-                isByte5Valid,
-                ToSpacedHex(bytes));
-
-            if (!isByte5Valid)
-            {
-                return null;
-            }
-
-            var uniquePart = bytes[..4];
-
-            var uniqueCode = Convert.ToHexString(uniquePart);
-
-            _logger.LogInformation(
-                "QR unique code extracted. UniqueCode={UniqueCode}, UniquePartHex={UniquePartHex}",
-                uniqueCode,
-                ToSpacedHex(uniquePart));
-
-            var spec = new TicketByUniqueCodeSpecification(uniqueCode);
-
-            var ticket = await _ticketRepository.FirstOrDefaultWithSpecAsync(
-                spec,
-                cancellationToken);
-
-            _logger.LogInformation(
-                "Ticket lookup by QR unique code completed. UniqueCode={UniqueCode}, Found={Found}, TicketId={TicketId}",
-                uniqueCode,
-                ticket is not null,
-                ticket?.Id);
-
-            return ticket;
+                MatchType = match,
+                TicketId = ticket.Id,
+                TicketNumber = ticket.UniqueCode,
+                CardNumber = ticket.CardNumber,
+                VehicleNumber = ticket.VehicleNumber,
+                StartDate = ticket.StartDate,
+                EndDate = ticket.EndDate,
+                IsValidForExit = assessment.IsValidForExit,
+                ReasonCode = assessment.ReasonCode,
+                Eligibility = assessment
+            });
         }
 
         private byte[]? NormalizeQrBytes(string qrCode)
@@ -224,7 +87,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
                 {
                     var hexBytes = Convert.FromHexString(cleanQr);
 
-                    _logger.LogInformation(
+                    logger.LogInformation(
                         "QR decoded using 10-character hexadecimal path. BytesLength={BytesLength}, BytesHex={BytesHex}",
                         hexBytes.Length,
                         ToSpacedHex(hexBytes));
@@ -233,7 +96,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(
+                    logger.LogWarning(
                         ex,
                         "QR hex decode failed. QrText={QrText}",
                         cleanQr);
@@ -246,9 +109,9 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
             // Base64 must decode to exactly 5 bytes.
             try
             {
-                var exactBytes = _byteVerificationService.DecodeBase64ToBytes(cleanQr);
+                var exactBytes = verification.DecodeBase64ToBytes(cleanQr);
 
-                _logger.LogInformation(
+                logger.LogInformation(
                     "QR decoded using exact 5-byte Base64 decoder. BytesLength={BytesLength}, BytesHex={BytesHex}",
                     exactBytes.Length,
                     ToSpacedHex(exactBytes));
@@ -257,7 +120,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
             }
             catch (Exception ex)
             {
-                _logger.LogInformation(
+                logger.LogInformation(
                     ex,
                     "Exact 5-byte Base64 QR decode failed. Trying legacy MQTT wrapped QR fallback.");
             }
@@ -272,14 +135,14 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(
+                logger.LogWarning(
                     ex,
                     "QR Base64 decode failed completely.");
 
                 return null;
             }
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "QR decoded using raw Base64. DecodedBytesLength={DecodedBytesLength}, DecodedBytesHex={DecodedBytesHex}",
                 decodedBytes.Length,
                 ToSpacedHex(decodedBytes));
@@ -289,7 +152,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
 
             if (!StartsWith(decodedBytes, prefix))
             {
-                _logger.LogWarning(
+                logger.LogWarning(
                     "Legacy wrapped QR rejected. Prefix not matched. ExpectedPrefix={ExpectedPrefix}, DecodedBytesHex={DecodedBytesHex}",
                     ToSpacedHex(prefix),
                     ToSpacedHex(decodedBytes));
@@ -299,7 +162,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
 
             if (!EndsWith(decodedBytes, suffix))
             {
-                _logger.LogWarning(
+                logger.LogWarning(
                     "Legacy wrapped QR rejected. Suffix not matched. ExpectedSuffix={ExpectedSuffix}, DecodedBytesHex={DecodedBytesHex}",
                     ToSpacedHex(suffix),
                     ToSpacedHex(decodedBytes));
@@ -311,7 +174,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
 
             if (innerLength <= 0)
             {
-                _logger.LogWarning(
+                logger.LogWarning(
                     "Legacy wrapped QR rejected. Inner data is empty. DecodedBytesHex={DecodedBytesHex}",
                     ToSpacedHex(decodedBytes));
 
@@ -341,14 +204,14 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
 
                     try
                     {
-                        isValidCandidate = _byteVerificationService.VerifyByte5(candidate);
+                        isValidCandidate = verification.VerifyByte5(candidate);
                     }
                     catch
                     {
                         isValidCandidate = false;
                     }
 
-                    _logger.LogInformation(
+                    logger.LogInformation(
                         "Testing legacy QR 5-byte candidate. Offset={Offset}, CandidateHex={CandidateHex}, IsValidCandidate={IsValidCandidate}",
                         i,
                         ToSpacedHex(candidate),
@@ -361,47 +224,11 @@ namespace NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText
                 }
             }
 
-            _logger.LogWarning(
+            logger.LogWarning(
                 "Legacy wrapped QR rejected. No valid 5-byte candidate found. InnerBytesHex={InnerBytesHex}",
                 ToSpacedHex(innerBytes));
 
             return null;
-        }
-
-        private async Task<Ticket?> GetTicketByCardNumberAsync(
-            string cardNumber,
-            CancellationToken cancellationToken)
-        {
-            var spec = new TicketByCardNumberSpecification(cardNumber);
-
-            var ticket = await _ticketRepository.FirstOrDefaultWithSpecAsync(
-                spec,
-                cancellationToken);
-
-            _logger.LogInformation(
-                "Ticket lookup by CardNumber completed. Found={Found}, TicketId={TicketId}",
-                ticket is not null,
-                ticket?.Id);
-
-            return ticket;
-        }
-
-        private async Task<Ticket?> GetTicketByVehicleNumberAsync(
-            string vehicleNumber,
-            CancellationToken cancellationToken)
-        {
-            var spec = new TicketByVehicleNumberSpecification(vehicleNumber);
-
-            var ticket = await _ticketRepository.FirstOrDefaultWithSpecAsync(
-                spec,
-                cancellationToken);
-
-            _logger.LogInformation(
-                "Ticket lookup by VehicleNumber completed. Found={Found}, TicketId={TicketId}",
-                ticket is not null,
-                ticket?.Id);
-
-            return ticket;
         }
 
         private static string NormalizeInputText(string? input)

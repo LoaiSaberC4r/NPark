@@ -1,4 +1,5 @@
-﻿using BuildingBlock.Domain.EntitiesHelper;
+using NPark.Domain.Enums;
+using BuildingBlock.Domain.EntitiesHelper;
 
 namespace NPark.Domain.Entities
 {
@@ -35,6 +36,17 @@ namespace NPark.Domain.Entities
         // -----------------------------
         // Transaction Data
         // -----------------------------
+        public SanctionPaymentStatus PaymentStatus { get; private set; }
+        public DateTime? PaymentConfirmedAtUtc { get; private set; }
+        public Guid? PaymentCashierId { get; private set; }
+        public Guid? PaymentGateId { get; private set; }
+        public DateOnly? PenaltyFromDate { get; private set; }
+        public DateOnly? PenaltyThroughDate { get; private set; }
+        public SanctionClassification Classification { get; private set; }
+        public string? IdempotencyKey { get; private set; }
+        public string? AppliedSanctionsJson { get; private set; }
+        public byte[] RowVersion { get; private set; } = [];
+
         public decimal ExceedAmount { get; private set; }
 
         public DateTime CreatedAt { get; private set; }
@@ -61,7 +73,10 @@ namespace NPark.Domain.Entities
             decimal exceedAmount,
             Guid gateId,
             Guid userCollectId,
-            IReadOnlyCollection<Sanction> sanctions)
+            IReadOnlyCollection<Sanction> sanctions,
+            DateTime paidAtUtc, DateTime businessTime, string idempotencyKey,
+            SanctionClassification classification, DateOnly? fromDate, DateOnly? throughDate,
+            string appliedSanctionsJson)
         {
             if (ticket is null)
                 throw new ArgumentNullException(nameof(ticket));
@@ -74,8 +89,16 @@ namespace NPark.Domain.Entities
 
             var transaction = new TicketExceedTransaction
             {
-                // Important: Id = TicketId, and there is NO FK relation with Ticket.
-                Id = ticket.Id,
+                Id = Guid.NewGuid(),
+                PaymentStatus = SanctionPaymentStatus.Confirmed,
+                PaymentConfirmedAtUtc = paidAtUtc,
+                PaymentCashierId = userCollectId,
+                PaymentGateId = gateId,
+                PenaltyFromDate = fromDate,
+                PenaltyThroughDate = throughDate,
+                Classification = classification,
+                IdempotencyKey = idempotencyKey,
+                AppliedSanctionsJson = appliedSanctionsJson,
 
                 TicketIdSnapshot = ticket.Id,
                 TicketUniqueCode = ticket.UniqueCode,
@@ -84,7 +107,7 @@ namespace NPark.Domain.Entities
                 TicketPrice = ticket.Price,
                 TicketOldExceedPrice = oldExceedPrice,
                 ExceedAmount = exceedAmount,
-                TotalPriceAfterExceed = ticket.Price + exceedAmount,
+                TotalPriceAfterExceed = ticket.Price + oldExceedPrice + exceedAmount,
 
                 VehicleNumber = ticket.VehicleNumber,
                 CardNumber = ticket.CardNumber,
@@ -101,7 +124,7 @@ namespace NPark.Domain.Entities
                 SuperVisorCollectorId = null,
                 SuperVisorCollectedAt = null,
 
-                CreatedAt = DateTime.Now
+                CreatedAt = businessTime
             };
 
             transaction._sanctions.AddRange(sanctions);

@@ -1,4 +1,4 @@
-﻿using BuildingBlock.Application.Abstraction.Encryption;
+using BuildingBlock.Application.Abstraction.Encryption;
 using BuildingBlock.Application.Abstraction.Media;
 using BuildingBlock.Application.Abstraction.QrCode;
 using BuildingBlock.Application.Repositories;
@@ -19,6 +19,7 @@ namespace BuildingBlock.Infrastracture.Bootstrap
         {
             services.AddScoped(typeof(IGenericRepository<>), typeof(EfGenericRepository<>));
             services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+            services.AddScoped<BuildingBlock.Application.Behaviors.TransactionScopeState>();
             return services;
         }
 

@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using NPark.Domain.Entities;
 
@@ -8,6 +8,7 @@ namespace NPark.Infrastructure.Configuration
     {
         public void Configure(EntityTypeBuilder<TicketArchive> builder)
         {
+            builder.Property(x => x.RowVersion).IsRowVersion();
             builder.HasKey(t => t.Id);
             builder.Property(t => t.Id)
     .ValueGeneratedNever();
@@ -16,7 +17,7 @@ namespace NPark.Infrastructure.Configuration
             builder.Property(t => t.CollectedBy).IsRequired(false);
             builder.Property(t => t.ExitGateId).IsRequired();
             builder.Property(t => t.VehicleNumber).IsRequired(false);
-            builder.Property(t => t.CollectedDate).IsRequired();
+            builder.Property(t => t.CollectedDate).IsRequired(false);
             builder.Property(t => t.UniqueCode).IsRequired(false);
             builder.Property(t => t.Price).IsRequired();
             builder.Property(t => t.IsSubscriber).IsRequired().HasDefaultValue(false);

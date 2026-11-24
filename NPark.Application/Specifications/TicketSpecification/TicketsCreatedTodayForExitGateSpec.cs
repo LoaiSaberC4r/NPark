@@ -1,4 +1,4 @@
-﻿using BuildingBlock.Domain.Specification;
+using BuildingBlock.Domain.Specification;
 using NPark.Application.Feature.TicketsManagement.Query.GetTicketForEntryGate;
 using NPark.Domain.Entities;
 
@@ -6,20 +6,20 @@ namespace NPark.Application.Specifications.TicketSpecification
 {
     internal class TicketsCreatedTodayForExitGateSpec : Specification<TicketArchive, GetTicketInfo>
     {
-        public TicketsCreatedTodayForExitGateSpec()
+        public TicketsCreatedTodayForExitGateSpec(DateTime start)
         {
-            var date = DateTime.Now.Date;
-            var start = date;
-            var end = date.AddDays(1);
-            AddCriteria(t => t.CreatedOnUtc >= start && t.CreatedOnUtc < end);
+            var end = start.AddDays(1);
+            AddCriteria(t => t.EndDate >= start && t.EndDate < end);
             AddCriteria(x => !x.IsCollected);
             UseNoTracking();
             Select(x => new GetTicketInfo
             {
-                isCollectedByCashier = x.IsCollected,
+                isCollectedByCashier = x.IsCashierCollected,
                 Price = x.Price,
-                TicketNumber = BitConverter.ToString(x.UniqueGuidPart).Replace("-", ""),
-                StartDate = x.CreatedOnUtc,
+                TicketNumber = x.UniqueCode,
+                StartDate = x.StartDate,
+                EndDate = x.EndDate,
+                TicketId = x.Id,
                 TicketInfo = x.VehicleNumber
             });
         }

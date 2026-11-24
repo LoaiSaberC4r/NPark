@@ -1,5 +1,5 @@
-﻿using BuildingBlock.Domain.EntitiesHelper;
-using NPark.Domain.DomainEvent;
+using BuildingBlock.Domain.EntitiesHelper;
+using NPark.Domain.Enums;
 using System.Buffers.Binary;
 using System.Globalization;
 
@@ -8,6 +8,16 @@ namespace NPark.Domain.Entities
     public sealed class Ticket : AggregateRoot<Guid>
     {
         private readonly List<TicketAttachment> _ticketAttachments = new();
+        public DateOnly ValidExitDate { get; private set; }
+        public EntryConfirmationStatus EntryConfirmationStatus { get; private set; }
+        public DateTime? EntryConfirmedAtUtc { get; private set; }
+        public BasePaymentStatus BasePaymentStatus { get; private set; }
+        public DateTime? BasePaymentConfirmedAtUtc { get; private set; }
+        public Guid? BasePaymentCashierId { get; private set; }
+        public Guid? BasePaymentGateId { get; private set; }
+        public PriceType? PricingModeSnapshot { get; private set; }
+        public byte[] RowVersion { get; private set; } = [];
+        public bool BasePriceCalculated { get; private set; }
         public DateTime StartDate { get; private set; }
         public DateTime? EndDate { get; private set; } = null;
         public decimal Price { get; private set; }
@@ -34,13 +44,18 @@ namespace NPark.Domain.Entities
         private Ticket()
         { }
 
-        public static Ticket Create(DateTime startDate, decimal price, Guid gateId, Guid userId
-            )
+        public static Ticket Create(DateTime startDate, decimal price, Guid gateId, Guid userId,
+            DateOnly businessDate, PriceType pricingMode)
         {
             var ticket = new Ticket()
             {
                 Id = Guid.NewGuid(),
                 StartDate = startDate,
+                ValidExitDate = businessDate,
+                PricingModeSnapshot = pricingMode,
+                BasePriceCalculated = pricingMode == PriceType.Enter,
+                BasePaymentStatus = BasePaymentStatus.Unpaid,
+                EntryConfirmationStatus = EntryConfirmationStatus.Pending,
                 Price = price,
                 GateId = gateId,
                 UserId = userId,
@@ -60,11 +75,46 @@ namespace NPark.Domain.Entities
             CollectedDate = now ?? DateTime.Now;
         }
 
-        public void SetExitGate(Guid exitGateId) => ExitGateId = exitGateId;
-
         public void SetVehicleNumber(string vehicleNumber) => VehicleNumber = vehicleNumber;
 
-        public void SetIsCashierCollected() => IsCashierCollected = true;
+        public void ConfirmEntry(DateTime utc)
+        {
+            if (EntryConfirmationStatus == EntryConfirmationStatus.Confirmed)
+                return;
+            EntryConfirmedAtUtc = utc;
+            EntryConfirmationStatus = EntryConfirmationStatus.Confirmed;
+        }
+
+        public void ConfirmBasePayment(Guid cashierId, Guid gateId, DateTime utc)
+        {
+            if (IsCashierCollected)
+                return;
+            if (EndDate.HasValue || !BasePriceCalculated && BasePaymentStatus != BasePaymentStatus.Legacy)
+                throw new InvalidOperationException("The ticket has no collectible base quote.");
+
+            IsCashierCollected = true;
+            BasePaymentStatus = Price == 0 ? BasePaymentStatus.NoCharge : BasePaymentStatus.Paid;
+            if (Price > 0)
+            {
+                BasePaymentCashierId = cashierId;
+                BasePaymentGateId = gateId;
+                BasePaymentConfirmedAtUtc = utc;
+            }
+        }
+
+        public void ExtendExitValidity(DateOnly date)
+        {
+            if (date > ValidExitDate)
+                ValidExitDate = date;
+        }
+
+        public void CompleteExit(Guid gateId, DateTime confirmedAt)
+        {
+            if (gateId == Guid.Empty || EndDate.HasValue)
+                throw new InvalidOperationException("A valid gate and an active ticket are required.");
+            ExitGateId = gateId;
+            EndDate = confirmedAt;
+        }
 
         public void SetCollectedBy(Guid collectedBy)
         {
@@ -86,15 +136,21 @@ namespace NPark.Domain.Entities
         {
             Price = 0;
             IsSubscriber = true;
+            BasePriceCalculated = true;
             IsCashierCollected = true;
+            BasePaymentStatus = BasePaymentStatus.NoCharge;
             VehicleNumber = vehicleNumber;
             SubscriberNationalId = nationalId;
             CardNumber = cardNumber;
         }
 
-        public void SetPrice(decimal price) => Price = price;
-
-        public void SetExitDate() => EndDate = DateTime.Now;
+        public void SetPrice(decimal price)
+        {
+            if (IsCashierCollected || EndDate.HasValue || price < 0)
+                throw new InvalidOperationException("The base price cannot be changed.");
+            Price = price;
+            BasePriceCalculated = true;
+        }
 
         public static byte[] ParseUniqueCode(string code)
         {
@@ -105,20 +161,18 @@ namespace NPark.Domain.Entities
             return Convert.FromHexString(code);
         }
 
-        public void Archive() => RaiseDomainEvent(new ExitTicketDomainEvent(this));
-
         public void AddAttachment(string filePath)
         {
             var attachment = TicketAttachment.Create(Id, filePath);
             _ticketAttachments.Add(attachment);
         }
 
-        public void SetExceedPrice(decimal exceedPrice)
+        public void AddExceedPrice(decimal exceedPrice)
         {
             if (exceedPrice < 0)
                 throw new ArgumentOutOfRangeException(nameof(exceedPrice), "Exceed price cannot be negative.");
 
-            ExceedPrice = exceedPrice;
+            ExceedPrice += exceedPrice;
         }
     }
 }

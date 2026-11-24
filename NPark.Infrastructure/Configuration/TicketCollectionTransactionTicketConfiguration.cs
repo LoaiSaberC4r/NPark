@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using NPark.Domain.Entities;
 using System;
@@ -25,7 +25,7 @@ namespace NPark.Infrastructure.Configuration
                 .IsRequired();
 
             builder.Property(x => x.ResponsibleUserId)
-                .IsRequired();
+                .IsRequired(false);
 
             builder.Property(x => x.Source)
                 .HasConversion<int>()
@@ -86,10 +86,13 @@ namespace NPark.Infrastructure.Configuration
             {
                 x.TicketCollectionTransactionId,
                 x.Source,
-                x.TicketIdSnapshot
+                x.SourceRecordId
             })
             .IsUnique();
 
+            builder.HasIndex(x => new { x.FinancialItemType, x.SourceRecordId })
+                .IsUnique();
+            builder.HasIndex(x => x.TicketIdSnapshot);
             builder.HasIndex(x => x.ResponsibleUserId);
 
             builder.HasIndex(x => x.TicketUniqueCode);

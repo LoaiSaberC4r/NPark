@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using NPark.Domain.Entities;
 using System;
@@ -25,7 +25,7 @@ namespace NPark.Infrastructure.Configuration
                 .IsRequired();
 
             builder.Property(x => x.ResponsibleUserId)
-                .IsRequired();
+                .IsRequired(false);
 
             builder.Property(x => x.ItemsCount)
                 .IsRequired();
@@ -44,7 +44,7 @@ namespace NPark.Infrastructure.Configuration
                 x.TicketCollectionTransactionId,
                 x.ResponsibleUserId
             })
-            .IsUnique();
+            .IsUnique().HasFilter(null);
         }
     }
 }

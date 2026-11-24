@@ -1,4 +1,7 @@
-﻿using BuildingBlock.Api;
+using NPark.Application.Services;
+using Microsoft.AspNetCore.Authorization;
+using NPark.Api.Contracts;
+using BuildingBlock.Api;
 using BuildingBlock.Api.ControllerTemplate;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -72,6 +75,7 @@ namespace NPark.Api.Controllers
             return result.ToIActionResult();
         }
 
+        [Authorize]
         [HttpPost(nameof(CollectCashier))]
         public async Task<IActionResult> CollectCashier([FromBody] ColletByCachierCommand command, CancellationToken cancellationToken)
         {
@@ -87,6 +91,7 @@ namespace NPark.Api.Controllers
             return result.ToIActionResult();
         }
 
+        [Authorize]
         [HttpPost(nameof(CalculateQrCodeTicketSalary))]
         public async Task<IActionResult> CalculateQrCodeTicketSalary([FromBody] CalculateSalaryCommand command, CancellationToken cancellationToken)
         {
@@ -94,6 +99,7 @@ namespace NPark.Api.Controllers
             return result.ToIActionResult();
         }
 
+        [Authorize]
         [HttpPost(nameof(CalculateSalaryForSubscriberCommand))]
         public async Task<IActionResult> CalculateCardTicketSalary([FromBody] CalculateSalaryForSubscriberCommand command, CancellationToken cancellationToken)
         {
@@ -101,11 +107,14 @@ namespace NPark.Api.Controllers
             return result.ToIActionResult();
         }
 
+        [Authorize]
         [HttpPost(nameof(ExitTicket))]
+        [ProducesResponseType(typeof(GateOperationResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(GateOperationResponse), StatusCodes.Status202Accepted)]
         public async Task<IActionResult> ExitTicket(ExitTicketCommand command, CancellationToken cancellationToken)
         {
             var result = await sender.Send(command, cancellationToken);
-            return result.ToIActionResult();
+            return result.ToOperationResponse();
         }
 
         [HttpGet(nameof(SearchTicket))]
@@ -122,6 +131,7 @@ namespace NPark.Api.Controllers
             return result.ToIActionResult();
         }
 
+        [Authorize]
         [HttpPost(nameof(ScanTicket))]
         public async Task<IActionResult> ScanTicket([FromBody] ScanQrCodeCommand command, CancellationToken cancellationToken)
         {
@@ -136,6 +146,7 @@ namespace NPark.Api.Controllers
             return result.ToIActionResult();
         }
 
+        [Authorize]
         [HttpGet("validate-exit-by-vehicle-number")]
         public async Task<IActionResult> ValidateExitByVehicleNumber(
            [FromQuery] string vehicleNumber,
@@ -148,6 +159,7 @@ namespace NPark.Api.Controllers
             return result.ToIActionResult();
         }
 
+        [Authorize]
         [HttpPost("validate-exit-by-text")]
         public async Task<IActionResult> ValidateExitByText(
         [FromBody] ValidateExitByTextCommand command,

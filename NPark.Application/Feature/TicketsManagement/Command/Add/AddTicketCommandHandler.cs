@@ -1,4 +1,7 @@
-﻿using BuildingBlock.Application.Abstraction;
+using MediatR;
+using Microsoft.Extensions.DependencyInjection;
+using NPark.Application.Services;
+using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Application.Abstraction.Media;
 using BuildingBlock.Application.Abstraction.QrCode;
 using BuildingBlock.Application.Repositories;
@@ -32,6 +35,9 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
         private readonly IMediaService _mediaService;
         private readonly ILogger<AddTicketCommandHandler> _logger;
         private readonly IRealtimeNotifier _realtimeNotifier;
+        private readonly ParkingBusinessClock _clock;
+        private readonly ISender _sender;
+        private readonly IServiceScopeFactory _scopes;
 
         public AddTicketCommandHandler(
             IGenericRepository<Ticket> ticketRepository,
@@ -45,8 +51,11 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             ILogger<AddTicketCommandHandler> logger,
             IRealtimeNotifier realtimeNotifier,
             IGenericRepository<ParkingSystemConfiguration> parkingSystemConfigurationRepository,
-            IGenericRepository<ParkingGate> parkingGateRepository)
+            IGenericRepository<ParkingGate> parkingGateRepository, ParkingBusinessClock clock, ISender sender, IServiceScopeFactory scopes)
         {
+            _clock = clock;
+            _sender = sender;
+            _scopes = scopes;
             _ticketRepository = ticketRepository ?? throw new ArgumentNullException(nameof(ticketRepository));
             _parkingMembershipsRepository = parkingMembershipsRepository ?? throw new ArgumentNullException(nameof(parkingMembershipsRepository));
             _qrCodeService = qrCodeService ?? throw new ArgumentNullException(nameof(qrCodeService));
@@ -114,7 +123,11 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                             Type: ErrorType.NotFound));
                 }
 
-                if (gateInfo.LprIp != null)
+                if (gateInfo.GateType != GateType.Entrance)
+                    return Result<AddTicketCommandResponse>.Fail(new Error("Gate.InvalidForEntry",
+                        ErrorMessage.GateNotFound, ErrorType.Conflict));
+
+                if (gateInfo.HasLpr)
                 {
                     if (request.VehicleNumber == null)
                     {
@@ -201,7 +214,8 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                         Type: ErrorType.NotFound));
             }
 
-            var now = DateTime.Now;
+            var issuedAtUtc = _clock.UtcNow;
+            var now = _clock.ToBusinessTime(issuedAtUtc);
 
             if (now < subscriber.CreatedAt || now >= subscriber.EndDate)
             {
@@ -247,15 +261,16 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                 startDate: now,
                 price: 0m,
                 gateId: gateId,
-                userId: userId);
+                userId: userId, businessDate: DateOnly.FromDateTime(now), pricingMode: configuration.PriceType);
 
             ticketEntity.SetSubscriber(
                 nationalId: subscriber.NationalId,
                 vehicleNumber: subscriber.VehicleNumber,
                 cardNumber: subscriber.CardNumber);
 
-            await _ticketRepository.AddAsync(ticketEntity, cancellationToken);
-            await _ticketRepository.SaveChangesAsync(cancellationToken);
+            var persisted = await PersistWithAttachmentsAsync(ticketEntity, request, cancellationToken);
+            if (persisted.IsFailure)
+                return Result<AddTicketCommandResponse>.Fail(persisted.Errors);
 
             await NotifyDashboardTicketAddedAsync(
                 ticketEntity,
@@ -279,7 +294,8 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             ParkingGate gateInfo,
             CancellationToken cancellationToken)
         {
-            var now = DateTime.Now;
+            var issuedAtUtc = _clock.UtcNow;
+            var now = _clock.ToBusinessTime(issuedAtUtc);
 
             Ticket ticketEntity;
 
@@ -327,28 +343,10 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                     startDate: now,
                     price: pricingScheme.Salary,
                     gateId: gateId,
-                    userId: userId);
+                    userId: userId, businessDate: DateOnly.FromDateTime(now), pricingMode: configuration.PriceType);
 
-                ticketEntity.SetIsCashierCollected();
+                ticketEntity.ConfirmBasePayment(userId, gateId, issuedAtUtc);
 
-                if (request.TicketsImages is { Count: > 0 })
-                {
-                    foreach (var file in request.TicketsImages)
-                    {
-                        var filePath = await _mediaService
-                            .SaveAsync(file, FileNames.TicketAttachments);
-
-                        ticketEntity.AddAttachment(filePath);
-                    }
-                }
-
-                if (request.ScannerPhoto is not null)
-                {
-                    var filePath = await _mediaService
-                        .SaveAsync(request.ScannerPhoto, FileNames.TicketAttachments);
-
-                    ticketEntity.AddAttachment(filePath);
-                }
             }
             else
             {
@@ -356,7 +354,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                     startDate: now,
                     price: 0m,
                     gateId: gateId,
-                    userId: userId);
+                    userId: userId, businessDate: DateOnly.FromDateTime(now), pricingMode: configuration.PriceType);
             }
 
             if (!string.IsNullOrWhiteSpace(request.VehicleNumber))
@@ -364,23 +362,69 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                 ticketEntity.SetVehicleNumber(request.VehicleNumber);
             }
 
-            await _ticketRepository.AddAsync(ticketEntity, cancellationToken);
-            await _ticketRepository.SaveChangesAsync(cancellationToken);
+            var generatedQr = GenerateTicketQrCode(ticketEntity);
+            var response = BuildResponse(ticketEntity, generatedQr.QrCode, generatedQr.QrText);
+            var persisted = await PersistWithAttachmentsAsync(ticketEntity, request, cancellationToken);
+            if (persisted.IsFailure)
+                return Result<AddTicketCommandResponse>.Fail(persisted.Errors);
 
             await NotifyDashboardTicketAddedAsync(
-                ticketEntity,
-                gateInfo,
-                isSubscriber: false,
-                cancellationToken);
-
-            var generatedQr = GenerateTicketQrCode(ticketEntity);
-
-            var response = BuildResponse(
-                ticketEntity,
-                generatedQr.QrCode,
-                generatedQr.QrText);
-
+                ticketEntity, gateInfo, isSubscriber: false, cancellationToken);
             return Result<AddTicketCommandResponse>.Ok(response);
+        }
+
+        private async Task<Result> PersistWithAttachmentsAsync(Ticket ticket, AddTicketCommand request, CancellationToken ct)
+        {
+            var newFiles = new List<string>();
+            var persistenceAttempted = false;
+            try
+            {
+                var files = request.TicketsImages?.AsEnumerable() ?? [];
+                if (request.ScannerPhoto is { } scannerPhoto)
+                    files = files.Append(scannerPhoto);
+                foreach (var file in files)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var path = await _mediaService.SaveAsync(file, FileNames.TicketAttachments);
+                    newFiles.Add(path);
+                    ticket.AddAttachment(path);
+                }
+
+                persistenceAttempted = true;
+                var persisted = await _sender.Send(new PersistIssuedTicket(ticket), ct);
+                if (persisted.IsFailure)
+                    await CleanupFilesAsync(ticket.Id, newFiles, persistenceAttempted);
+                return persisted;
+            }
+            catch
+            {
+                await CleanupFilesAsync(ticket.Id, newFiles, persistenceAttempted);
+                throw;
+            }
+        }
+
+        private async Task CleanupFilesAsync(Guid ticketId, List<string> paths, bool persistenceAttempted)
+        {
+            if (paths.Count == 0)
+                return;
+            try
+            {
+                if (persistenceAttempted)
+                {
+                    await using var scope = _scopes.CreateAsyncScope();
+                    var db = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                    if (await db.AnyWithSpecAsync(new Matching<Ticket>(x => x.Id == ticketId), timeout.Token) ||
+                        await db.AnyWithSpecAsync(new Matching<TicketArchive>(x => x.Id == ticketId), timeout.Token))
+                        return;
+                }
+                foreach (var path in paths)
+                    _mediaService.RemoveFromFolder(path, FileNames.TicketAttachments);
+            }
+            catch (Exception error)
+            {
+                _logger.LogWarning(error, "Could not verify issuance or remove temporary media for ticket {TicketId}", ticketId);
+            }
         }
 
         private async Task NotifyDashboardTicketAddedAsync(
@@ -455,6 +499,9 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             return new AddTicketCommandResponse
             {
                 CreatedAt = ticketEntity.StartDate,
+                ValidExitDate = ticketEntity.ValidExitDate,
+                EntryConfirmationStatus = ticketEntity.EntryConfirmationStatus.ToString(),
+                IsCashierCollected = ticketEntity.IsCashierCollected,
                 Price = ticketEntity.Price,
                 QrCode = qrCode ?? Array.Empty<byte>(),
                 TicketId = ticketEntity.Id,

@@ -1,4 +1,4 @@
-﻿using BuildingBlock.Application.Abstraction;
+using BuildingBlock.Application.Abstraction;
 
 namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.CollectTicketExceedTransaction
 {
@@ -32,7 +32,7 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
         /// <summary>
         /// User who created/collected the exceed transaction.
         /// </summary>
-        public Guid ResponsibleUserId { get; init; }
+        public Guid? ResponsibleUserId { get; init; }
 
         public string ResponsibleUserName { get; init; } = string.Empty;
 
@@ -49,7 +49,7 @@ namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.C
 
         public string TicketUniqueCode { get; init; } = string.Empty;
 
-        public Guid ResponsibleUserId { get; init; }
+        public Guid? ResponsibleUserId { get; init; }
 
         public string ResponsibleUserName { get; init; } = string.Empty;
 

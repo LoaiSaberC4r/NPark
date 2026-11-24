@@ -1,295 +1,146 @@
-﻿using BuildingBlock.Application.Abstraction;
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Application.Abstraction.QrCode;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 using NPark.Application.Abstraction.Security;
+using NPark.Application.Services;
 using NPark.Domain.Entities;
+using NPark.Domain.Enums;
 using NPark.Domain.Resource;
 
-namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.Create
+namespace NPark.Application.Feature.TicketExceedTransactionsManagement.Command.Create;
+
+internal sealed class CreateTicketExceedTransactionCommandHandler(IUnitOfWork db, IQRCodeService qr,
+    IByteVerificationService verification, IHttpContextAccessor http, ITokenReader tokens,
+    OvernightPenaltyPolicy overnight, ParkingBusinessClock clock)
+    : ICommandHandler<CreateTicketExceedTransactionCommand, CreateTicketExceedTransactionCommandResponse>
 {
-    internal sealed class CreateTicketExceedTransactionCommandHandler
-         : ICommandHandler<CreateTicketExceedTransactionCommand, CreateTicketExceedTransactionCommandResponse>
+    public async Task<Result<CreateTicketExceedTransactionCommandResponse>> Handle(
+        CreateTicketExceedTransactionCommand request, CancellationToken ct)
     {
-        private readonly IGenericRepository<Ticket> _ticketRepository;
-        private readonly IGenericRepository<TicketExceedTransaction> _ticketExceedTransactionRepository;
-        private readonly IGenericRepository<Sanction> _sanctionRepository;
-        private readonly IGenericRepository<ParkingGate> _parkingGateRepository;
-        private readonly IGenericRepository<User> _userRepository;
+        var principal = http.HttpContext?.User;
+        if (principal?.Identity?.IsAuthenticated != true || principal.GetGateId(tokens) is not Guid gateId ||
+            principal.GetUserId(tokens) is not Guid cashierId || !principal.IsInRole("ExitCashier"))
+            return Fail("Payment.CashierRequired", ErrorMessage.TokenInfo_Missing, ErrorType.Security);
+        var gate = await db.Repository<ParkingGate>().GetByIdAsync(gateId, ct);
+        if (gate?.GateType != GateType.Exit)
+            return Fail("InvalidExitGate", ErrorMessage.GateNotFound, ErrorType.Security);
 
-        private readonly IQRCodeService _qrCodeService;
-        private readonly IByteVerificationService _byteVerificationService;
+        var ticket = await db.Repository<Ticket>().GetByIdAsync(request.TicketId, ct);
+        if (await db.AnyWithSpecAsync(new Matching<TicketArchive>(x => x.Id == request.TicketId), ct))
+            return Result<CreateTicketExceedTransactionCommandResponse>.Fail(TicketExitEligibilityService.AsError("TicketArchived"));
+        if (ticket is null)
+            return Fail("TicketNotFound", ErrorMessage.Ticket_NotFound, ErrorType.NotFound);
+        if (ticket.EndDate.HasValue)
+            return Result<CreateTicketExceedTransactionCommandResponse>.Fail(TicketExitEligibilityService.AsError("TicketAlreadyExited"));
 
-        private readonly IHttpContextAccessor _httpContextAccessor;
-        private readonly ITokenReader _tokenReader;
-        private readonly ILogger<CreateTicketExceedTransactionCommandHandler> _logger;
+        var ids = request.SanctionIds.Order().ToArray();
+        var utc = clock.UtcNow;
+        var local = clock.ToBusinessTime(utc);
+        var day = DateOnly.FromDateTime(local);
+        var overnightSelected = overnight.SanctionId is Guid overnightId && ids.Contains(overnightId);
+        var key = request.IdempotencyKey is string supplied
+            ? "client:" + supplied.Trim()
+            : "selection:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+                string.Join(",", ids) + (overnightSelected ? day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : ""))));
 
-        public CreateTicketExceedTransactionCommandHandler(
-            IGenericRepository<Ticket> ticketRepository,
-            IGenericRepository<TicketExceedTransaction> ticketExceedTransactionRepository,
-            IGenericRepository<Sanction> sanctionRepository,
-            IGenericRepository<ParkingGate> parkingGateRepository,
-            IGenericRepository<User> userRepository,
-            IQRCodeService qrCodeService,
-            IByteVerificationService byteVerificationService,
-            IHttpContextAccessor httpContextAccessor,
-            ITokenReader tokenReader,
-            ILogger<CreateTicketExceedTransactionCommandHandler> logger)
+        var prior = await db.ListWithSpecAsync(new TicketSanctionsSpec(ticket.Id), ct);
+        var replay = prior.SingleOrDefault(x => x.IdempotencyKey == key);
+        if (replay != null)
         {
-            _ticketRepository = ticketRepository ?? throw new ArgumentNullException(nameof(ticketRepository));
-            _ticketExceedTransactionRepository = ticketExceedTransactionRepository ?? throw new ArgumentNullException(nameof(ticketExceedTransactionRepository));
-            _sanctionRepository = sanctionRepository ?? throw new ArgumentNullException(nameof(sanctionRepository));
-            _parkingGateRepository = parkingGateRepository ?? throw new ArgumentNullException(nameof(parkingGateRepository));
-            _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
-
-            _qrCodeService = qrCodeService ?? throw new ArgumentNullException(nameof(qrCodeService));
-            _byteVerificationService = byteVerificationService ?? throw new ArgumentNullException(nameof(byteVerificationService));
-
-            _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
-            _tokenReader = tokenReader ?? throw new ArgumentNullException(nameof(tokenReader));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            if (replay.PaymentCashierId != cashierId || replay.PaymentGateId != gateId ||
+                !ids.SequenceEqual(replay.Sanctions.Select(x => x.Id).Order()))
+                return Fail("Payment.IdempotencyConflict", ErrorMessage.TicketExceedTransaction_AlreadyExists);
+            return Respond(ticket, replay, prior, ids);
         }
 
-        public async Task<Result<CreateTicketExceedTransactionCommandResponse>> Handle(
-            CreateTicketExceedTransactionCommand request,
-            CancellationToken cancellationToken)
+        if (await TicketExitEligibilityService.FindReservationAsync(db, ticket.Id, ct) != null)
+            return Result<CreateTicketExceedTransactionCommandResponse>.Fail(TicketExitEligibilityService.AsError("GateOperationPending"));
+
+        var selection = new List<Sanction>();
+        foreach (var id in ids)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            try
-            {
-                // ---------------------------------------------------------------
-                // 1) Read token info: GateId + UserId
-                // ---------------------------------------------------------------
-                var tokenInfo = _httpContextAccessor.HttpContext?.ReadToken(_tokenReader);
-
-                if (tokenInfo is null || !tokenInfo.GateId.HasValue || !tokenInfo.UserId.HasValue)
-                {
-                    _logger.LogWarning("Token info missing GateId/UserId while creating ticket exceed transaction.");
-
-                    return Result<CreateTicketExceedTransactionCommandResponse>.Fail(
-                        new Error(
-                            Code: "Token.GateOrUser.NotFound",
-                            Message: ErrorMessage.TokenInfo_Missing,
-                            Type: ErrorType.NotFound));
-                }
-
-                var gateId = tokenInfo.GateId.Value;
-                var userCollectId = tokenInfo.UserId.Value;
-
-                // ---------------------------------------------------------------
-                // 2) Validate Gate exists
-                // ---------------------------------------------------------------
-                var gate = await _parkingGateRepository.GetByIdAsync(gateId, cancellationToken);
-
-                if (gate is null)
-                {
-                    _logger.LogWarning(
-                        "Gate not found while creating ticket exceed transaction. GateId: {GateId}",
-                        gateId);
-
-                    return Result<CreateTicketExceedTransactionCommandResponse>.Fail(
-                        new Error(
-                            Code: "Gate.NotFound",
-                            Message: ErrorMessage.GateNotFound,
-                            Type: ErrorType.NotFound));
-                }
-
-                // ---------------------------------------------------------------
-                // 3) Validate User exists
-                // ---------------------------------------------------------------
-                var userCollector = await _userRepository.GetByIdAsync(userCollectId, cancellationToken);
-
-                if (userCollector is null)
-                {
-                    _logger.LogWarning(
-                        "User collector not found while creating ticket exceed transaction. UserId: {UserId}",
-                        userCollectId);
-
-                    return Result<CreateTicketExceedTransactionCommandResponse>.Fail(
-                        new Error(
-                            Code: "User.NotFound",
-                            Message: ErrorMessage.User_NotFound,
-                            Type: ErrorType.NotFound));
-                }
-
-                // ---------------------------------------------------------------
-                // 4) Get Ticket
-                // ---------------------------------------------------------------
-                var ticketEntity = await _ticketRepository.GetByIdAsync(request.TicketId, cancellationToken);
-
-                if (ticketEntity is null)
-                {
-                    _logger.LogWarning(
-                        "Ticket not found while creating ticket exceed transaction. TicketId: {TicketId}",
-                        request.TicketId);
-
-                    return Result<CreateTicketExceedTransactionCommandResponse>.Fail(
-                        new Error(
-                            Code: "Ticket.NotFound",
-                            Message: ErrorMessage.Ticket_NotFound,
-                            Type: ErrorType.NotFound));
-                }
-
-                // ---------------------------------------------------------------
-                // 5) Prevent duplicate transaction
-                // Important: Transaction.Id = TicketId
-                // ---------------------------------------------------------------
-                var existingTransaction = await _ticketExceedTransactionRepository
-                    .GetByIdAsync(request.TicketId, cancellationToken);
-
-                if (existingTransaction is not null)
-                {
-                    _logger.LogWarning(
-                        "Ticket exceed transaction already exists. TicketId: {TicketId}",
-                        request.TicketId);
-
-                    return Result<CreateTicketExceedTransactionCommandResponse>.Fail(
-                        new Error(
-                            Code: "TicketExceedTransaction.AlreadyExists",
-                            Message: ErrorMessage.TicketExceedTransaction_AlreadyExists,
-                            Type: ErrorType.Conflict));
-                }
-
-                // ---------------------------------------------------------------
-                // 6) Generate SAME ticket QR as AddTicket
-                // ---------------------------------------------------------------
-                var generatedQr = GenerateTicketQrCode(ticketEntity);
-
-                // ---------------------------------------------------------------
-                // 7) Get Sanctions + calculate total exceed amount
-                // ---------------------------------------------------------------
-                var distinctSanctionIds = request.SanctionIds
-                    .Distinct()
-                    .ToList();
-
-                var sanctions = new List<Sanction>();
-
-                foreach (var sanctionId in distinctSanctionIds)
-                {
-                    var sanction = await _sanctionRepository.GetByIdAsync(sanctionId, cancellationToken);
-
-                    if (sanction is null)
-                    {
-                        _logger.LogWarning(
-                            "Sanction not found while creating ticket exceed transaction. SanctionId: {SanctionId}",
-                            sanctionId);
-
-                        return Result<CreateTicketExceedTransactionCommandResponse>.Fail(
-                            new Error(
-                                Code: "Sanction.NotFound",
-                                Message: ErrorMessage.Sanction_NotFound,
-                                Type: ErrorType.NotFound));
-                    }
-
-                    sanctions.Add(sanction);
-                }
-
-                var totalExceedAmount = sanctions.Sum(x => x.Amount);
-                var oldExceedPrice = ticketEntity.ExceedPrice;
-
-                // ---------------------------------------------------------------
-                // 8) Update ticket exceed price
-                // ---------------------------------------------------------------
-                ticketEntity.SetExceedPrice(totalExceedAmount);
-
-                // ---------------------------------------------------------------
-                // 9) Create transaction snapshot
-                // SuperVisorCollectorId = null initially
-                // ---------------------------------------------------------------
-                var transaction = TicketExceedTransaction.Create(
-                    ticket: ticketEntity,
-                    oldExceedPrice: oldExceedPrice,
-                    exceedAmount: totalExceedAmount,
-                    gateId: gateId,
-                    userCollectId: userCollectId,
-                    sanctions: sanctions);
-
-                await _ticketExceedTransactionRepository.AddAsync(transaction, cancellationToken);
-
-                // Saves:
-                // 1) Ticket.ExceedPrice update
-                // 2) TicketExceedTransaction insert
-                // 3) Many-to-many sanctions join rows
-                await _ticketExceedTransactionRepository.SaveChangesAsync(cancellationToken);
-                await _ticketRepository.SaveChangesAsync(cancellationToken);
-
-                // ---------------------------------------------------------------
-                // 10) Build response
-                // ---------------------------------------------------------------
-                var response = new CreateTicketExceedTransactionCommandResponse
-                {
-                    TicketExceedTransactionId = transaction.Id,
-                    TicketId = ticketEntity.Id,
-
-                    ExceedAmount = transaction.ExceedAmount,
-                    TicketPrice = transaction.TicketPrice,
-                    TotalPriceAfterExceed = transaction.TotalPriceAfterExceed,
-
-                    GateId = transaction.GateId,
-                    UserCollectId = transaction.UserCollectId,
-                    SuperVisorCollectorId = transaction.SuperVisorCollectorId,
-
-                    SanctionIds = distinctSanctionIds,
-                    CreatedAt = transaction.CreatedAt,
-
-                    QrCode = generatedQr.QrCode,
-                    TicketInfo = generatedQr.QrText
-                };
-
-                return Result<CreateTicketExceedTransactionCommandResponse>.Ok(response);
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.LogWarning("CreateTicketExceedTransaction operation was canceled.");
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error while creating ticket exceed transaction.");
-
-                return Result<CreateTicketExceedTransactionCommandResponse>.Fail(
-                    new Error(
-                        Code: "TicketExceedTransaction.Create.Unexpected",
-                        Message: ErrorMessage.TicketExceedTransaction_Create_Unexpected,
-                        Type: ErrorType.Infrastructure));
-            }
+            var sanction = await db.Repository<Sanction>().GetByIdAsync(id, ct);
+            if (sanction is null)
+                return Fail("Sanction.NotFound", ErrorMessage.Sanction_NotFound, ErrorType.NotFound);
+            if (id != overnight.SanctionId && prior.Any(x => x.Sanctions.Any(s => s.Id == id)))
+                return Fail("Sanction.AlreadyApplied", ErrorMessage.TicketExceedTransaction_AlreadyExists);
+            selection.Add(sanction);
         }
 
-        private (byte[] QrCode, string QrText) GenerateTicketQrCode(Ticket ticketEntity)
+        var coverage = new OvernightRequirement(null, null, null);
+        if (overnightSelected)
         {
-            if (ticketEntity.UniqueGuidPart is null || ticketEntity.UniqueGuidPart.Length != 4)
-            {
-                throw new InvalidOperationException(
-                    $"Ticket UniqueGuidPart must be exactly 4 bytes. TicketId={ticketEntity.Id}");
-            }
-
-            var byte5 = _byteVerificationService
-                .GenerateComplexByte5FromGuid(ticketEntity.UniqueGuidPart);
-
-            var combinedBytes = ticketEntity.UniqueGuidPart
-                .Concat(new[] { byte5 })
-                .ToArray();
-
-            if (combinedBytes.Length != 5)
-            {
-                throw new InvalidOperationException(
-                    $"Generated QR bytes must be exactly 5 bytes, but got {combinedBytes.Length} bytes. TicketId={ticketEntity.Id}");
-            }
-
-            var qrText = Convert.ToHexString(combinedBytes);
-
-            _logger.LogInformation(
-                "Ticket QR generated for exceed transaction. TicketId={TicketId}, UniqueCode={UniqueCode}, QrText={QrText}",
-                ticketEntity.Id,
-                ticketEntity.UniqueCode,
-                qrText);
-
-            var qrCode = _qrCodeService.GenerateQRCodeFromText(qrText);
-
-            return (qrCode, qrText);
+            coverage = await overnight.GetRequirementAsync(ticket, day, ct);
+            if (coverage.Error != null)
+                return Result<CreateTicketExceedTransactionCommandResponse>.Fail(coverage.Error);
+            if (coverage.Count == 0)
+                return Fail("OvernightPenaltyAlreadyCovered", ErrorMessage.TicketExceedTransaction_AlreadyExists);
         }
+
+        var amounts = selection.Select(x => new
+        {
+            SanctionId = x.Id,
+            UnitAmount = x.Amount,
+            Units = x.Id == overnight.SanctionId ? coverage.Count : 1
+        }).ToArray();
+        if (amounts.Any(x => x.UnitAmount < 0))
+            return Fail("Sanction.InvalidAmount", "A sanction has an invalid amount.");
+        var amount = amounts.Sum(x => x.UnitAmount * x.Units);
+        var classification = !overnightSelected ? SanctionClassification.Ordinary :
+            selection.Count == 1 ? SanctionClassification.Overnight : SanctionClassification.Mixed;
+        var payment = TicketExceedTransaction.Create(ticket, ticket.ExceedPrice, amount, gateId, cashierId,
+            selection, utc, local, key, classification, coverage.From, coverage.Through, JsonSerializer.Serialize(amounts));
+        ticket.AddExceedPrice(amount);
+        if (coverage.From is DateOnly from && coverage.Through is DateOnly through)
+        {
+            for (var date = from.DayNumber; date <= through.DayNumber; date++)
+                await db.Repository<OvernightPenaltyCoverage>().AddAsync(
+                    new(ticket.Id, DateOnly.FromDayNumber(date), payment.Id), ct);
+            ticket.ExtendExitValidity(through);
+        }
+        await db.Repository<TicketExceedTransaction>().AddAsync(payment, ct);
+        prior.Add(payment);
+        return Respond(ticket, payment, prior, ids);
     }
+
+    private Result<CreateTicketExceedTransactionCommandResponse> Respond(Ticket ticket,
+        TicketExceedTransaction payment, IEnumerable<TicketExceedTransaction> history, Guid[] ids)
+    {
+        var bytes = ticket.UniqueGuidPart.Concat([verification.GenerateComplexByte5FromGuid(ticket.UniqueGuidPart)]).ToArray();
+        var qrText = Convert.ToHexString(bytes);
+        var paid = (ticket.IsCashierCollected ? ticket.Price : 0) + Math.Min(ticket.ExceedPrice,
+            history.Where(x => x.PaymentStatus != SanctionPaymentStatus.Assessed).Sum(x => x.ExceedAmount));
+        return Result<CreateTicketExceedTransactionCommandResponse>.Ok(new()
+        {
+            TicketExceedTransactionId = payment.Id,
+            TicketId = ticket.Id,
+            ExceedAmount = payment.ExceedAmount,
+            ExceedPrice = ticket.ExceedPrice,
+            TicketPrice = payment.TicketPrice,
+            TotalPriceAfterExceed = payment.TotalPriceAfterExceed,
+            PaidAmount = paid,
+            OutstandingAmount = Math.Max(0, ticket.TotalPrice - paid),
+            ValidExitDate = ticket.ValidExitDate,
+            GateId = payment.GateId,
+            UserCollectId = payment.UserCollectId,
+            SuperVisorCollectorId = payment.SuperVisorCollectorId,
+            SanctionIds = ids,
+            CreatedAt = payment.CreatedAt,
+            PaymentStatus = payment.PaymentStatus.ToString(),
+            PaymentConfirmedAtUtc = payment.PaymentConfirmedAtUtc is DateTime at
+                ? DateTime.SpecifyKind(at, DateTimeKind.Utc) : null,
+            TicketInfo = qrText,
+            QrCode = qr.GenerateQRCodeFromText(qrText)
+        });
+    }
+
+    private static Result<CreateTicketExceedTransactionCommandResponse> Fail(
+        string code, string message, ErrorType type = ErrorType.Conflict) =>
+        Result<CreateTicketExceedTransactionCommandResponse>.Fail(new Error(code, message, type));
 }
