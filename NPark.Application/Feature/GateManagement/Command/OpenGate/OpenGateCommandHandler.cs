@@ -31,7 +31,7 @@ internal sealed class OpenGateCommandHandler(GateOperationService operations, IH
             _ => (GateOperationType?)null
         };
         return type.HasValue
-            ? operations.AuthorizeAsync(request.TicketId, gateId, controller, userId, type.Value, ct)
+            ? operations.AuthorizeAsync(request.TicketId, gateId, controller, userId, type.Value, ct, request.RequestId)
             : Invalid();
     }
 

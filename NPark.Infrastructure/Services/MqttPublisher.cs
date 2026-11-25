@@ -40,7 +40,8 @@ namespace NPark.Infrastructure.Services
             string topic,
             ReadOnlyMemory<byte> payload,
             MqttPublishOptions options,
-            CancellationToken ct)
+            CancellationToken ct,
+            Func<bool>? canPublish = null)
         {
             await EnsureConnectedAsync(ct);
 
@@ -51,6 +52,9 @@ namespace NPark.Infrastructure.Services
                 .WithRetainFlag(options.Retain)
                 .Build();
 
+            ct.ThrowIfCancellationRequested();
+            if (canPublish?.Invoke() == false)
+                throw new InvalidOperationException("Gate dispatch is no longer ready or within its deadline.");
             var result = await _client.PublishAsync(message, ct);
             if (!result.IsSuccess)
                 throw new InvalidOperationException($"MQTT publication was rejected with result {result.ReasonCode}.");
@@ -63,7 +67,7 @@ namespace NPark.Infrastructure.Services
                 payload.Length);
         }
 
-        private async Task EnsureConnectedAsync(CancellationToken ct)
+        public async Task EnsureConnectedAsync(CancellationToken ct)
         {
             if (_client.IsConnected)
                 return;
@@ -95,7 +99,9 @@ namespace NPark.Infrastructure.Services
                     });
                 }
 
-                await _client.ConnectAsync(builder.Build(), ct);
+                var result = await _client.ConnectAsync(builder.Build(), ct);
+                if (result.ResultCode != MqttClientConnectResultCode.Success)
+                    throw new InvalidOperationException($"MQTT connection rejected with result {result.ResultCode}.");
 
                 _logger.LogInformation(
                     "MQTT connected successfully. Host={Host}, Port={Port}, UseTls={UseTls}",

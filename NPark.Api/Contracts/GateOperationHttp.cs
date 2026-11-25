@@ -15,7 +15,7 @@ internal static class GateOperationHttp
         var operation = result.Value;
         return operation.Status switch
         {
-            "Completed" or "Failed" => new OkObjectResult(operation),
+            "Completed" or "Failed" or "TimedOut" or "Unknown" => new OkObjectResult(operation),
             _ => new AcceptedResult($"/api/Gate/operations/{operation.OperationId}", operation)
         };
     }

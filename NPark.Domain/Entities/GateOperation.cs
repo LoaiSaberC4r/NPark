@@ -44,21 +44,28 @@ public sealed class GateOperation : Entity<Guid>
     public string? ErrorCode { get; private set; }
     public byte[] RowVersion { get; private set; } = [];
 
-    public void BeginDispatch(DateTime utc, bool retry)
+    public void BeginDispatch(DateTime utc)
     {
+        if (Status != GateOperationStatus.Pending || DispatchStartedAtUtc.HasValue)
+            throw new InvalidOperationException("Only an unclaimed pending operation can be dispatched.");
         DispatchStartedAtUtc = utc;
-        PublishedAtUtc = null;
-        Status = GateOperationStatus.Pending;
-        ErrorCode = null;
-        if (retry)
-            RetryCount++;
     }
 
     public void MarkPublished(DateTime utc)
     {
-        PublishedAtUtc ??= utc;
-        if (Status == GateOperationStatus.Pending)
-            Status = GateOperationStatus.Published;
+        if (Status != GateOperationStatus.Pending || !DispatchStartedAtUtc.HasValue)
+            return;
+        PublishedAtUtc = utc;
+        Status = GateOperationStatus.Published;
+    }
+
+    public void MarkDispatchExpired()
+    {
+        if (Status != GateOperationStatus.Pending || DispatchStartedAtUtc.HasValue)
+            return;
+        Status = GateOperationStatus.TimedOut;
+        ErrorCode = "GateDispatchTimeout";
+        Release();
     }
 
     public void MarkUncertain(bool timeout)
@@ -67,18 +74,21 @@ public sealed class GateOperation : Entity<Guid>
             return;
         Status = timeout ? GateOperationStatus.TimedOut : GateOperationStatus.Unknown;
         ErrorCode = timeout ? "GateAckTimeout" : "GateDeliveryUnknown";
+        Release();
     }
 
     public bool Acknowledge(byte code, DateTime utc)
     {
-        if (!DispatchStartedAtUtc.HasValue || AckStatusCode.HasValue || ReservedControllerId is null)
+        if (Status is not (GateOperationStatus.Pending or GateOperationStatus.Published) ||
+            !DispatchStartedAtUtc.HasValue || AckStatusCode.HasValue || ReservedControllerId is null || code > 3)
             return false;
         AckStatusCode = code;
         AcknowledgedAtUtc = utc;
         Status = code == 0 ? GateOperationStatus.Acknowledged : GateOperationStatus.Failed;
         ErrorCode = code switch { 1 => "GateExecutionFailed", 2 => "GateBusy", 3 => "GateRejected", _ => null };
+        ReleaseController();
         if (code != 0)
-            Release();
+            ReleaseTicket();
         return true;
     }
 
@@ -98,14 +108,15 @@ public sealed class GateOperation : Entity<Guid>
         ReconciledBy = actor;
         ReconciliationEvidence = evidence;
         ReconciledAtUtc = utc;
-        Status = GateOperationStatus.Failed;
-        ErrorCode = "GateNonExecutionReconciled";
-        Release();
     }
+
+    private void ReleaseController() => ReservedControllerId = null;
+
+    private void ReleaseTicket() => ReservedTicketId = null;
 
     private void Release()
     {
-        ReservedTicketId = null;
-        ReservedControllerId = null;
+        ReleaseController();
+        ReleaseTicket();
     }
 }

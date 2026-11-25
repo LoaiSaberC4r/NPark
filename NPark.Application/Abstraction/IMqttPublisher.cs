@@ -4,7 +4,10 @@
     {
         Task PublishStringAsync(string topic, string payload, MqttPublishOptions options, CancellationToken ct);
 
-        Task PublishBytesAsync(string topic, ReadOnlyMemory<byte> payload, MqttPublishOptions options, CancellationToken ct);
+        Task EnsureConnectedAsync(CancellationToken ct);
+
+        Task PublishBytesAsync(string topic, ReadOnlyMemory<byte> payload, MqttPublishOptions options,
+            CancellationToken ct, Func<bool>? canPublish = null);
     }
 
     public sealed record MqttPublishOptions(int Qos = 1, bool Retain = false);

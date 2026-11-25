@@ -41,7 +41,8 @@ namespace NPark.Api.Controllers
             {
                 ControllerId = request.ControllerId,
                 OperationType = request.OperationType,
-                TicketId = request.TicketId
+                TicketId = request.TicketId,
+                RequestId = request.RequestId
             };
 
             var result = await sender.Send(command, cancellationToken);
@@ -79,8 +80,12 @@ namespace NPark.Api.Controllers
             if (!await dispatcher.RetryAsync(operationId, gateId, ct))
             {
                 var existing = await operations.GetAsync(operationId, gateId, ct);
-                return existing.IsFailure || existing.Value.Status == "Completed"
-                    ? existing.ToOperationResponse() : Conflict(existing.Value);
+                if (existing.IsFailure)
+                    return existing.ToOperationResponse();
+                if (existing.Value.Status is "Completed" or "Failed" or "TimedOut" or "Unknown")
+                    return Result<GateOperationResponse>.Fail(TicketExitEligibilityService.AsError("GateFreshRequestRequired"))
+                        .ToOperationResponse();
+                return Conflict(existing.Value);
             }
             return (await operations.GetAsync(operationId, gateId, ct)).ToOperationResponse();
         }

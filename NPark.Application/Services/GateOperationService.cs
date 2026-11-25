@@ -17,49 +17,69 @@ public sealed record GateOperationResponse(
     string OperationType, string Status, bool IsAcknowledged, bool TicketExited, bool Archived,
     DateTime? AcknowledgedAtUtc, DateTime? PublishedAtUtc, byte? AckStatusCode,
     DateTime CreatedAtUtc, DateTime? CompletedAtUtc,
-    bool RetryAllowed, bool RequiresReconciliation, string? ReasonCode, string Topic, string Payload);
+    bool RetryAllowed, bool RequiresReconciliation, string? ReasonCode, string Topic, string Payload)
+{
+    public string? ReasonMessage => ReasonCode is null ? null : WorkflowMessages.Get(ReasonCode);
+}
 
 public sealed class GateOperationService(IUnitOfWork db, IServiceScopeFactory scopes,
     IOptions<GateOperationOptions> options, ILogger<GateOperationService> logger)
 {
     public async Task<Result<GateOperationResponse>> AuthorizeAsync(
-        Guid? ticketId, Guid? gateId, ushort? controller, Guid? userId, GateOperationType type, CancellationToken ct)
+        Guid? ticketId, Guid? gateId, ushort? controller, Guid? userId, GateOperationType type, CancellationToken ct,
+        Guid? requestId = null)
     {
-        var id = Guid.NewGuid();
+        if (requestId == Guid.Empty)
+            return Result<GateOperationResponse>.Fail(new Error("InvalidGateRequestId", WorkflowMessages.Get("InvalidGateRequestId"),
+                ErrorType.Validation));
+
+        var id = requestId ?? Guid.NewGuid();
         await using var phase = scopes.CreateAsyncScope();
         var sender = phase.ServiceProvider.GetRequiredService<ISender>();
         var operationDb = phase.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        var request = new AuthorizeGateOperation(id, ticketId, gateId, controller, userId, type);
+        var request = new AuthorizeGateOperation(id, ticketId, gateId, controller, userId, type, requestId.HasValue);
         var result = await sender.Send(request, ct);
         if (result.IsFailure)
         {
             // A concurrent request can win the reservation after this request reads eligibility.
-            var existing = ticketId.HasValue && result.Errors.Any(e => e.Type is ErrorType.Infrastructure or ErrorType.Unknown ||
-                e.Code is "GateOperationPending" or ErrorCodes.Common.Conflict)
-                ? await TicketExitEligibilityService.FindReservationAsync(operationDb, ticketId.Value, ct)
-                : null;
-            if (existing is not null &&
-                await AuthorizeGateOperationHandler.ResolveGateAsync(operationDb, request, ct) is { } mapping)
+            if (result.Errors.Any(e => e.Type is ErrorType.Infrastructure or ErrorType.Unknown ||
+                e.Code is "GateOperationPending" or ErrorCodes.Common.Conflict))
             {
-                var prior = AuthorizeGateOperationHandler.CheckPrior(existing, mapping.Gate.Id, mapping.Controller, type, logger);
-                return prior.IsSuccess ? Result<GateOperationResponse>.Ok(ToResponse(existing))
-                    : Result<GateOperationResponse>.Fail(prior.Errors);
+                await using var read = scopes.CreateAsyncScope();
+                var freshDb = read.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                if (request.HasRequestId && await freshDb.Repository<GateOperation>().GetByIdAsync(id, ct) is { } replay)
+                    return PriorResponse(replay, AuthorizeGateOperationHandler.CheckReplay(replay, request));
+                if (await AuthorizeGateOperationHandler.ResolveGateAsync(freshDb, request, ct) is { } mapping)
+                {
+                    var existing = ticketId is Guid ticket ? await TicketExitEligibilityService.FindReservationAsync(freshDb, ticket, ct) : null;
+                    if (existing is not null)
+                        return PriorResponse(existing, AuthorizeGateOperationHandler.CheckPrior(existing, mapping.Gate.Id,
+                            mapping.Controller, type, request.HasRequestId, logger));
+                    if (await AuthorizeGateOperationHandler.FindControllerReservationAsync(freshDb, mapping.Controller, ct) is { } reserved)
+                        return type == GateOperationType.Manual
+                            ? PriorResponse(reserved, AuthorizeGateOperationHandler.CheckPrior(reserved, mapping.Gate.Id,
+                                mapping.Controller, type, request.HasRequestId, logger))
+                            : Result<GateOperationResponse>.Fail(TicketExitEligibilityService.AsError("GateOperationPending"));
+                }
             }
             logger.LogInformation("Gate authorization declined for {OperationType}, ticket {TicketId}, gate {GateId}, " +
                 "requested controller {ControllerId}, reasons {Reasons}", type, ticketId, gateId, controller,
                 string.Join(",", result.Errors.Select(e => e.Code)));
             return Result<GateOperationResponse>.Fail(result.Errors);
         }
-        var operation = await operationDb.Repository<GateOperation>().GetByIdAsync(result.Value, ct);
-        if (operation?.Id == id)
-            logger.LogInformation("Gate operation created. OperationId={OperationId}, CommandId={CommandId}, " +
-                "ControllerId={ControllerId}, TicketId={TicketId}, GateId={GateId}, Status={Status}",
+        var operation = await operationDb.Repository<GateOperation>().GetByIdAsync(result.Value.OperationId, ct);
+        if (operation is not null && result.Value.Created)
+            logger.LogInformation("Gate operation authorized. OperationId={OperationId}, CommandId={CommandId}, " +
+                "ControllerId={ControllerId}, TicketId={TicketId}, GateId={GateId}, NewStatus={NewStatus}, OperationType={OperationType}",
                 operation.Id, operation.CommandId, operation.ControllerId, operation.TicketIdSnapshot,
-                operation.GateId, operation.Status);
+                operation.GateId, operation.Status, operation.Type);
         return operation is null
             ? Result<GateOperationResponse>.Fail(new Error("GateOperationNotFound", "Gate operation not found.", ErrorType.NotFound))
             : Result<GateOperationResponse>.Ok(ToResponse(operation));
     }
+
+    private Result<GateOperationResponse> PriorResponse(GateOperation operation, Result<GateAuthorization> prior) =>
+        prior.IsSuccess ? Result<GateOperationResponse>.Ok(ToResponse(operation)) : Result<GateOperationResponse>.Fail(prior.Errors);
 
     public async Task<Result<GateOperationResponse>> GetAsync(Guid operationId, Guid? gateId, CancellationToken ct)
     {
@@ -79,21 +99,15 @@ public sealed class GateOperationService(IUnitOfWork db, IServiceScopeFactory sc
     public GateOperationResponse ToResponse(GateOperation operation)
     {
         var completedExit = operation.Type == GateOperationType.Exit && operation.Status == GateOperationStatus.Completed;
-        var uncertain = operation.Status is GateOperationStatus.TimedOut or GateOperationStatus.Unknown;
         return new(operation.Id, operation.TicketIdSnapshot, operation.GateId,
             operation.CommandId.ToString(CultureInfo.InvariantCulture), operation.ControllerId,
             operation.Type.ToString(), operation.Status.ToString(), operation.AckStatusCode == 0,
             completedExit, completedExit, AsUtc(operation.AcknowledgedAtUtc), AsUtc(operation.PublishedAtUtc),
             operation.AckStatusCode, AsUtc(operation.CreatedAtUtc)!.Value, AsUtc(operation.CompletedAtUtc),
-            operation.Status == GateOperationStatus.Acknowledged || CanRetry(operation, options.Value),
-            uncertain && !CanRetry(operation, options.Value), operation.ErrorCode,
+            operation.Status == GateOperationStatus.Acknowledged, false, operation.ErrorCode,
             options.Value.CommandTopic(operation.ControllerId),
             Convert.ToHexString(GatePacketCodec.EncodeOpen((ushort)operation.ControllerId, (ulong)operation.CommandId)));
     }
-
-    public static bool CanRetry(GateOperation op, GateOperationOptions options) =>
-        options.HardwareDeduplicationConfirmed && op.RetryCount < options.MaxRetries &&
-        op.Status is GateOperationStatus.TimedOut or GateOperationStatus.Unknown;
 
     private static DateTime? AsUtc(DateTime? time) =>
         time.HasValue ? DateTime.SpecifyKind(time.Value, DateTimeKind.Utc) : null;
@@ -111,13 +125,17 @@ public sealed class GateOperationService(IUnitOfWork db, IServiceScopeFactory sc
 }
 
 internal sealed record AuthorizeGateOperation(Guid OperationId, Guid? TicketId, Guid? GateId,
-    ushort? Controller, Guid? UserId, GateOperationType Type) : ITransactionalCommand<Guid>;
+    ushort? Controller, Guid? UserId, GateOperationType Type, bool HasRequestId) : ITransactionalCommand<GateAuthorization>;
+
+internal sealed record GateAuthorization(Guid OperationId, bool Created = false);
 
 internal sealed class AuthorizeGateOperationHandler(IUnitOfWork db, ITicketExitEligibilityService eligibility,
-    ParkingBusinessClock clock, ILogger<AuthorizeGateOperationHandler> logger) : ICommandHandler<AuthorizeGateOperation, Guid>
+    ParkingBusinessClock clock, ILogger<AuthorizeGateOperationHandler> logger) : ICommandHandler<AuthorizeGateOperation, GateAuthorization>
 {
-    public async Task<Result<Guid>> Handle(AuthorizeGateOperation command, CancellationToken ct)
+    public async Task<Result<GateAuthorization>> Handle(AuthorizeGateOperation command, CancellationToken ct)
     {
+        if (command.HasRequestId && await db.Repository<GateOperation>().GetByIdAsync(command.OperationId, ct) is { } replay)
+            return CheckReplay(replay, command);
         if (await ResolveGateAsync(db, command, ct) is not { } mapping)
             return Fail("InvalidExitGate");
 
@@ -131,7 +149,7 @@ internal sealed class AuthorizeGateOperationHandler(IUnitOfWork db, ITicketExitE
                 ?? await db.FirstOrDefaultWithSpecAsync(new Matching<GateOperation>(x => x.TicketIdSnapshot == ticketId &&
                     x.Type == command.Type && x.Status == GateOperationStatus.Completed), ct);
             if (prior is not null)
-                return CheckPrior(prior, gate.Id, numeric, command.Type, logger);
+                return CheckPrior(prior, gate.Id, numeric, command.Type, command.HasRequestId, logger);
 
             var ticket = await db.Repository<Ticket>().GetByIdAsync(ticketId, ct);
             if (command.Type == GateOperationType.Exit)
@@ -149,16 +167,24 @@ internal sealed class AuthorizeGateOperationHandler(IUnitOfWork db, ITicketExitE
         else if (command.Type != GateOperationType.Manual)
             return Fail("TicketNotFound");
 
-        var reserved = await db.FirstOrDefaultWithSpecAsync(
-            new Matching<GateOperation>(x => x.ReservedControllerId == numeric), ct);
+        var reserved = await FindControllerReservationAsync(db, numeric, ct);
         if (reserved is not null)
             return command.Type == GateOperationType.Manual
-                ? CheckPrior(reserved, gate.Id, numeric, command.Type, logger) : Fail("GateOperationPending");
+                ? CheckPrior(reserved, gate.Id, numeric, command.Type, command.HasRequestId, logger) : Fail("GateOperationPending");
 
         await db.Repository<GateOperation>().AddAsync(new GateOperation(command.OperationId,
             command.TicketId, gate.Id, command.UserId, numeric, command.Type, clock.UtcNow), ct);
-        return Result<Guid>.Ok(command.OperationId);
+        return Result<GateAuthorization>.Ok(new(command.OperationId, Created: true));
     }
+
+    internal static Task<GateOperation?> FindControllerReservationAsync(IUnitOfWork db, ushort controller, CancellationToken ct) =>
+        db.FirstOrDefaultWithSpecAsync(new Matching<GateOperation>(x => x.ReservedControllerId == controller &&
+            (x.Status == GateOperationStatus.Pending || x.Status == GateOperationStatus.Published)), ct);
+
+    internal static Result<GateAuthorization> CheckReplay(GateOperation prior, AuthorizeGateOperation request) =>
+        prior.TicketIdSnapshot == request.TicketId && prior.GateId == request.GateId && prior.UserId == request.UserId &&
+        prior.Type == request.Type && (!request.Controller.HasValue || prior.ControllerId == request.Controller.Value)
+            ? Result<GateAuthorization>.Ok(new(prior.Id)) : Fail("GateRequestIdConflict");
 
     internal static async Task<(ParkingGate Gate, ushort Controller)?> ResolveGateAsync(
         IUnitOfWork db, AuthorizeGateOperation command, CancellationToken ct)
@@ -184,16 +210,16 @@ internal sealed class AuthorizeGateOperationHandler(IUnitOfWork db, ITicketExitE
         return (matches[0], controller.Value);
     }
 
-    internal static Result<Guid> CheckPrior(GateOperation prior, Guid gateId, ushort controller, GateOperationType type,
-        ILogger logger)
+    internal static Result<GateAuthorization> CheckPrior(GateOperation prior, Guid gateId, ushort controller, GateOperationType type,
+        bool hasRequestId, ILogger logger)
     {
         var sameRequest = prior.GateId == gateId && prior.Type == type;
         if (sameRequest && prior.Status == GateOperationStatus.Completed)
-            return Result<Guid>.Ok(prior.Id);
+            return Result<GateAuthorization>.Ok(new(prior.Id));
 
         var changedController = sameRequest && prior.ControllerId != controller;
-        var reason = changedController ? "GateOperationControllerChanged" : prior.ErrorCode ?? "GateOperationPending";
-        if (changedController || !sameRequest || prior.Status is GateOperationStatus.TimedOut or GateOperationStatus.Unknown)
+        var reason = changedController ? "GateOperationControllerChanged" : "GateOperationPending";
+        if (changedController || !sameRequest)
             logger.LogWarning("Existing gate operation blocks a new command. OperationId={OperationId}, TicketId={TicketId}, " +
                 "GateId={GateId}, CommandId={CommandId}, ControllerId={ControllerId}, CurrentGateControllerId={CurrentControllerId}, " +
                 "Status={Status}, Reason={Reason}, ReservedTicketId={ReservedTicketId}, ReservedControllerId={ReservedControllerId}, " +
@@ -202,10 +228,10 @@ internal sealed class AuthorizeGateOperationHandler(IUnitOfWork db, ITicketExitE
                 prior.Status, reason, prior.ReservedTicketId, prior.ReservedControllerId, prior.DispatchStartedAtUtc,
                 prior.PublishedAtUtc, prior.AcknowledgedAtUtc);
         if (changedController)
-            return Result<Guid>.Fail(Error.Conflict(reason, string.Format(CultureInfo.CurrentCulture,
+            return Result<GateAuthorization>.Fail(Error.Conflict(reason, string.Format(CultureInfo.CurrentCulture,
                 WorkflowMessages.Get(reason), prior.Id, prior.ControllerId, controller, prior.Status)));
-        return sameRequest ? Result<Guid>.Ok(prior.Id) : Fail("GateOperationPending");
+        return sameRequest && !hasRequestId ? Result<GateAuthorization>.Ok(new(prior.Id)) : Fail("GateOperationPending");
     }
 
-    private static Result<Guid> Fail(string reason) => Result<Guid>.Fail(TicketExitEligibilityService.AsError(reason));
+    private static Result<GateAuthorization> Fail(string reason) => Result<GateAuthorization>.Fail(TicketExitEligibilityService.AsError(reason));
 }

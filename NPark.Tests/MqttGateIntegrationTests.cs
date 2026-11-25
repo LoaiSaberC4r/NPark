@@ -12,7 +12,9 @@ using MQTTnet.Formatter;
 using MQTTnet.Protocol;
 using MQTTnet.Server;
 using NPark.Application.Feature.GateManagement.Command.OpenGate;
+using NPark.Application.Feature.TicketExceedTransactionsManagement.Command.Create;
 using NPark.Application.Feature.TicketsManagement.Command.ExitTicket;
+using NPark.Application.Feature.TicketsManagement.Command.ValidateExitByText;
 using NPark.Application.Services;
 using NPark.Domain.Entities;
 using NPark.Domain.Enums;
@@ -23,7 +25,7 @@ namespace NPark.Tests;
 public sealed partial class ParkingWorkflowIntegrationTests
 {
     [SqlBrokerFact]
-    public async Task ExitOverHttpPreservesAnUnresolvedControllerAndArchivesOnceAfterReconciliation()
+    public async Task HttpExitTimeoutReleasesReservationsAndOnlyTheFreshMatchingCommandArchivesThePaidTicket()
     {
         var time = new ManualParkingTime(new DateTimeOffset(2026, 11, 24, 10, 0, 0, TimeSpan.Zero));
         await using var fixture = await Fixture.StartAsync(time, enableMqttNetworkServices: true);
@@ -31,10 +33,22 @@ public sealed partial class ParkingWorkflowIntegrationTests
         var commands = Channel.CreateUnbounded<MqttApplicationMessage>();
         var heartbeats = Channel.CreateUnbounded<MqttApplicationMessage>();
         await SubscribeToCommandsAsync(simulator, fixture.Port, commands.Writer, heartbeats.Writer);
-        var seed = await fixture.SeedAsync(sameDay: true, exitController: "5");
+        var seed = await fixture.SeedAsync(sameDay: true, exitController: "1");
         using var cashier = await fixture.CreateHttpClientAsync(seed.ExitGate, seed.ExitCashier);
-        using var supervisor = await fixture.CreateHttpClientAsync(seed.ExitGate, seed.Supervisor);
-        var request = new ExitTicketCommand { TicketId = seed.TicketId };
+        var request = new ExitTicketCommand { TicketId = seed.TicketId, RequestId = Guid.NewGuid() };
+        var sanction = Sanction.Create("Isolation test sanction", "", 400);
+        await using (var setup = fixture.OpenDb())
+        {
+            setup.Add(sanction);
+            await setup.SaveChangesAsync();
+        }
+        var payment = await fixture.PayAsync(new CreateTicketExceedTransactionCommand
+        {
+            TicketId = seed.TicketId, IdempotencyKey = "isolated-payment", ExpectedAmount = 400,
+            ExpectedValidExitDate = fixture.Clock.BusinessDate, SanctionIds = [sanction.Id]
+        }, seed);
+        payment.ThrowIfFailed();
+        var scan = new ValidateExitByTextCommand { Text = await fixture.GetTicketQrAsync(seed.TicketId) };
 
         await using (var before = fixture.OpenDb())
             Assert.Empty(await before.Set<GateOperation>().ToListAsync());
@@ -43,54 +57,77 @@ public sealed partial class ParkingWorkflowIntegrationTests
         await fixture.Logs.WaitForAsync(log => log.Contains("Gate ACK subscription confirmed"));
         var original = await RequestExitAsync(cashier, request);
         var firstFrame = await ReadFrameAsync(commands.Reader);
-        AssertOpen(firstFrame, original, 5);
+        AssertOpen(firstFrame, original, 1);
         await fixture.WaitForStatusAsync(original.OperationId, GateOperationStatus.Published);
+        await using (var published = fixture.OpenDb())
+        {
+            var row = await published.Set<GateOperation>().SingleAsync();
+            Assert.Equal((1, seed.TicketId), (row.ReservedControllerId, row.ReservedTicketId));
+            output.WriteLine($"SQL before expiry: operation {row.Id}, command {row.CommandId}, status {row.Status}, " +
+                $"reserved controller {row.ReservedControllerId}, reserved ticket {row.ReservedTicketId}.");
+        }
         time.Advance(TimeSpan.FromSeconds(3));
         await fixture.WaitForStatusAsync(original.OperationId, GateOperationStatus.TimedOut);
 
-        await using (var remap = fixture.OpenDb())
-        {
-            var gate = await remap.Set<ParkingGate>().SingleAsync(x => x.Id == seed.ExitGate);
-            gate.SetControlIp("1");
-            await remap.SaveChangesAsync();
-            Assert.Equal(1, await remap.Set<ParkingGate>().CountAsync(x => x.ControlIp == "1"));
-        }
-        using var conflict = await cashier.PostAsJsonAsync("/api/Ticket/ExitTicket", request);
-        var problem = await conflict.Content.ReadAsStringAsync();
-        Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
-        Assert.Contains("GateOperationControllerChanged", problem);
-        Assert.Contains(original.OperationId.ToString(), problem);
         var oldLocation = $"/api/Gate/operations/{original.OperationId}";
         using var historicalResponse = await cashier.GetAsync(oldLocation);
+        Assert.Equal(HttpStatusCode.OK, historicalResponse.StatusCode);
         var historical = Assert.IsType<GateOperationResponse>(
             await historicalResponse.Content.ReadFromJsonAsync<GateOperationResponse>());
-        Assert.Equal(("TimedOut", 5, original.CommandId, "GateAckTimeout", true),
+        Assert.Equal(("TimedOut", 1, original.CommandId, "GateAckTimeout", false),
             (historical.Status, historical.ControllerId, historical.CommandId, historical.ReasonCode, historical.RequiresReconciliation));
         Assert.False(historical.RetryAllowed);
-        await using (var blocked = fixture.OpenDb())
+        Assert.False(historical.TicketExited || historical.Archived);
+        using var replay = await cashier.PostAsJsonAsync("/api/Ticket/ExitTicket", request);
+        Assert.Equal(HttpStatusCode.OK, replay.StatusCode);
+        Assert.Equal(original.OperationId, (await replay.Content.ReadFromJsonAsync<GateOperationResponse>())?.OperationId);
+        using var deniedRetry = await cashier.PostAsync($"{oldLocation}/retry", null);
+        Assert.Equal(HttpStatusCode.Conflict, deniedRetry.StatusCode);
+        Assert.Contains("GateFreshRequestRequired", await deniedRetry.Content.ReadAsStringAsync());
+        await using (var released = fixture.OpenDb())
         {
-            var row = Assert.Single(await blocked.Set<GateOperation>().ToListAsync());
-            Assert.Equal((seed.TicketId, 5, original.CommandId), (row.ReservedTicketId, row.ReservedControllerId, row.CommandId.ToString()));
+            var row = Assert.Single(await released.Set<GateOperation>().ToListAsync());
+            Assert.Null(row.ReservedControllerId);
+            Assert.Null(row.ReservedTicketId);
             Assert.NotNull(row.DispatchStartedAtUtc);
             Assert.NotNull(row.PublishedAtUtc);
             Assert.Null(row.AcknowledgedAtUtc);
-            output.WriteLine($"Blocked historical exit {row.Id}, command {row.CommandId}, original/current controller 5/1, " +
-                $"status {row.Status}, dispatch {row.DispatchStartedAtUtc:O}, published {row.PublishedAtUtc:O}, ACK null.");
+            var ticket = await released.Set<Ticket>().SingleAsync();
+            Assert.Equal((seed.TicketId, seed.StartDate, seed.UniqueCode), (ticket.Id, ticket.StartDate, ticket.UniqueCode));
+            Assert.Null(ticket.EndDate);
+            Assert.Equal(payment.Value.TicketExceedTransactionId, (await released.Set<TicketExceedTransaction>().SingleAsync()).Id);
+            Assert.Empty(await released.Set<TicketCollectionTransaction>().ToListAsync());
+            output.WriteLine($"SQL after expiry: operation {row.Id}, command {row.CommandId}, status {row.Status}, " +
+                "reserved controller NULL, reserved ticket NULL, ticket active.");
         }
+        var eligible = await fixture.SendAsync(scan, seed.ExitGate, seed.ExitCashier, "ExitCashier");
+        Assert.True(eligible.Value.IsValidForExit);
+        Assert.Equal((20m, 400m, 420m, 0m, fixture.Clock.BusinessDate),
+            (eligible.Value.Eligibility!.BasePrice, eligible.Value.Eligibility.ExceedPrice,
+             eligible.Value.Eligibility.PaidAmount, eligible.Value.OutstandingAmount, eligible.Value.ValidExitDate));
+        await fixture.RestartAsync();
         Assert.False(commands.Reader.TryRead(out _));
-
-        var evidence = new { Evidence = "Isolated controller simulator confirmed non-execution." };
-        using var unauthorized = await cashier.PostAsJsonAsync($"{oldLocation}/reconcile-non-execution", evidence);
-        Assert.Equal(HttpStatusCode.Forbidden, unauthorized.StatusCode);
-        using var reconciliation = await supervisor.PostAsJsonAsync($"{oldLocation}/reconcile-non-execution", evidence);
-        Assert.Equal(HttpStatusCode.OK, reconciliation.StatusCode);
-
-        var operation = await RequestExitAsync(cashier, request);
+        using var restartedCashier = await fixture.CreateHttpClientAsync(seed.ExitGate, seed.ExitCashier);
+        using var restartedSupervisor = await fixture.CreateHttpClientAsync(seed.ExitGate, seed.Supervisor);
+        var operation = await RequestExitAsync(restartedCashier, request with { RequestId = Guid.NewGuid() });
         Assert.NotEqual(original.OperationId, operation.OperationId);
+        Assert.NotEqual(original.CommandId, operation.CommandId);
         var command = await ReadFrameAsync(commands.Reader);
         AssertOpen(command, operation, 1);
         await fixture.WaitForStatusAsync(operation.OperationId, GateOperationStatus.Published);
         var ack = MakeAck(command);
+        var late = MakeAck(firstFrame);
+        await PublishAckAsync(simulator, "ack/network/1", late);
+        await fixture.Logs.WaitForAsync(log => log.Contains($"Reason=LateAckForTerminalOperation, ControllerId=1, CommandId={original.CommandId}"));
+        late[11] = 1;
+        await PublishAckAsync(simulator, "ack/network/1", late);
+        await fixture.Logs.WaitForAsync(log => log.Contains($"CommandId={original.CommandId}, AckStatusCode=1, OperationStatus=TimedOut"));
+        await using (var active = fixture.OpenDb())
+        {
+            var row = await active.Set<GateOperation>().SingleAsync(x => x.Id == operation.OperationId);
+            Assert.Equal((GateOperationStatus.Published, 1, seed.TicketId), (row.Status, row.ReservedControllerId, row.ReservedTicketId));
+            Assert.Empty(await active.Set<TicketArchive>().ToListAsync());
+        }
 
         await PublishAckAsync(simulator, "ack/network/1", ack[..^1]);
         await fixture.Logs.WaitForAsync(log => log.Contains("Reason=MalformedFrame"));
@@ -126,7 +163,7 @@ public sealed partial class ParkingWorkflowIntegrationTests
         await fixture.WaitForStatusAsync(operation.OperationId, GateOperationStatus.Completed);
         await PublishAckAsync(simulator, "ack/network/1", ack);
         await fixture.Logs.WaitForAsync(log => log.Contains("Reason=Duplicate"));
-        var completed = await cashier.GetFromJsonAsync<GateOperationResponse>($"/api/Gate/operations/{operation.OperationId}");
+        var completed = await restartedCashier.GetFromJsonAsync<GateOperationResponse>($"/api/Gate/operations/{operation.OperationId}");
         Assert.Equal("Completed", completed?.Status);
         Assert.True(completed!.IsAcknowledged && completed.TicketExited && completed.Archived);
         Assert.False(completed.RequiresReconciliation);
@@ -136,15 +173,25 @@ public sealed partial class ParkingWorkflowIntegrationTests
         var archive = Assert.Single(await after.Set<TicketArchive>().ToListAsync());
         Assert.Equal(seed.TicketId, archive.Id);
         Assert.Equal(seed.UniqueCode, archive.UniqueCode);
-        Assert.Equal(20, archive.TotalPrice);
+        Assert.Equal(420, archive.TotalPrice);
         Assert.Equal(operation.OperationId, archive.ExitOperationId);
         Assert.False(await after.Set<Ticket>().AnyAsync(x => x.Id == seed.TicketId));
         Assert.Null(saved.ReservedTicketId);
         Assert.Null(saved.ReservedControllerId);
         Assert.NotNull(saved.AcknowledgedAtUtc);
         Assert.Equal((byte)0, saved.AckStatusCode);
+        var evidence = new { Evidence = "Isolated controller simulator withheld execution." };
+        using var unauthorized = await restartedCashier.PostAsJsonAsync($"{oldLocation}/reconcile-non-execution", evidence);
+        Assert.Equal(HttpStatusCode.Forbidden, unauthorized.StatusCode);
+        using var reconciliation = await restartedSupervisor.PostAsJsonAsync($"{oldLocation}/reconcile-non-execution", evidence);
+        Assert.Equal(HttpStatusCode.OK, reconciliation.StatusCode);
+        var annotated = await after.Set<GateOperation>().SingleAsync(x => x.Id == original.OperationId);
+        Assert.Equal((GateOperationStatus.TimedOut, "GateAckTimeout", seed.Supervisor),
+            (annotated.Status, annotated.ErrorCode, annotated.ReconciledBy));
         Assert.False(commands.Reader.TryRead(out _));
-        output.WriteLine($"Isolated broker {command.Topic} | {Convert.ToHexString(command.PayloadSegment.AsSpan())}");
+        output.WriteLine($"Isolated broker first command {firstFrame.Topic} | {Convert.ToHexString(firstFrame.PayloadSegment.AsSpan())}");
+        output.WriteLine($"Isolated broker fresh command {command.Topic} | {Convert.ToHexString(command.PayloadSegment.AsSpan())}");
+        output.WriteLine($"Ignored simulator late ACK ack/network/1 | {Convert.ToHexString(MakeAck(firstFrame))}");
         output.WriteLine($"Simulator ACK ack/network/1 | {Convert.ToHexString(ack)}");
         output.WriteLine($"SQL operation {saved.Id}, ticket {archive.Id}, controller {saved.ControllerId}, command {saved.CommandId}, " +
             $"status {saved.Status}, dispatch {saved.DispatchStartedAtUtc:O}, published {saved.PublishedAtUtc:O}, " +
@@ -165,7 +212,6 @@ public sealed partial class ParkingWorkflowIntegrationTests
             seed.ExitGate, seed.ExitCashier, "ExitCashier");
         exit.ThrowIfFailed();
         await fixture.Logs.WaitForAsync(log => log.Contains("Gate ACK subscription unavailable"));
-        await fixture.Logs.WaitForAsync(log => log.Contains($"Gate dispatch deferred. OperationId={exit.Value.OperationId}"));
         await fixture.RestartAsync();
 
         var acceptSubscription = 0;
@@ -210,14 +256,27 @@ public sealed partial class ParkingWorkflowIntegrationTests
         var manual = await fixture.SendAsync(new OpenGateCommand { ControllerId = "1", OperationType = "Manual" },
             seed.ExitGate, seed.Supervisor, "Supervisor");
         manual.ThrowIfFailed();
-        await fixture.Logs.WaitForAsync(log => log.Contains($"Gate dispatch deferred. OperationId={manual.Value.OperationId}"));
+        time.Advance(TimeSpan.FromSeconds(10));
+        await fixture.WaitForStatusAsync(manual.Value.OperationId, GateOperationStatus.TimedOut);
+        await using (var expired = fixture.OpenDb())
+        {
+            var row = await expired.Set<GateOperation>().SingleAsync(x => x.Id == manual.Value.OperationId);
+            Assert.Equal("GateDispatchTimeout", row.ErrorCode);
+            Assert.Null(row.DispatchStartedAtUtc);
+            Assert.Null(row.ReservedControllerId);
+        }
         await broker.StartAsync();
         using var restartedSimulator = new MqttFactory().CreateMqttClient();
         await SubscribeToCommandsAsync(restartedSimulator, port, commands.Writer);
+        var newManual = await fixture.SendAsync(new OpenGateCommand { ControllerId = "1", OperationType = "Manual" },
+            seed.ExitGate, seed.Supervisor, "Supervisor");
+        newManual.ThrowIfFailed();
+        Assert.NotEqual(manual.Value.CommandId, newManual.Value.CommandId);
         var manualFrame = await ReadFrameAsync(commands.Reader);
-        AssertOpen(manualFrame, manual.Value, 1);
+        AssertOpen(manualFrame, newManual.Value, 1);
         await PublishAckAsync(restartedSimulator, "ack/network/1", MakeAck(manualFrame));
-        await fixture.WaitForStatusAsync(manual.Value.OperationId, GateOperationStatus.Completed);
+        await fixture.WaitForStatusAsync(newManual.Value.OperationId, GateOperationStatus.Completed);
+        Assert.False(commands.Reader.TryRead(out _));
     }
 
     private static async Task<GateOperationResponse> RequestExitAsync(HttpClient cashier, ExitTicketCommand command)
@@ -259,10 +318,12 @@ public sealed partial class ParkingWorkflowIntegrationTests
         Assert.Equal(GatePacketCodec.EncodeOpen(controller, ulong.Parse(operation.CommandId)), command.PayloadSegment.ToArray());
     }
 
-    private static byte[] MakeAck(MqttApplicationMessage command)
+    private static byte[] MakeAck(MqttApplicationMessage command) => MakeAck(command.PayloadSegment.AsSpan());
+
+    private static byte[] MakeAck(ReadOnlySpan<byte> command)
     {
         byte[] ack = [0x7B, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x7D];
-        command.PayloadSegment.AsSpan().Slice(1, 10).CopyTo(ack.AsSpan(1));
+        command.Slice(1, 10).CopyTo(ack.AsSpan(1));
         return ack;
     }
 

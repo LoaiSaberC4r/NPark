@@ -88,7 +88,9 @@ public sealed class TicketExitEligibilityService(
     }
 
     public static Task<GateOperation?> FindReservationAsync(IUnitOfWork db, Guid ticketId, CancellationToken ct) =>
-        db.FirstOrDefaultWithSpecAsync(new Matching<GateOperation>(x => x.ReservedTicketId == ticketId), ct);
+        db.FirstOrDefaultWithSpecAsync(new Matching<GateOperation>(x => x.ReservedTicketId == ticketId &&
+            (x.Status == GateOperationStatus.Pending || x.Status == GateOperationStatus.Published ||
+             x.Status == GateOperationStatus.Acknowledged)), ct);
 
     public static async Task<(decimal Paid, decimal Outstanding)> GetBalanceAsync(
         IUnitOfWork db, Ticket ticket, CancellationToken ct)

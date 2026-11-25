@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Net.Http.Headers;
 using System.Security.Claims;
+using System.Threading.Channels;
 using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
@@ -61,17 +62,17 @@ public sealed class SqlBrokerFactAttribute : FactAttribute
 public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper output)
 {
     [SqlBrokerFact]
-    public async Task OvernightRenewalAcrossMidnightAndLateAckArchiving()
+    public async Task OvernightFinancialStateSurvivesTimeoutAndCompletionRecoveryWhileOtherTicketsUseTheController()
     {
         var time = new ManualParkingTime(new DateTimeOffset(2026, 11, 24, 10, 0, 0, TimeSpan.Zero));
         await using var fixture = await Fixture.StartAsync(time);
         using var simulator = new MqttFactory().CreateMqttClient();
-        var exitFrame = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var frames = Channel.CreateUnbounded<byte[]>();
         var publishCount = 0;
         simulator.ApplicationMessageReceivedAsync += message =>
         {
             Interlocked.Increment(ref publishCount);
-            exitFrame.TrySetResult(message.ApplicationMessage.PayloadSegment.ToArray());
+            frames.Writer.TryWrite(message.ApplicationMessage.PayloadSegment.ToArray());
             return Task.CompletedTask;
         };
         await simulator.ConnectAsync(new MqttClientOptionsBuilder().WithTcpServer("127.0.0.1", fixture.Port)
@@ -182,7 +183,7 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
         Assert.Equal(pending.OperationId, qr.Value.OperationId);
         Assert.Equal($"/api/Gate/operations/{pending.OperationId}", accepted.Location);
 
-        var frame = await exitFrame.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        var frame = await frames.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(15));
         Assert.Equal(16, frame.Length);
         Assert.Equal(ushort.Parse("54321"), BinaryPrimitives.ReadUInt16BigEndian(frame.AsSpan(1, 2)));
         var command = BinaryPrimitives.ReadUInt64BigEndian(frame.AsSpan(3, 8));
@@ -195,40 +196,66 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
             Assert.False(await beforeAck.Set<TicketArchive>().AnyAsync(x => x.Id == data.TicketId));
             Assert.Null((await beforeAck.Set<Ticket>().SingleAsync(x => x.Id == data.TicketId)).EndDate);
         }
-        var retry = await fixture.SendAsync(exitRequest, data.ExitGate, data.ExitCashier, "ExitCashier");
-        Assert.Equal(pending.OperationId, retry.Value.OperationId);
-        Assert.True(retry.Value.RequiresReconciliation);
 
-        byte[] reply = [0x7B, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x7D];
-        frame.AsSpan(1, 10).CopyTo(reply.AsSpan(1));
-        var ack = new MqttApplicationMessageBuilder().WithTopic("ack/network/54321").WithPayload(reply)
-            .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce).Build();
+        async Task CompleteOtherTicketAsync()
+        {
+            var otherTicket = await fixture.CreateTicketAsync(data, price: 0, confirmEntry: true);
+            var other = await fixture.SendAsync(new ExitTicketCommand { TicketId = otherTicket.Id },
+                data.ExitGate, data.ExitCashier, "ExitCashier");
+            other.ThrowIfFailed();
+            var frame = await frames.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.Equal(other.Value.CommandId, BinaryPrimitives.ReadUInt64BigEndian(frame.AsSpan(3, 8)).ToString());
+            await PublishAckAsync(simulator, "ack/network/54321", MakeAck(frame));
+            await fixture.WaitForStatusAsync(other.Value.OperationId, GateOperationStatus.Completed);
+        }
+
+        await CompleteOtherTicketAsync();
+        var stillEligible = await fixture.SendAsync(scan, data.ExitGate, data.ExitCashier, "ExitCashier");
+        Assert.True(stillEligible.Value.IsValidForExit);
+        Assert.Equal((120m, 0m, secondDay), (stillEligible.Value.Eligibility!.PaidAmount,
+            stillEligible.Value.OutstandingAmount, stillEligible.Value.ValidExitDate));
+
+        var fresh = await fixture.SendAsync(exitRequest, data.ExitGate, data.ExitCashier, "ExitCashier");
+        fresh.ThrowIfFailed();
+        Assert.NotEqual(pending.OperationId, fresh.Value.OperationId);
+        Assert.NotEqual(pending.CommandId, fresh.Value.CommandId);
+        var freshFrame = await frames.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(15));
+        await fixture.WaitForStatusAsync(fresh.Value.OperationId, GateOperationStatus.Published);
+        var reply = MakeAck(freshFrame);
         await using (var failureDb = fixture.OpenDb())
         {
             await failureDb.Database.ExecuteSqlRawAsync(
-                "CREATE TRIGGER [TestRejectArchive] ON [TicketArchive] AFTER INSERT AS THROW 51010, 'Archive failure probe', 1;");
+                "ALTER TABLE [TicketArchive] ADD CONSTRAINT [TestRejectArchive] CHECK ([ExceedPrice] <> 100);");
         }
-        await simulator.PublishAsync(ack);
-        await simulator.PublishAsync(ack);
-        await fixture.WaitForStatusAsync(pending.OperationId, GateOperationStatus.Acknowledged);
-        await Task.Delay(1200);
+        await PublishAckAsync(simulator, "ack/network/54321", reply);
+        await PublishAckAsync(simulator, "ack/network/54321", reply);
+        await fixture.WaitForStatusAsync(fresh.Value.OperationId, GateOperationStatus.Acknowledged);
+        await fixture.Logs.WaitForAsync(log => log.Contains($"Gate transition Complete failed for {fresh.Value.OperationId}"));
+        var protectedTicket = await fixture.SendAsync(scan, data.ExitGate, data.ExitCashier, "ExitCashier");
+        Assert.Equal("GateOperationPending", protectedTicket.Value.ReasonCode);
+        await CompleteOtherTicketAsync();
         DateTime? firstAck;
         await using (var failedArchive = fixture.OpenDb())
         {
             Assert.False(await failedArchive.Set<TicketArchive>().AnyAsync(x => x.Id == data.TicketId));
             Assert.Null((await failedArchive.Set<Ticket>().SingleAsync(x => x.Id == data.TicketId)).EndDate);
-            firstAck = (await failedArchive.Set<GateOperation>().SingleAsync(x => x.Id == pending.OperationId)).AcknowledgedAtUtc;
-            await failedArchive.Database.ExecuteSqlRawAsync("DROP TRIGGER [TestRejectArchive];");
+            var acknowledged = await failedArchive.Set<GateOperation>().SingleAsync(x => x.Id == fresh.Value.OperationId);
+            Assert.Equal(data.TicketId, acknowledged.ReservedTicketId);
+            Assert.Null(acknowledged.ReservedControllerId);
+            firstAck = acknowledged.AcknowledgedAtUtc;
+            output.WriteLine($"SQL after injected archive failure: command {acknowledged.CommandId}, status {acknowledged.Status}, " +
+                $"reserved controller NULL, reserved ticket {acknowledged.ReservedTicketId}.");
+            await failedArchive.Database.ExecuteSqlRawAsync("ALTER TABLE [TicketArchive] DROP CONSTRAINT [TestRejectArchive];");
         }
 
-        await fixture.WaitForStatusAsync(pending.OperationId, GateOperationStatus.Completed);
+        await fixture.WaitForStatusAsync(fresh.Value.OperationId, GateOperationStatus.Completed);
         await using var afterAck = fixture.OpenDb();
         var archive = await afterAck.Set<TicketArchive>().Include(x => x.TicketArchiveAttachments)
             .SingleAsync(x => x.Id == data.TicketId);
         Assert.Equal(data.StartDate, archive.StartDate);
         Assert.Equal(data.UniqueCode, archive.UniqueCode);
-        Assert.Equal(pending.OperationId, archive.ExitOperationId);
-        Assert.Equal(firstAck, (await afterAck.Set<GateOperation>().SingleAsync(x => x.Id == pending.OperationId)).AcknowledgedAtUtc);
+        Assert.Equal(fresh.Value.OperationId, archive.ExitOperationId);
+        Assert.Equal(firstAck, (await afterAck.Set<GateOperation>().SingleAsync(x => x.Id == fresh.Value.OperationId)).AcknowledgedAtUtc);
         Assert.Equal(120, archive.TotalPrice);
         Assert.Equal(secondDay, archive.ValidExitDate);
         Assert.Null(archive.CollectedBy);
@@ -256,7 +283,8 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
         Assert.Equal(
             new[] { first.Value.TicketExceedTransactionId, second.Value.TicketExceedTransactionId }.Order(),
             snapshots.Where(x => x.FinancialItemType == FinancialItemType.ExceedPayment).Select(x => x.SourceRecordId).Order());
-        Assert.Equal(1, Volatile.Read(ref publishCount));
+        Assert.Equal(4, Volatile.Read(ref publishCount));
+        Assert.False(frames.Reader.TryRead(out _));
         Assert.True((await fixture.SendAsync(new CollectEnterTicketsCommand(),
             data.EntryGate, data.Supervisor, "Supervisor")).IsFailure);
     }
@@ -433,7 +461,8 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
             new(new DbContextOptionsBuilder<NParkDBContext>().UseSqlServer(connection).Options);
 
         public static async Task<Fixture> StartAsync(TimeProvider? time = null, bool seedCatalog = true,
-            bool includeObsoleteSettings = false, int? brokerPort = null, bool enableMqttNetworkServices = false)
+            bool includeObsoleteSettings = false, int? brokerPort = null, bool enableMqttNetworkServices = false,
+            int recoveryIntervalSeconds = 1, IMqttPublisher? publisher = null, bool failNotifications = false)
         {
             var port = brokerPort ?? (int.TryParse(Environment.GetEnvironmentVariable("NPARK_TEST_MQTT_PORT"), out var configuredPort)
                 ? configuredPort : 1);
@@ -459,8 +488,10 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
                 ["MqttHeartbeat:Payload"] = "7BFFA31A2A3A4A7D",
                 ["MqttNetworkSubscriber:Enabled"] = enableMqttNetworkServices.ToString(),
                 ["MqttNetworkSubscriber:ReconnectSeconds"] = "1",
-                ["GateOperation:RecoveryIntervalSeconds"] = "1",
+                ["GateOperation:RecoveryIntervalSeconds"] = recoveryIntervalSeconds.ToString(),
                 ["GateOperation:AckTimeoutSeconds"] = "2",
+                ["GateOperation:EnableAutomaticRetry"] = "true",
+                ["GateOperation:HardwareDeduplicationConfirmed"] = "true",
                 ["Jwt:Issuer"] = "npark-test",
                 ["Jwt:Audience"] = "npark-test",
                 ["Jwt:ExpiryMinutes"] = "5",
@@ -483,8 +514,10 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
                 NPark.Application.Bootstrap.Bootstrap.AddApplicationBootstrap(hostBuilder.Services);
                 NPark.Infrastructure.Bootstrap.Bootstrap.InfrastructureInjection(hostBuilder.Services, hostBuilder.Configuration);
                 hostBuilder.Services.AddSingleton(testTime);
-                hostBuilder.Services.AddSingleton<IRealtimeNotifier, TestNotifications>();
+                hostBuilder.Services.AddSingleton<IRealtimeNotifier>(new TestNotifications(failNotifications));
                 hostBuilder.Services.AddSingleton<IMqttCaptureSignalRNotifier, TestNotifications>();
+                if (publisher is not null)
+                    hostBuilder.Services.AddSingleton(publisher);
                 hostBuilder.Services.AddTransient<IRequestHandler<RollbackProbe, Result<int>>, RollbackProbeHandler>();
                 var app = hostBuilder.Build();
                 app.UseAuthentication();
@@ -627,6 +660,18 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
             Assert.Equal(status, (await verify.Set<GateOperation>().SingleAsync(x => x.Id == id)).Status);
         }
 
+        public async Task<Ticket> CreateTicketAsync(Seed data, decimal price, bool confirmEntry)
+        {
+            await using var db = OpenDb();
+            var ticket = Ticket.Create(Clock.LocalNow, price, data.EntryGate, data.EntryCashier, Clock.BusinessDate, PriceType.Enter);
+            ticket.ConfirmBasePayment(data.EntryCashier, data.EntryGate, Clock.UtcNow);
+            if (confirmEntry)
+                ticket.ConfirmEntry(Clock.UtcNow);
+            db.Add(ticket);
+            await db.SaveChangesAsync();
+            return ticket;
+        }
+
         internal static User NewUser(string name, Guid role)
         {
             var user = User.Create(name, name + "@example.test", name, "test", name, name);
@@ -656,9 +701,10 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
         public void Advance(TimeSpan duration) => Interlocked.Add(ref utcTicks, duration.Ticks);
     }
 
-    private sealed class TestNotifications : IRealtimeNotifier, IMqttCaptureSignalRNotifier
+    private sealed class TestNotifications(bool fail = false) : IRealtimeNotifier, IMqttCaptureSignalRNotifier
     {
-        public Task NotifyGateOperationAsync(GateOperationResponse payload) => Task.CompletedTask;
+        public Task NotifyGateOperationAsync(GateOperationResponse payload) => fail
+            ? Task.FromException(new InvalidOperationException("Injected SignalR notification failure")) : Task.CompletedTask;
         public Task NotifyTicketAddedAsync(TicketAddedNotification payload) => Task.CompletedTask;
         public Task NotifyTicketExitedAsync(TicketExitedNotification payload) => Task.CompletedTask;
         public Task NotifyCaptureDetectedAsync(MqttCaptureDetectedResponse payload, CancellationToken ct) => Task.CompletedTask;
