@@ -142,3 +142,19 @@ The final backend run used `dotnet test NPark.Tests --no-build --artifacts-path 
 The Angular test runner was invoked as `node ./node_modules/@angular/cli/bin/ng.js test --watch=false --browsers=ChromeHeadless`. The focused run added `--include=src/app/Domain/Gate/gate-operation.models.spec.ts`. The migration commands use `--project NPark.Infrastructure --startup-project NPark.Api --context NParkDBContext`.
 
 Physical relay behavior, IIS rollout, live broker ACLs, and browser-to-physical-gate acceptance remain unverified. Firmware local actuation and offline event loss must be evaluated before rollout. The backend and simulator cases use isolated resources.
+
+## NPARK-MQTT-FIX-01
+
+The new integration test timed out waiting for B2 on the reviewed handler. After the fix, both a direct HTTP request from a different address and a request forwarded through a loopback HTTP relay produced the expected correlated B2 command. The entrance cases also covered the matching-address request, unregistered `lprIp`, non-subscriber notification, expired membership, unsupported controller, exit gate, disabled Lock feature, duplicate detections, and release after failure or timeout.
+
+| Final backend group | Executed | Passed | Failed | Skipped |
+|---|---:|---:|---:|---:|
+| Entrance and parking event protocol | 19 | 19 | 0 | 0 |
+| Gate dispatch, timeouts, and restart | 6 | 6 | 0 | 0 |
+| Pricing, payment, and settlement regression | 7 | 7 | 0 | 0 |
+| Startup, legacy migration, and gate protocol | 34 | 34 | 0 | 0 |
+| Total | 66 | 66 | 0 | 0 |
+
+`dotnet restore NPark.sln` succeeded. `dotnet build NPark.sln --no-restore` succeeded with 28 warnings and zero errors. The supplied `FullyQualifiedName~EntranceMqttIntegrationTests` filter discovered zero tests because the file contributes to the partial `ParkingWorkflowIntegrationTests` class. The final verification ran `dotnet test NPark.Tests --no-build --filter <group>` with four disjoint filters covering all cases listed by `--list-tests`. Use `FullyQualifiedName~SubscriberLockUsesRegisteredLprIpForDirectAndRelayedRequests` for the new regression alone.
+
+The initial full run encountered a SQL Express connectivity failure during test setup. The successful rerun used a dedicated SQL Server LocalDB instance, disposable databases, and loopback MQTT brokers. Physical cameras and controllers were outside this verification.

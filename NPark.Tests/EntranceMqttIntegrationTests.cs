@@ -2,6 +2,9 @@ using System.Buffers.Binary;
 using System.Net;
 using System.Net.Http.Json;
 using System.Threading.Channels;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using MQTTnet;
 using MQTTnet.Client;
@@ -119,6 +122,100 @@ public sealed partial class ParkingWorkflowIntegrationTests
             (issued.IsSubscriber, issued.CardNumber, issued.Price, issued.EntryConfirmationStatus));
         Assert.Equal(2, await verify.Set<GateOperation>().CountAsync());
         Assert.All(await verify.Set<GateOperation>().ToListAsync(), op => Assert.Null(op.ReservedControllerId));
+    }
+
+    [SqlBrokerFact]
+    public async Task SubscriberLockUsesRegisteredLprIpForDirectAndRelayedRequests()
+    {
+        // The API listens on loopback, so its HTTP peer differs from this registered camera.
+        const string registeredCamera = "192.0.2.20";
+        const string detectionPath = "/api/lpr-signalr/vehicle-detected";
+        var time = EntranceTime();
+        var settings = EntranceSettings();
+        settings["SubscriberButtonLock:SupportedControllerIds:1"] = "54321";
+        await using var fixture = await Fixture.StartAsync(time, entranceSettings: settings);
+        var seed = await fixture.SeedAsync(sameDay: true);
+        await using (var db = fixture.OpenDb())
+        {
+            var entrance = await db.Set<ParkingGate>().SingleAsync(x => x.Id == seed.EntryGate);
+            db.Entry(entrance).Property(x => x.LprIp).CurrentValue = registeredCamera;
+            entrance.SetControlIp("54310");
+            var exit = await db.Set<ParkingGate>().SingleAsync(x => x.Id == seed.ExitGate);
+            db.Entry(exit).Property(x => x.LprIp).CurrentValue = ExitCamera;
+            var price = PricingScheme.Create("Test membership", DurationType.Days, null, null, false, 80, 30, null);
+            db.Add(price);
+            await db.SaveChangesAsync();
+            db.Add(ParkingMemberships.Create("Valid test member", "100", "100", "SUB 101", "11223344", price.Id,
+                fixture.Clock.LocalNow.AddDays(-1), fixture.Clock.LocalNow.AddDays(1)));
+            await db.SaveChangesAsync();
+        }
+
+        using var simulator = new MqttFactory().CreateMqttClient();
+        var commands = Channel.CreateUnbounded<MqttApplicationMessage>();
+        await SubscribeToCommandsAsync(simulator, fixture.Port, commands.Writer);
+        await fixture.Logs.WaitForAsync(log => log.Contains("Gate ACK subscription confirmed"));
+        using var cashier = await fixture.CreateHttpClientAsync(seed.EntryGate, seed.EntryCashier);
+        using var unknown = await cashier.PostAsJsonAsync(detectionPath,
+            new LprVehicleDetectedCommand { LprIp = "192.0.2.30", VehicleNumber = "SUB 101" });
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+        Assert.Contains("LPR_IP_NOT_FOUND", await unknown.Content.ReadAsStringAsync());
+
+        await DetectAsync(cashier, registeredCamera, "SUB 101");
+        await DetectAsync(cashier, ExitCamera, "SUB 101");
+        Assert.Equal(new[] { seed.EntryGate, seed.ExitGate }, fixture.Notifications.Lpr.Select(x => x.GateId).ToArray());
+        await using (var db = fixture.OpenDb())
+        {
+            Assert.Equal(2, await db.LprCaptures.CountAsync());
+            Assert.Empty(await db.Set<GateOperation>().ToListAsync());
+            var entrance = await db.Set<ParkingGate>().SingleAsync(x => x.Id == seed.EntryGate);
+            entrance.SetControlIp(EntranceController.ToString());
+            await db.SaveChangesAsync();
+        }
+
+        var relayBuilder = WebApplication.CreateSlimBuilder();
+        relayBuilder.WebHost.UseUrls("http://127.0.0.1:0");
+        await using var relay = relayBuilder.Build();
+        relay.MapPost(detectionPath, async (LprVehicleDetectedCommand detection, CancellationToken ct) =>
+        {
+            using var response = await cashier.PostAsJsonAsync(detectionPath, detection, ct);
+            return Results.StatusCode((int)response.StatusCode);
+        });
+        await relay.StartAsync();
+        using var relayClient = new HttpClient { BaseAddress = new Uri(Assert.Single(relay.Urls)) };
+
+        foreach (var sender in new[] { cashier, relayClient })
+        {
+            var detected = DetectAsync(sender, registeredCamera, "SUB 101");
+            var command = await ReadFrameAsync(commands.Reader);
+            Assert.Equal($"sub/network/{EntranceController}", command.Topic);
+            var commandId = BinaryPrimitives.ReadUInt64BigEndian(command.PayloadSegment.AsSpan()[3..11]);
+            Assert.Equal(GatePacketCodec.EncodeLock(EntranceController, commandId), command.PayloadSegment.ToArray());
+            var operation = await WaitForAsync(fixture,
+                db => db.Set<GateOperation>().SingleOrDefaultAsync(x => x.CommandId == (long)commandId),
+                x => x?.Status == GateOperationStatus.Published);
+            await PublishAckAsync(simulator, $"ack/network/{EntranceController}", MakeAck(command));
+            await detected;
+            await fixture.WaitForStatusAsync(operation!.Id, GateOperationStatus.Completed);
+            time.Advance(TimeSpan.FromSeconds(61));
+        }
+
+        settings["SubscriberButtonLock:Enabled"] = "false";
+        await fixture.RestartAsync();
+        using var disabledCashier = await fixture.CreateHttpClientAsync(seed.EntryGate, seed.EntryCashier);
+        await DetectAsync(disabledCashier, registeredCamera, "SUB 101");
+        Assert.False(commands.Reader.TryRead(out _));
+        Assert.Equal(5, fixture.Notifications.Lpr.Count);
+        await using var verify = fixture.OpenDb();
+        Assert.Equal(5, await verify.LprCaptures.CountAsync());
+        var operations = await verify.Set<GateOperation>().ToListAsync();
+        Assert.Equal(2, operations.Count);
+        Assert.All(operations, op =>
+        {
+            Assert.Equal(GateOperationType.LockCardButton, op.Type);
+            Assert.Equal(seed.EntryGate, op.GateId);
+            Assert.Null(op.TicketIdSnapshot);
+            Assert.Null(op.ReservedControllerId);
+        });
     }
 
     [SqlBrokerFact]

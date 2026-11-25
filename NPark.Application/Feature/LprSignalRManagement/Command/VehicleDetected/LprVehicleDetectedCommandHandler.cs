@@ -1,8 +1,6 @@
-using System.Net;
 using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NPark.Application.Abstraction;
@@ -18,7 +16,6 @@ internal sealed class LprVehicleDetectedCommandHandler(
     IUnitOfWork db,
     ILprSignalRNotifier notifier,
     ParkingBusinessClock clock,
-    IHttpContextAccessor http,
     IOptions<LprCaptureOptions> captures,
     IOptions<SubscriberButtonLockOptions> locks,
     GateOperationService operations,
@@ -46,12 +43,8 @@ internal sealed class LprVehicleDetectedCommandHandler(
                 if (controller is not ushort id || !locks.Value.Supports(id))
                     logger.LogDebug("Subscriber lock unsupported. GateId={GateId}, ControllerId={ControllerId}, LprCaptureId={LprCaptureId}",
                         gate.Id, controller, capture.Id);
-                else if (IsCameraSource(lprIp))
-                    await TryLockAsync(capture, id, ct);
                 else
-                    logger.LogWarning("Subscriber lock skipped for an unverified LPR source. GateId={GateId}, " +
-                        "ControllerId={ControllerId}, LprCaptureId={LprCaptureId}",
-                        gate.Id, controller, capture.Id);
+                    await TryLockAsync(capture, id, ct);
             }
         }
 
@@ -59,11 +52,6 @@ internal sealed class LprVehicleDetectedCommandHandler(
         await notifier.NotifyVehicleDetectedAsync(response, ct);
         return Result<LprVehicleDetectedCommandResponse>.Ok(response);
     }
-
-    private bool IsCameraSource(string lprIp) =>
-        http.HttpContext?.Connection.RemoteIpAddress is { } remote && IPAddress.TryParse(lprIp, out var camera) &&
-        (remote.IsIPv4MappedToIPv6 ? remote.MapToIPv4() : remote)
-            .Equals(camera.IsIPv4MappedToIPv6 ? camera.MapToIPv4() : camera);
 
     private async Task<bool> PersistAsync(LprCapture capture, CancellationToken ct)
     {
