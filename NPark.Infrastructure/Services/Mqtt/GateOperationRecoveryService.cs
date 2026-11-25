@@ -1,5 +1,6 @@
-using BuildingBlock.Domain.Results;
+using System.Data;
 using MediatR;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -25,185 +26,252 @@ internal sealed class GateOperationRecoveryService(IServiceScopeFactory scopes, 
     TimeProvider time, ILogger<GateOperationRecoveryService> logger)
     : BackgroundService, IGateOperationDispatcher
 {
-    private readonly HashSet<Guid> deferredOperations = [];
+    private bool publisherUnavailable;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.WhenAll(
+        RunLoopAsync("expiry", ExpireAsync, stoppingToken),
+        RunLoopAsync("dispatch", DispatchPendingAsync, stoppingToken),
+        RunLoopAsync("completion", CompleteAcknowledgedAsync, stoppingToken));
+
+    private async Task RunLoopAsync(string name, Func<CancellationToken, Task> work, CancellationToken ct)
     {
-        logger.LogInformation("Gate operation recovery started. IntervalSeconds={IntervalSeconds}, " +
-            "CommandTopicTemplate={CommandTopicTemplate}, AckTopicFilter={AckTopicFilter}",
-            options.Value.RecoveryIntervalSeconds, options.Value.CommandTopicTemplate, options.Value.AckTopicFilter);
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(options.Value.RecoveryIntervalSeconds));
         do
         {
             try
             {
-                await RecoverAsync(stoppingToken);
+                await work(ct);
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                break;
+                return;
             }
             catch (Exception error)
             {
-                logger.LogError(error, "The gate operation recovery pass failed");
+                logger.LogError(error, "Gate operation {Phase} pass failed", name);
             }
-        } while (!stoppingToken.IsCancellationRequested && await timer.WaitForNextTickAsync(stoppingToken));
+        } while (!ct.IsCancellationRequested && await timer.WaitForNextTickAsync(ct));
     }
 
-    private async Task RecoverAsync(CancellationToken ct)
+    private async Task ExpireAsync(CancellationToken ct)
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NParkDBContext>();
-        var configuration = options.Value;
-        var ready = ackSubscription.Ready;
-        if (ready)
-            deferredOperations.Clear();
-        var utcNow = time.GetUtcNow().UtcDateTime;
-        var timeout = utcNow.AddSeconds(-configuration.AckTimeoutSeconds);
-        var retryBefore = timeout.AddMilliseconds(-configuration.RetryIntervalMilliseconds);
-        var autoRetry = ready && configuration.EnableAutomaticRetry && configuration.HardwareDeduplicationConfirmed;
+        var now = time.GetUtcNow().UtcDateTime;
+        var ackCutoff = now.AddSeconds(-options.Value.AckTimeoutSeconds);
+        var dispatchCutoff = now.AddSeconds(-options.Value.DispatchWaitTimeoutSeconds);
         var candidates = await db.Set<GateOperation>().AsNoTracking()
-            .Where(op => op.Status == GateOperationStatus.Acknowledged ||
-                op.Status == GateOperationStatus.Pending &&
-                    (op.DispatchStartedAtUtc == null || op.DispatchStartedAtUtc <= timeout) ||
-                op.Status == GateOperationStatus.Published && op.PublishedAtUtc <= timeout ||
-                autoRetry && op.RetryCount < configuration.MaxRetries && op.DispatchStartedAtUtc <= retryBefore &&
-                    (op.Status == GateOperationStatus.Unknown || op.Status == GateOperationStatus.TimedOut))
-            .OrderBy(op => op.Status == GateOperationStatus.Acknowledged ? 0 : 1)
-            .ThenBy(op => op.CreatedAtUtc)
-            .Select(op => new { op.Id, op.Status, op.DispatchStartedAtUtc })
+            .Where(op => op.Status == GateOperationStatus.Pending &&
+                    (op.DispatchStartedAtUtc == null && op.CreatedAtUtc <= dispatchCutoff || op.DispatchStartedAtUtc <= ackCutoff) ||
+                op.Status == GateOperationStatus.Published && op.PublishedAtUtc <= ackCutoff)
+            .Select(op => new { op.Id, op.Status })
             .ToListAsync(ct);
 
-        if (!ready)
+        await ProcessBatchAsync(candidates, async (operation, token) =>
         {
-            foreach (var op in candidates.Where(op => op.Status == GateOperationStatus.Pending && op.DispatchStartedAtUtc is null))
-                if (deferredOperations.Add(op.Id))
-                    LogDeferred(op.Id);
-        }
-
-        await Parallel.ForEachAsync(candidates.Where(op => ready || op.Status != GateOperationStatus.Pending ||
-            op.DispatchStartedAtUtc.HasValue), new ParallelOptions
-        {
-            MaxDegreeOfParallelism = 8,
-            CancellationToken = ct
-        }, async (op, cancellationToken) =>
-        {
-            var transition = op.Status switch
-            {
-                GateOperationStatus.Acknowledged => GateTransition.Complete,
-                GateOperationStatus.Pending when op.DispatchStartedAtUtc is null => GateTransition.Dispatch,
-                GateOperationStatus.Pending or GateOperationStatus.Published => GateTransition.CheckTimeout,
-                _ => GateTransition.Retry
-            };
-            if (transition is GateTransition.Dispatch or GateTransition.Retry)
-                await DispatchAsync(op.Id, transition, null, cancellationToken);
-            else
-                await AdvanceAsync(op.Id, transition, null, cancellationToken);
-        });
+            var change = operation.Status == GateOperationStatus.Pending
+                ? await CheckPendingTimeoutAsync(operation.Id, token)
+                : await AdvanceAsync(operation.Id, GateTransition.CheckTimeout, null, token);
+            if (change is not null)
+                await PublishStatusAsync(change);
+        }, ct);
     }
 
-    public async Task<bool> RetryAsync(Guid operationId, Guid gateId, CancellationToken ct)
+    private async Task<GateTransitionResult?> CheckPendingTimeoutAsync(Guid id, CancellationToken ct)
     {
-        var completed = await AdvanceAsync(operationId, GateTransition.Complete, gateId, ct);
-        return completed != null || await DispatchAsync(operationId, GateTransition.Retry, gateId, ct);
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NParkDBContext>();
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        return await TryLockDispatchAsync(db, id, ct)
+            ? await AdvanceAsync(id, GateTransition.CheckTimeout, null, ct) : null;
     }
 
-    private async Task<bool> DispatchAsync(Guid operationId, GateTransition transition, Guid? gateId, CancellationToken ct)
+    private async Task DispatchPendingAsync(CancellationToken ct)
     {
         if (!ackSubscription.Ready)
+            return;
+
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NParkDBContext>();
+        var cutoff = time.GetUtcNow().UtcDateTime.AddSeconds(-options.Value.DispatchWaitTimeoutSeconds);
+        var ids = await db.Set<GateOperation>().AsNoTracking()
+            .Where(op => op.Status == GateOperationStatus.Pending && op.DispatchStartedAtUtc == null && op.CreatedAtUtc > cutoff)
+            .OrderBy(op => op.CreatedAtUtc).Select(op => op.Id).ToListAsync(ct);
+        if (ids.Count == 0)
+            return;
+
+        // A connection failure before claiming leaves the original dispatch window in effect.
+        using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(options.Value.AckTimeoutSeconds), time);
+        using var connection = CancellationTokenSource.CreateLinkedTokenSource(budget.Token, ct);
+        try
         {
-            LogDeferred(operationId);
-            return false;
+            await publisher.EnsureConnectedAsync(connection.Token);
+            publisherUnavailable = false;
         }
-        var change = await AdvanceAsync(operationId, transition, gateId, ct, notify: false);
-        if (change?.Operation is not { } operation)
-            return false;
+        catch (Exception error) when (!ct.IsCancellationRequested)
+        {
+            if (!publisherUnavailable)
+                logger.LogWarning(error, "Gate dispatch deferred because the MQTT publisher is unavailable");
+            publisherUnavailable = true;
+            return;
+        }
 
-        await using var check = scopes.CreateAsyncScope();
-        var db = check.ServiceProvider.GetRequiredService<NParkDBContext>();
-        if (!await db.Set<GateOperation>().AnyAsync(x => x.Id == operationId && x.Status == GateOperationStatus.Pending, ct))
-            return true;
+        await ProcessBatchAsync(ids, async (id, token) =>
+        {
+            if (await DispatchAsync(id, token) is { } change)
+                await PublishStatusAsync(change);
+        }, ct);
+    }
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(options.Value.AckTimeoutSeconds));
-        logger.LogInformation("Gate dispatch started. OperationId={OperationId}, CommandId={CommandId}, " +
-            "ControllerId={ControllerId}", operationId, operation.CommandId, operation.ControllerId);
+    private async Task<GateTransitionResult?> DispatchAsync(Guid id, CancellationToken ct)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NParkDBContext>();
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        if (!await TryLockDispatchAsync(db, id, ct) || !ackSubscription.Ready)
+            return null;
+
+        var claim = await AdvanceAsync(id, GateTransition.Dispatch, null, ct);
+        if (claim?.Operation is not { } operation || claim.DispatchAttemptDeadlineUtc is not DateTime deadline)
+            return claim;
+
+        var remaining = deadline - time.GetUtcNow().UtcDateTime;
+        if (remaining <= TimeSpan.Zero)
+            return await AdvanceAsync(id, GateTransition.DeliveryUnknown, null, CancellationToken.None);
+
+        using var budget = new CancellationTokenSource(remaining, time);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct, budget.Token);
+        var sendBy = operation.CreatedAtUtc.AddSeconds(options.Value.DispatchWaitTimeoutSeconds);
         try
         {
             var raw = Convert.FromHexString(operation.Payload);
             logger.LogInformation("Publishing Open Gate command. OperationId={OperationId}, CommandId={CommandId}, " +
                 "ControllerId={ControllerId}, Topic={Topic}, PayloadHex={PayloadHex}, PayloadLength={PayloadLength}, " +
                 "BrokerHost={BrokerHost}, BrokerPort={BrokerPort}, Qos={Qos}, Retain={Retain}",
-                operationId, operation.CommandId, operation.ControllerId, operation.Topic, operation.Payload,
+                id, operation.CommandId, operation.ControllerId, operation.Topic, operation.Payload,
                 raw.Length, brokerOptions.Value.Host, brokerOptions.Value.Port, options.Value.CommandQos, false);
             await publisher.PublishBytesAsync(operation.Topic, raw,
-                new MqttPublishOptions(options.Value.CommandQos, false), timeout.Token);
+                new MqttPublishOptions(options.Value.CommandQos, false), timeout.Token,
+                () => ackSubscription.Ready && time.GetUtcNow().UtcDateTime < (deadline < sendBy ? deadline : sendBy));
         }
         catch (Exception error)
         {
-            logger.LogWarning(error, "MQTT dispatch outcome unknown for {OperationId}, command {CommandId}",
-                operation.OperationId, operation.CommandId);
-            await AdvanceAsync(operationId, GateTransition.DeliveryUnknown, gateId, CancellationToken.None);
-            return true;
+            logger.LogWarning(error, "MQTT publish failed for gate operation {OperationId}, command {CommandId}",
+                id, operation.CommandId);
+            return await AdvanceAsync(id, GateTransition.DeliveryUnknown, null, CancellationToken.None);
         }
 
-        logger.LogInformation("MQTT broker accepted gate command. OperationId={OperationId}, CommandId={CommandId}, " +
-            "ControllerId={ControllerId}, Topic={Topic}", operationId, operation.CommandId,
-            operation.ControllerId, operation.Topic);
-        await AdvanceAsync(operationId, GateTransition.Published, gateId, CancellationToken.None);
+        logger.LogInformation("MQTT broker accepted Open Gate command. OperationId={OperationId}, CommandId={CommandId}, " +
+            "ControllerId={ControllerId}, Topic={Topic}", id, operation.CommandId, operation.ControllerId, operation.Topic);
+        return await AdvanceAsync(id, GateTransition.Published, null, CancellationToken.None);
+    }
+
+    // The outer SQL transaction owns only this application lock. The claim and final state
+    // commit separately. Another process may expire a claim only after the publisher settles
+    // or its owning SQL session closes. A recovered claim is never sent again.
+    private static async Task<bool> TryLockDispatchAsync(NParkDBContext db, Guid id, CancellationToken ct)
+    {
+        var result = new SqlParameter("result", SqlDbType.Int) { Direction = ParameterDirection.Output };
+        var resource = new SqlParameter("resource", $"NPark:GateDispatch:{id:N}");
+        await db.Database.ExecuteSqlRawAsync(
+            "EXEC @result = sys.sp_getapplock @Resource = @resource, @LockMode = 'Exclusive', @LockTimeout = 0;",
+            new object[] { result, resource }, ct);
+        return (int)result.Value switch
+        {
+            >= 0 => true,
+            -1 => false,
+            var code => throw new InvalidOperationException($"SQL gate dispatch lock returned {code}.")
+        };
+    }
+
+    private async Task CompleteAcknowledgedAsync(CancellationToken ct)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<NParkDBContext>();
+        var ids = await db.Set<GateOperation>().AsNoTracking().Where(op => op.Status == GateOperationStatus.Acknowledged)
+            .OrderBy(op => op.CreatedAtUtc).Select(op => op.Id).ToListAsync(ct);
+        await ProcessBatchAsync(ids, async (id, token) => await RetryAsync(id, null, token), ct);
+    }
+
+    public Task<bool> RetryAsync(Guid operationId, Guid gateId, CancellationToken ct) => RetryAsync(operationId, (Guid?)gateId, ct);
+
+    private async Task<bool> RetryAsync(Guid id, Guid? gateId, CancellationToken ct)
+    {
+        var change = await AdvanceAsync(id, GateTransition.Complete, gateId, ct);
+        if (change is null)
+        {
+            if (gateId.HasValue)
+            {
+                await using var scope = scopes.CreateAsyncScope();
+                var db = scope.ServiceProvider.GetRequiredService<NParkDBContext>();
+                var status = await db.Set<GateOperation>().AsNoTracking().Where(x => x.Id == id && x.GateId == gateId &&
+                    (x.Status == GateOperationStatus.Completed || x.Status == GateOperationStatus.Failed ||
+                     x.Status == GateOperationStatus.TimedOut || x.Status == GateOperationStatus.Unknown))
+                    .Select(x => new { x.Status, x.CommandId, x.ControllerId }).SingleOrDefaultAsync(ct);
+                if (status is not null)
+                    logger.LogInformation("Terminal gate operation retransmission rejected. OperationId={OperationId}, " +
+                        "CommandId={CommandId}, ControllerId={ControllerId}, GateId={GateId}, Status={Status}, ReasonCode={ReasonCode}",
+                        id, status.CommandId, status.ControllerId, gateId, status.Status, "GateFreshRequestRequired");
+            }
+            return false;
+        }
+        await PublishStatusAsync(change);
         return true;
     }
 
-    private void LogDeferred(Guid operationId) => logger.LogWarning(
-        "Gate dispatch deferred. OperationId={OperationId}, AckSubscriptionReady={AckSubscriptionReady}", operationId, false);
+    private Task ProcessBatchAsync<T>(IEnumerable<T> candidates, Func<T, CancellationToken, Task> process, CancellationToken ct) =>
+        Parallel.ForEachAsync(candidates, new ParallelOptions { MaxDegreeOfParallelism = 8, CancellationToken = ct },
+            async (candidate, token) =>
+            {
+                try
+                {
+                    await process(candidate, token);
+                }
+                catch (Exception error) when (!token.IsCancellationRequested)
+                {
+                    logger.LogWarning(error, "Gate recovery could not process {Candidate}; the next pass will read current state", candidate);
+                }
+            });
 
-    private async Task<GateTransitionResult?> AdvanceAsync(Guid id, GateTransition transition, Guid? gateId,
-        CancellationToken ct, bool notify = true)
+    private async Task<GateTransitionResult?> AdvanceAsync(Guid id, GateTransition transition, Guid? gateId, CancellationToken ct)
     {
         await using var scope = scopes.CreateAsyncScope();
         var command = new AdvanceGateOperation(id, transition, gateId);
         var result = await scope.ServiceProvider.GetRequiredService<ISender>().Send(command, ct);
-        if (result.IsFailure)
-        {
-            logger.LogWarning("Gate transition {Transition} failed for {OperationId}: {Codes}",
-                transition, id, string.Join(",", result.Errors.Select(x => x.Code)));
-            return null;
-        }
-        if (result.Value.Operation is not { } operation)
-            return null;
-        if (transition == GateTransition.CheckTimeout)
-            logger.LogWarning("Gate ACK timeout. OperationId={OperationId}, CommandId={CommandId}, " +
-                "ControllerId={ControllerId}, PublishedAtUtc={PublishedAtUtc}, TimeoutSeconds={TimeoutSeconds}, Status={Status}",
-                operation.OperationId, operation.CommandId, operation.ControllerId, operation.PublishedAtUtc,
-                options.Value.AckTimeoutSeconds, operation.Status);
-        if (transition == GateTransition.Complete)
-        {
-            logger.LogInformation("Gate operation completed. OperationId={OperationId}, CommandId={CommandId}, " +
-                "ControllerId={ControllerId}", operation.OperationId, operation.CommandId, operation.ControllerId);
-            if (result.Value.Exit is { } exit)
-                logger.LogInformation("Ticket archived. TicketId={TicketId}, OperationId={OperationId}", exit.TicketId,
-                    operation.OperationId);
-        }
-        if (notify)
-            await PublishStatusAsync(result.Value);
-        return result.Value;
+        if (result.IsSuccess)
+            return result.Value.Operation is null ? null : result.Value;
+
+        logger.LogWarning("Gate transition {Transition} failed for {OperationId}: {Codes}",
+            transition, id, string.Join(",", result.Errors.Select(x => x.Code)));
+        return null;
     }
 
     public async Task PublishStatusAsync(GateTransitionResult change)
     {
         if (change.Operation is not { } operation)
             return;
-        logger.LogInformation(
-            "Gate {OperationType} {OperationId} command {CommandId} controller {ControllerId} ticket {TicketId} at gate {GateId} is {Status}, ACK {Ack}",
-            operation.OperationType, operation.OperationId, operation.CommandId, operation.ControllerId,
-            operation.TicketId, operation.GateId, operation.Status, operation.AckStatusCode);
+        var message = operation.Status switch
+        {
+            "TimedOut" when change.PreviousStatus != GateOperationStatus.TimedOut => "Gate operation timed out",
+            "Unknown" when change.PreviousStatus != GateOperationStatus.Unknown => "Gate delivery outcome unknown",
+            "Acknowledged" => "Successful hardware ACK persisted; gate completion pending",
+            "Completed" when operation.TicketId.HasValue => "Gate operation and ticket completed",
+            _ => "Gate operation updated"
+        };
+        logger.LogInformation("{Outcome}. OperationId={OperationId}, CommandId={CommandId}, ControllerId={ControllerId}, " +
+            "TicketId={TicketId}, GateId={GateId}, OperationType={OperationType}, PreviousStatus={PreviousStatus}, " +
+            "NewStatus={NewStatus}, ReasonCode={ReasonCode}, ControllerReservationReleased={ControllerReservationReleased}, " +
+            "TicketReservationReleased={TicketReservationReleased}, AckStatusCode={AckStatusCode}",
+            message, operation.OperationId, operation.CommandId, operation.ControllerId, operation.TicketId, operation.GateId,
+            operation.OperationType, change.PreviousStatus, operation.Status, operation.ReasonCode, change.ControllerReleased,
+            change.TicketReleased, operation.AckStatusCode);
         try
         {
             await using var scope = scopes.CreateAsyncScope();
             var realtime = scope.ServiceProvider.GetRequiredService<IRealtimeNotifier>();
-            if (change.Exit != null)
-                await realtime.NotifyTicketExitedAsync(change.Exit);
-            await realtime.NotifyGateOperationAsync(operation);
+            var gateStatus = realtime.NotifyGateOperationAsync(operation);
+            var ticketStatus = change.Exit is { } exit ? realtime.NotifyTicketExitedAsync(exit) : Task.CompletedTask;
+            await Task.WhenAll(gateStatus, ticketStatus).WaitAsync(TimeSpan.FromSeconds(1));
         }
         catch (Exception error)
         {

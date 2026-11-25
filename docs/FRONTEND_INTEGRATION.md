@@ -5,10 +5,17 @@ Reference checkout reviewed locally at `1bc959325350a05054a80c4924e26e8d6a277009
 ## Shared contracts
 
 - In `src/app/Domain/tickets/tickets.model.ts` add `ExitEligibility` and the salary breakdown fields described in [API contracts](API_CONTRACT_CHANGES.md). Preserve the existing QR fields and transport.
-- In `src/app/Services/Gate/gate-services.ts` replace the controller-only gate request with a typed body. Model `commandId` as a string and keep `operationId`, `status`, `ticketExited`, `archived`, `retryAllowed`, and `requiresReconciliation`.
+- In `src/app/Services/Gate/gate-services.ts` replace the controller-only gate request with a typed body. Model `commandId` as a string and keep `operationId`, `status`, `ticketExited`, `archived`, `retryAllowed`, `requiresReconciliation`, `reasonCode`, and `reasonMessage`.
 - In `src/app/Services/Tickets/ticket-core.service.ts` and `tickets-services.ts` return the gate operation from `addExitTicket`. Use Angular's `observe: 'response'` where the UI needs to distinguish HTTP 202 from HTTP 200. Handle the response body on both status codes.
 - Extend `src/app/Services/OverView/dashboard-hub.service.ts` and `src/app/Domain/OverView/dashboard-notifications.model.ts` to subscribe to `GateOperationStatusChanged`. Build the connection with the current gate JWT via `accessTokenFactory`. Reconnect on gate selection changes and refresh all pending operations after reconnecting. Use the HTTP status endpoint as the source of truth if events arrive out of order.
 - In `src/app/Services/Gate/lpr-signalr.service.ts`, carry `operationId` and `operationStatus` through `mqttCaptureDetected`. A successful QR capture can carry a pending operation. Render it using the operation state.
+
+## Monitoring and new attempts
+
+1. Generate a `requestId` UUID when the operator explicitly requests entry, exit, or manual opening. Keep the UUID and body across transport retries of that action. Use a new UUID for a subsequent explicit action.
+2. Follow the operation ID returned by the backend. Poll or refresh it with `GET /api/Gate/operations/{operationId}`. Treat SignalR events and reconnects as prompts to refresh. Disable the same ticket action while it is `Pending`, `Published`, or `Acknowledged`.
+3. Show success when the status is `Completed`. On `Failed`, `TimedOut`, or `Unknown`, stop polling the attempt as active, show the reason, and re-enable the normal action when eligible. For an exit ACK timeout, Arabic copy can be “لم يتم تأكيد فتح البوابة. لم يتم تسجيل خروج التذكرة. يمكنك المحاولة مرة أخرى.” An uncertain delivery can still have moved the physical relay.
+4. For a fresh exit attempt, refresh the existing ticket's eligibility and submit `ExitTicket` again only on operator action. Reuse the existing ticket for entry and keep its payment and QR code. Use the normal manual-open control for a new manual attempt. The retry route is for database completion of `Acknowledged` operations. Supervisors may add an audit annotation independently of the operator flow.
 
 ## Entry
 
@@ -21,7 +28,7 @@ Reference checkout reviewed locally at `1bc959325350a05054a80c4924e26e8d6a277009
 - In `src/app/Feature/exitgate-component/exitgate-component.ts`, route LPR, QR, card, and selected-ticket actions through unified eligibility and `addExitTicket(ticketId)`. Remove the follow-up `openGateForValidatedExit` and `openGateForSelectedTicket` calls from ticket workflows. The current `allowExitWithoutCollect` paths must follow the same backend payment rules.
 - Replace `createMembershipExitTicketAndOpenGate` with a lookup of the subscriber's existing active ticket by card or vehicle. Display missing-ticket and ambiguous-match outcomes when appropriate. Ticket issuance belongs to the entry gate.
 - Remove optimistic exit rows from the validation, confirmation, and MQTT paths. Add or refresh an exit row only when the operation reports `Completed` with `archived: true` or after the final `TicketExited` event.
-- Persist enough local selection state to recover with `GET /api/Gate/operations?ticketId=…&controllerId=…`. Keep the ticket action disabled while the operation is unresolved. When retry is available, use the existing operation's retry endpoint. Surface unknown execution for authorized supervisor reconciliation.
+- Persist enough local selection state to recover with `GET /api/Gate/operations?ticketId=…&controllerId=…`. Refresh the current gate mapping and financial eligibility before offering another exit attempt.
 
 ## Payments and reports
 

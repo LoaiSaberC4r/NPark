@@ -165,7 +165,7 @@ internal sealed class GateAckSubscriber(IServiceScopeFactory scopes, IOptions<Mq
             }
             if (change is not null)
             {
-                if (change.Operation is { } operation)
+                if (change.Operation is { AcknowledgedAtUtc: not null } operation)
                     logger.LogInformation("Hardware ACK persisted. OperationId={OperationId}, ControllerId={ControllerId}, " +
                         "CommandId={CommandId}, AckStatusCode={AckStatusCode}, AcknowledgedAtUtc={AcknowledgedAtUtc}",
                         operation.OperationId, ack.ControllerId, ack.CommandId, ack.Status, operation.AcknowledgedAtUtc);

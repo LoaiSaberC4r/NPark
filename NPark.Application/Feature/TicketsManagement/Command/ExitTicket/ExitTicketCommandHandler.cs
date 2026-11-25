@@ -21,6 +21,6 @@ internal sealed class ExitTicketCommandHandler(GateOperationService operations, 
         if (request.TicketId == Guid.Empty)
             return Task.FromResult(Result<GateOperationResponse>.Fail(new Error(
                 "TicketId.Required", ErrorMessage.TicketId_Required, ErrorType.Validation)));
-        return operations.AuthorizeAsync(request.TicketId, gateId, null, userId, GateOperationType.Exit, ct);
+        return operations.AuthorizeAsync(request.TicketId, gateId, null, userId, GateOperationType.Exit, ct, request.RequestId);
     }
 }

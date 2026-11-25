@@ -10,6 +10,8 @@ using Microsoft.Extensions.Logging;
 using NPark.Application.Abstraction;
 using NPark.Application.Bootstrap;
 using NPark.Application.Feature.MqttNetworkManagement;
+using NPark.Domain.Entities;
+using NPark.Domain.Enums;
 using NPark.Infrastructure;
 using NPark.Infrastructure.Bootstrap;
 using Xunit;
@@ -96,6 +98,66 @@ public sealed class DatabaseStartupTests
             Assert.Contains(probe.Logs, l => l.Message.Contains("schema is up to date"));
             Assert.DoesNotContain(probe.Logs, l => l.Message.Contains("Applying NPark database migrations"));
             Assert.Equal(originalHistory, (await db.Database.GetAppliedMigrationsAsync()).ToArray());
+            await host.StopAsync();
+        }
+    }
+
+    [SqlFact]
+    public async Task StartupReleasesHistoricalReservationsBeforeWorkersAndRepairsOnlyOnce()
+    {
+        await using var database = await StartupDatabase.CreateAtBaselineAsync();
+        var now = DateTime.UtcNow.AddDays(1);
+        var states = new[] { GateOperationStatus.TimedOut, GateOperationStatus.Unknown, GateOperationStatus.Failed,
+            GateOperationStatus.Completed, GateOperationStatus.Acknowledged, GateOperationStatus.Pending };
+        var operations = states.Select((_, i) => new GateOperation(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null,
+            (ushort)(i + 1), GateOperationType.Exit, now)).ToArray();
+        await using (var db = database.Open())
+        {
+            await db.Database.MigrateAsync();
+            db.AddRange(operations);
+            await db.SaveChangesAsync();
+            for (var i = 0; i < operations.Length - 1; i++)
+            {
+                var ack = states[i] switch
+                {
+                    GateOperationStatus.Completed or GateOperationStatus.Acknowledged => (byte?)0,
+                    GateOperationStatus.Failed => (byte?)1,
+                    _ => null
+                };
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    UPDATE [GateOperations] SET [Status] = {(int)states[i]}, [PublishedAtUtc] = {now}, [ErrorCode] = 'LegacyEvidence',
+                        [AcknowledgedAtUtc] = {(ack.HasValue ? now : (DateTime?)null)}, [AckStatusCode] = {ack}
+                    WHERE [Id] = {operations[i].Id}
+                    """);
+            }
+        }
+
+        Dictionary<Guid, byte[]>? versions = null;
+        for (var pass = 0; pass < 2; pass++)
+        {
+            var probe = new StartupProbe(async db =>
+            {
+                var current = await db.Set<GateOperation>().AsNoTracking().ToDictionaryAsync(x => x.Id);
+                Assert.Equal(operations.Length, current.Count);
+                for (var i = 0; i < operations.Length; i++)
+                {
+                    var original = operations[i];
+                    var row = current[original.Id];
+                    Assert.Equal((states[i], original.CommandId, original.ControllerId, original.GateId, original.TicketIdSnapshot),
+                        (row.Status, row.CommandId, row.ControllerId, row.GateId, row.TicketIdSnapshot));
+                    Assert.Equal(i == 5 ? original.ControllerId : (int?)null, row.ReservedControllerId);
+                    Assert.Equal(i >= 4 ? original.TicketIdSnapshot : null, row.ReservedTicketId);
+                    Assert.Equal(i < 5 ? now : (DateTime?)null, row.PublishedAtUtc);
+                    Assert.Equal(i is 2 or 3 or 4 ? now : (DateTime?)null, row.AcknowledgedAtUtc);
+                    Assert.Equal(i < 5 ? "LegacyEvidence" : null, row.ErrorCode);
+                    Assert.Null(row.ReconciledAtUtc);
+                    if (versions is not null)
+                        Assert.Equal(versions[row.Id], row.RowVersion);
+                }
+                versions = current.ToDictionary(x => x.Key, x => x.Value.RowVersion);
+            });
+            using var host = CreateHost(database.ConnectionString, false, probe);
+            await host.StartAsync();
             await host.StopAsync();
         }
     }

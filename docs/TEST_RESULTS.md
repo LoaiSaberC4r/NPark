@@ -65,3 +65,52 @@ Both frames carry command ID `2`. An induced SQL ACK write failure left the oper
 The recorded isolated operation was `5739a08c-9eaf-4104-b9f4-714b1b3cb4d6` for ticket `dcc2aefc-2b32-42a3-88cc-6e76b569b568`. The fixed test clock put dispatch, publication, ACK persistence, and completion at `2026-11-24T10:00:03Z`. The assertions checked the database and HTTP state at each stage.
 
 On November 24, 2026, `dotnet build NPark.sln` succeeded with 40 warnings and zero errors. `dotnet test NPark.sln` passed all 36 tests, with zero failures or skips, using disposable SQL Server Express databases and loopback MQTT brokers.
+
+## Automatic controller release, November 25, 2026
+
+Branch `codex/automatic-controller-release` starts from master at `3116baf8ce49a3bf5b077553ca82c581975cff0c`. Previously, uncertain operations kept the filtered controller and ticket reservations, and a late ACK could resume the operation. The current lifecycle makes those outcomes terminal. It permits a fresh authorized operation and keeps the earlier attempt in the audit history.
+
+The authenticated API test used disposable SQL Server Express databases and an isolated Mosquitto listener on `127.0.0.1:18883`. Ticket `5d9aa415-e9bb-4fd9-ac4f-a7425a0a5420` had a base price of 20, a confirmed sanction of 400, a paid amount of 420, zero outstanding, and current business-day validity in the test clock. Revalidation after timeout returned `Eligible` with the same balance and validity. The test replayed the first HTTP request ID and received its original result. A fresh UUID created command 2 after restart. It reused the ticket and controller without reconciliation. SQL contained one archive row at the end.
+
+| SQL checkpoint | Status | Reserved controller | Reserved ticket |
+|---|---|---|---|
+| Command 1 before expiry | `Published` | `1` | `5d9aa415-e9bb-4fd9-ac4f-a7425a0a5420` |
+| Same operation after expiry | `TimedOut` | `NULL` | `NULL` |
+| Command 2 after matching ACK and archival | `Completed` | `NULL` | `NULL` |
+
+The command 1 operation ID was `17fc7487-e5a3-4a6a-a883-eb3dffe81768`. The ticket stayed active through command 1's timeout. The simulator sent both a late success ACK and a late failure ACK for command 1 while command 2 was published. Command 2 kept its reservations until its own ACK arrived.
+
+| Observed frame on the isolated broker | Topic | Payload hex |
+|---|---|---|
+| First backend open command | `sub/network/1` | `7B00010000000000000001AEBEC1B17D` |
+| Fresh backend open command | `sub/network/1` | `7B00010000000000000002AEBEC1B17D` |
+| Ignored success ACK from the simulator | `ack/network/1` | `7B00010000000000000001007D` |
+| Accepted success ACK from the simulator | `ack/network/1` | `7B00010000000000000002007D` |
+
+The overnight regression used controller `54321` to exercise separate tickets on the same controller. One ticket completed after another ticket timed out. During an injected archive write failure, command 4 stayed `Acknowledged` with controller `NULL` and ticket `b6b533b3-d7e2-436a-89ff-10e850ad0546` still reserved. Another ticket completed on that controller before the constraint was removed. The original ticket then archived once with the same ACK timestamp and no additional MQTT command. The existing sanction, settlement, and QR assertions passed.
+
+The deadline test checked the SQL state immediately before and at equality, including competing ACK and timeout transactions. A controlled publish canceled after its deadline retained the reservations until it settled, then committed `Unknown` and released both reservations despite an injected SignalR exception. The restart and broker outage tests exercised a subscriber without an ACK subscription grant, pending recovery before expiry, dispatch expiry during disconnection, and publication of a fresh command after reconnection. Entry and manual tests covered successive failures, the current gate mapping, and failure ACK codes 01, 02, and 03.
+
+The startup test seeded historical `TimedOut`, `Unknown`, `Failed`, `Completed`, and `Acknowledged` rows with reservations. Before any worker started, SQL showed both reservations cleared on terminal rows and only the controller cleared on the acknowledged row. An active pending row kept both reservations. Historical command IDs, gate mappings, ticket snapshots, publication and ACK timestamps, and error codes survived. A second startup left the row versions unchanged. EF reported no pending model changes.
+
+The configured test broker at `192.168.1.40:1883` accepted the TCP probe and passive MQTT subscriptions. The observation window showed the heartbeat `7BFFA31A2A3A4A7D` on `sub/network/1` and `sub/network/5`. The open and ACK evidence above is from loopback. Physical-controller execution remains unverified pending an authorized and physically safe setup.
+
+### Changed files
+
+| Area | Files |
+|---|---|
+| Domain and localization | `GateOperation.cs`, `ErrorMessage.resx`, `ErrorMessage.ar.resx` |
+| Application | `GateOperationTransitions.cs`, `GateOperationService.cs`, `TicketExitEligibilityService.cs`, `ParkingWorkflowOptions.cs`, `IMqttPublisher.cs`, `OpenGateCommand.cs`, `OpenGateCommandHandler.cs`, `ExitTicketCommand.cs`, `ExitTicketCommandHandler.cs` |
+| API | `GateController.cs`, `GateOperationHttp.cs`, `OpenGateRequest.cs`, `appsettings.json` |
+| Infrastructure | `Bootstrap.cs`, `GateOperationRecoveryService.cs`, `GateAckSubscriber.cs`, `MqttPublisher.cs` |
+| Tests | `DatabaseStartupTests.cs`, `GateProtocolTests.cs`, `GateLifecycleIntegrationTests.cs`, `MqttGateIntegrationTests.cs`, `ParkingWorkflowIntegrationTests.cs` |
+| Documentation | `FRONTEND_INTEGRATION.md`, `API_CONTRACT_CHANGES.md`, `MQTT_GATE_PROTOCOL.md`, `TEST_RESULTS.md` |
+
+### Final checks
+
+| Check | Result |
+|---|---|
+| `dotnet build NPark.sln` | Passed with 42 warnings and zero errors. |
+| `dotnet test NPark.sln` with `NPARK_TEST_SQL` and `NPARK_TEST_MQTT_PORT` | 47 passed, zero failed, zero skipped. |
+| `dotnet ef migrations has-pending-model-changes` | No changes since the last migration. |
+| `git diff --check` | Passed. |

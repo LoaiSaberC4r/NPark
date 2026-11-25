@@ -661,10 +661,37 @@
     <value>Entry gate opening is awaiting confirmation.</value>
   </data>
   <data name="ParkingWorkflow_GateOperationPending" xml:space="preserve">
-    <value>A gate operation is unresolved.</value>
+    <value>A gate operation is in progress.</value>
   </data>
   <data name="ParkingWorkflow_GateOperationControllerChanged" xml:space="preserve">
-    <value>Gate operation {0} is unresolved ({3}) on controller {1}. The gate now uses controller {2}. Resolve the existing operation before requesting a new command.</value>
+    <value>Gate operation {0} is in progress ({3}) on controller {1}. The gate now uses controller {2}. Check the existing operation status before requesting a new command.</value>
+  </data>
+  <data name="ParkingWorkflow_GateAckTimeout" xml:space="preserve">
+    <value>Gate opening was not confirmed. Ticket entry or exit was not recorded. You can request a new attempt.</value>
+  </data>
+  <data name="ParkingWorkflow_GateDispatchTimeout" xml:space="preserve">
+    <value>The gate command could not be sent in time. You can request a new attempt.</value>
+  </data>
+  <data name="ParkingWorkflow_GateDeliveryUnknown" xml:space="preserve">
+    <value>Gate command delivery could not be confirmed. Check the gate before requesting a new attempt.</value>
+  </data>
+  <data name="ParkingWorkflow_GateExecutionFailed" xml:space="preserve">
+    <value>The controller reported that gate execution failed. You can request a new attempt.</value>
+  </data>
+  <data name="ParkingWorkflow_GateBusy" xml:space="preserve">
+    <value>The controller reported that the gate is busy.</value>
+  </data>
+  <data name="ParkingWorkflow_GateRejected" xml:space="preserve">
+    <value>The controller rejected the gate command.</value>
+  </data>
+  <data name="ParkingWorkflow_GateFreshRequestRequired" xml:space="preserve">
+    <value>This gate operation has ended. To request another opening, submit a new gate request.</value>
+  </data>
+  <data name="ParkingWorkflow_GateRequestIdConflict" xml:space="preserve">
+    <value>This request ID belongs to a different gate action.</value>
+  </data>
+  <data name="ParkingWorkflow_InvalidGateRequestId" xml:space="preserve">
+    <value>The request ID must be a non-empty UUID.</value>
   </data>
   <data name="ParkingWorkflow_TicketAlreadyExited" xml:space="preserve">
     <value>The ticket has already exited.</value>

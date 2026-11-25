@@ -7,5 +7,6 @@ public sealed record OpenGateCommand : ICommand<GateOperationResponse>
 {
     public string ControllerId { get; init; } = string.Empty;
     public Guid? TicketId { get; init; }
+    public Guid? RequestId { get; init; }
     public string? OperationType { get; init; }
 }

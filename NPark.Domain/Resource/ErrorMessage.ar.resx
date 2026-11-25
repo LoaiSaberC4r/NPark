@@ -663,10 +663,37 @@
     <value>لم يتم تأكيد فتح بوابة الدخول.</value>
   </data>
   <data name="ParkingWorkflow_GateOperationPending" xml:space="preserve">
-    <value>توجد عملية غير مكتملة للبوابة.</value>
+    <value>توجد عملية جارية للبوابة.</value>
   </data>
   <data name="ParkingWorkflow_GateOperationControllerChanged" xml:space="preserve">
-    <value>عملية البوابة {0} لم تُحسم بعد ({3}) على وحدة التحكم {1}. تستخدم البوابة الآن وحدة التحكم {2}. يجب حسم العملية الحالية قبل طلب أمر جديد.</value>
+    <value>عملية البوابة {0} جارية ({3}) على وحدة التحكم {1}. تستخدم البوابة الآن وحدة التحكم {2}. تحقق من حالة العملية الحالية قبل طلب أمر جديد.</value>
+  </data>
+  <data name="ParkingWorkflow_GateAckTimeout" xml:space="preserve">
+    <value>لم يتم تأكيد فتح البوابة. لم يتم تسجيل دخول أو خروج التذكرة. يمكنك المحاولة مرة أخرى.</value>
+  </data>
+  <data name="ParkingWorkflow_GateDispatchTimeout" xml:space="preserve">
+    <value>تعذر إرسال أمر البوابة في الوقت المحدد. يمكنك المحاولة مرة أخرى.</value>
+  </data>
+  <data name="ParkingWorkflow_GateDeliveryUnknown" xml:space="preserve">
+    <value>تعذر تأكيد وصول أمر البوابة. تحقق من حالة البوابة قبل المحاولة مرة أخرى.</value>
+  </data>
+  <data name="ParkingWorkflow_GateExecutionFailed" xml:space="preserve">
+    <value>أبلغت وحدة التحكم بفشل تشغيل البوابة. يمكنك المحاولة مرة أخرى.</value>
+  </data>
+  <data name="ParkingWorkflow_GateBusy" xml:space="preserve">
+    <value>أبلغت وحدة التحكم بأن البوابة مشغولة.</value>
+  </data>
+  <data name="ParkingWorkflow_GateRejected" xml:space="preserve">
+    <value>رفضت وحدة التحكم أمر البوابة.</value>
+  </data>
+  <data name="ParkingWorkflow_GateFreshRequestRequired" xml:space="preserve">
+    <value>انتهت عملية البوابة. لطلب فتح آخر، أرسل طلب فتح جديدًا.</value>
+  </data>
+  <data name="ParkingWorkflow_GateRequestIdConflict" xml:space="preserve">
+    <value>معرّف الطلب هذا مرتبط بإجراء مختلف للبوابة.</value>
+  </data>
+  <data name="ParkingWorkflow_InvalidGateRequestId" xml:space="preserve">
+    <value>يجب أن يكون معرّف الطلب UUID غير فارغ.</value>
   </data>
   <data name="ParkingWorkflow_TicketAlreadyExited" xml:space="preserve">
     <value>تم خروج التذكرة بالفعل.</value>

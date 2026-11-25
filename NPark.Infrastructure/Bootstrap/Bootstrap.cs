@@ -18,6 +18,8 @@ using Microsoft.IdentityModel.Tokens;
 using NPark.Application.Abstraction;
 using NPark.Application.Abstraction.Security;
 using NPark.Application.Options;
+using NPark.Domain.Entities;
+using NPark.Domain.Enums;
 using NPark.Infrastructure.Authorization;
 using NPark.Infrastructure.Options;
 using NPark.Infrastructure.Services;
@@ -64,8 +66,7 @@ namespace NPark.Infrastructure.Bootstrap
             services.AddOptions<GateOperationOptions>().Bind(configuration.GetSection("GateOperation"))
                 .Validate(x => x.RequireAcknowledgment && !x.Retain && x.CommandQos > 0 && x.CommandQos <= 2
                     && x.AckQos > 0 && x.AckQos <= 2 && x.AckTimeoutSeconds > 0 && x.RecoveryIntervalSeconds > 0
-                    && x.MaxRetries >= 0 && x.RetryIntervalMilliseconds >= 0
-                    && (!x.EnableAutomaticRetry || x.HardwareDeduplicationConfirmed)
+                    && x.DispatchWaitTimeoutSeconds > 0
                     && x.CommandTopicTemplate.Split("{controllerId}").Length == 2
                     && !x.CommandTopicTemplate.Contains('+') && !x.CommandTopicTemplate.Contains('#')
                     && (x.AckTopicFilter == "ack/network/+" || x.AckTopicFilter == "ack/network/#"),
@@ -182,15 +183,16 @@ namespace NPark.Infrastructure.Bootstrap
                     }
 
                     cancellationToken.ThrowIfCancellationRequested();
+                    await ReleaseHistoricalReservationsAsync(db, cancellationToken);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    logger.LogWarning("NPark database migration initialization was canceled.");
+                    logger.LogWarning("NPark database initialization was canceled.");
                     throw;
                 }
                 catch (Exception exception)
                 {
-                    logger.LogError(exception, "NPark database migration initialization failed.");
+                    logger.LogError(exception, "NPark database initialization failed.");
                     throw;
                 }
 
@@ -199,6 +201,24 @@ namespace NPark.Infrastructure.Bootstrap
                 await seeder.SeedDatabaseAsync();
                 cancellationToken.ThrowIfCancellationRequested();
                 logger.LogInformation("Database seeding completed (HostedService).");
+            }
+
+            private async Task ReleaseHistoricalReservationsAsync(NParkDBContext db, CancellationToken ct)
+            {
+                await using var transaction = await db.Database.BeginTransactionAsync(ct);
+                var operations = db.Set<GateOperation>();
+                var terminal = await operations.Where(x => (x.ReservedControllerId != null || x.ReservedTicketId != null) &&
+                        (x.Status == GateOperationStatus.Completed || x.Status == GateOperationStatus.Failed ||
+                         x.Status == GateOperationStatus.TimedOut || x.Status == GateOperationStatus.Unknown))
+                    .ExecuteUpdateAsync(set => set.SetProperty(x => x.ReservedControllerId, (int?)null)
+                        .SetProperty(x => x.ReservedTicketId, (Guid?)null), ct);
+                var acknowledged = await operations.Where(x => x.Status == GateOperationStatus.Acknowledged &&
+                        x.AckStatusCode == 0 && x.ReservedControllerId != null)
+                    .ExecuteUpdateAsync(set => set.SetProperty(x => x.ReservedControllerId, (int?)null), ct);
+                await transaction.CommitAsync(ct);
+                if (terminal > 0 || acknowledged > 0)
+                    logger.LogInformation("Historical gate reservations released. TerminalOperations={TerminalOperations}, " +
+                        "AcknowledgedControllers={AcknowledgedControllers}", terminal, acknowledged);
             }
 
             public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;

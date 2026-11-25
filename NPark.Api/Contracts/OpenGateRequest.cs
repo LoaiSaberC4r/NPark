@@ -4,6 +4,7 @@ namespace NPark.Api.Contracts
     {
         public string? OperationType { get; init; }
         public Guid? TicketId { get; init; }
+        public Guid? RequestId { get; init; }
         public string ControllerId { get; init; } = string.Empty;
     }
 }
