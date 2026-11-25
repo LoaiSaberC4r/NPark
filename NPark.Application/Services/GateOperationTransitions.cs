@@ -1,6 +1,7 @@
 using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NPark.Application.Options;
 using NPark.Application.Shared.Dto;
@@ -17,19 +18,25 @@ public sealed record RecordGateAcknowledgment(GateAck Ack) : ITransactionalComma
 public sealed record GateTransitionResult(GateOperationResponse? Operation, TicketExitedNotification? Exit = null);
 
 public sealed class GateOperationTransitions(IUnitOfWork db, ParkingBusinessClock clock,
-    IOptions<GateOperationOptions> options, GateOperationService operations, ITicketArchiveService archives)
+    IOptions<GateOperationOptions> options, GateOperationService operations, ITicketArchiveService archives,
+    ILogger<GateOperationTransitions> logger)
     : ICommandHandler<AdvanceGateOperation, GateTransitionResult>,
       ICommandHandler<RecordGateAcknowledgment, GateTransitionResult>
 {
     public async Task<Result<GateTransitionResult>> Handle(RecordGateAcknowledgment command, CancellationToken ct)
     {
         var ack = command.Ack;
-        if (ack.CommandId > long.MaxValue)
-            return Unchanged();
+        if (ack.CommandId is 0 or > long.MaxValue || ack.ControllerId == 0 || ack.Status > 3)
+            return IgnoreAck(ack, "InvalidFrameFields");
         var operation = await db.FirstOrDefaultWithSpecAsync(new Matching<GateOperation>(x =>
             x.CommandId == (long)ack.CommandId && x.ControllerId == ack.ControllerId), ct);
-        return operation != null && operation.Acknowledge(ack.Status, clock.UtcNow)
-            ? Changed(operation) : Unchanged();
+        if (operation is null)
+            return IgnoreAck(ack, "NoMatchingOperation");
+
+        logger.LogInformation("Matching gate operation found. OperationId={OperationId}, ControllerId={ControllerId}, " +
+            "CommandId={CommandId}, Status={Status}", operation.Id, ack.ControllerId, ack.CommandId, operation.Status);
+        return operation.Acknowledge(ack.Status, clock.UtcNow)
+            ? Changed(operation) : IgnoreAck(ack, operation.AckStatusCode.HasValue ? "Duplicate" : "OperationNotAwaitingAck");
     }
 
     public async Task<Result<GateTransitionResult>> Handle(AdvanceGateOperation command, CancellationToken ct)
@@ -100,6 +107,13 @@ public sealed class GateOperationTransitions(IUnitOfWork db, ParkingBusinessCloc
 
     private Result<GateTransitionResult> Changed(GateOperation operation) =>
         Result<GateTransitionResult>.Ok(new(operations.ToResponse(operation)));
+
+    private Result<GateTransitionResult> IgnoreAck(GateAck ack, string reason)
+    {
+        logger.LogWarning("Hardware ACK ignored. Reason={Reason}, ControllerId={ControllerId}, CommandId={CommandId}",
+            reason, ack.ControllerId, ack.CommandId);
+        return Unchanged();
+    }
 
     private static Result<GateTransitionResult> Unchanged() => Result<GateTransitionResult>.Ok(new(null));
 }

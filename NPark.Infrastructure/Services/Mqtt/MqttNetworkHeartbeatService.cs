@@ -48,9 +48,9 @@ namespace NPark.Infrastructure.Services.Mqtt
             var hexPayload = StringToHexBytes(payload);
 
             _logger.LogInformation(
-                "MQTT heartbeat background service started. IntervalSeconds={IntervalSeconds}, Payload={Payload} (hex)",
+                "MQTT heartbeat background service started. IntervalSeconds={IntervalSeconds}, Payload={Payload} (hex), TopicPrefix={TopicPrefix}",
                 _options.IntervalSeconds,
-                payload);
+                payload, _options.TopicPrefix);
 
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(_options.IntervalSeconds));
 
@@ -80,10 +80,7 @@ namespace NPark.Infrastructure.Services.Mqtt
                                 new MqttPublishOptions(_options.Qos, _options.Retain),
                                 stoppingToken);
 
-                            _logger.LogInformation(
-                                "MQTT heartbeat published successfully. Topic={Topic}, PayloadHex={PayloadHex}",
-                                topic,
-                                BitConverter.ToString(hexPayload.ToArray()).Replace("-", ""));
+                            _logger.LogDebug("MQTT heartbeat published. Topic={Topic}", topic);
                             await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
                         }
                     }

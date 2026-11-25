@@ -52,6 +52,8 @@ namespace NPark.Infrastructure.Services.Mqtt
             }
 
             ConfigureClientHandlers();
+            _logger.LogInformation("MQTT QR capture subscriber configuration. Host={Host}, Port={Port}, ClientId={ClientId}, TopicFilter={TopicFilter}",
+                _mqttOptions.Host, _mqttOptions.Port, $"{_mqttOptions.ClientId}-subscriber", _subscriberOptions.TopicFilter);
 
             while (!stoppingToken.IsCancellationRequested)
             {

@@ -17,21 +17,29 @@ public static class GatePacketCodec
         return bytes;
     }
 
-    public static bool TryDecodeAck(string topic, ReadOnlySpan<byte> bytes, out GateAck ack)
+    public static bool TryDecodeAck(string topic, ReadOnlySpan<byte> bytes, out GateAck ack) =>
+        TryDecodeAck(topic, bytes, out ack, out _);
+
+    public static bool TryDecodeAck(string topic, ReadOnlySpan<byte> bytes, out GateAck ack, out string? reason)
     {
         ack = default;
-        const string prefix = "ack/network/";
-        if (bytes.Length != 13 || bytes[0] != 0x7B || bytes[12] != 0x7D || bytes[11] > 3 ||
-            !topic.StartsWith(prefix, StringComparison.Ordinal) ||
-            !ushort.TryParse(topic.AsSpan(prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out var controller) ||
-            controller == 0 || BinaryPrimitives.ReadUInt16BigEndian(bytes.Slice(1, 2)) != controller ||
-            !topic.AsSpan(prefix.Length).SequenceEqual(controller.ToString(CultureInfo.InvariantCulture)))
+        reason = "MalformedFrame";
+        if (bytes.Length != 13 || bytes[0] != 0x7B || bytes[12] != 0x7D)
             return false;
 
-        var command = BinaryPrimitives.ReadUInt64BigEndian(bytes.Slice(3, 8));
-        if (command == 0)
+        ack = new(BinaryPrimitives.ReadUInt16BigEndian(bytes.Slice(1, 2)),
+            BinaryPrimitives.ReadUInt64BigEndian(bytes.Slice(3, 8)), bytes[11]);
+        reason = "InvalidFrameFields";
+        if (ack.ControllerId == 0 || ack.CommandId == 0 || ack.Status > 3)
             return false;
-        ack = new(controller, command, bytes[11]);
+
+        const string prefix = "ack/network/";
+        reason = "ControllerTopicMismatch";
+        if (!topic.StartsWith(prefix, StringComparison.Ordinal) ||
+            !topic.AsSpan(prefix.Length).SequenceEqual(ack.ControllerId.ToString(CultureInfo.InvariantCulture)))
+            return false;
+
+        reason = null;
         return true;
     }
 }

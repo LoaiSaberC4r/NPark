@@ -25,6 +25,8 @@ namespace NPark.Infrastructure.Services
             _logger = logger;
             _options = options.Value;
             _client = new MqttFactory().CreateMqttClient();
+            _logger.LogInformation("MQTT publisher configuration. Host={Host}, Port={Port}, ClientId={ClientId}, UseTls={UseTls}",
+                _options.Host, _options.Port, _options.ClientId, _options.UseTls);
         }
 
         public Task PublishStringAsync(
@@ -53,7 +55,7 @@ namespace NPark.Infrastructure.Services
             if (!result.IsSuccess)
                 throw new InvalidOperationException($"MQTT publication was rejected with result {result.ReasonCode}.");
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "MQTT message published. Topic={Topic}, Qos={Qos}, Retain={Retain}, PayloadSize={PayloadSize}",
                 topic,
                 options.Qos,

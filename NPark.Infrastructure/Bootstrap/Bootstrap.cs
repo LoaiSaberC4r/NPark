@@ -77,7 +77,11 @@ namespace NPark.Infrastructure.Bootstrap
             services.AddSingleton<IGateOperationDispatcher>(sp => sp.GetRequiredService<GateOperationRecoveryService>());
             services.AddHostedService(sp => sp.GetRequiredService<GateOperationRecoveryService>());
             services.AddHostedService<GateAckSubscriber>();
-            services.Configure<MqttOptions>(configuration.GetSection("Mqtt"));
+            services.AddOptions<MqttOptions>().Bind(configuration.GetSection("Mqtt"))
+                .Validate(x => !string.IsNullOrWhiteSpace(x.Host) && x.Port is > 0 and <= 65535 &&
+                    !string.IsNullOrWhiteSpace(x.ClientId) && x.KeepAliveSeconds > 0 && x.ReconnectSeconds > 0,
+                    "Configure a valid MQTT host, port, client ID, keep-alive and reconnect interval.")
+                .ValidateOnStart();
             services.Configure<MqttHeartbeatOptions>(configuration.GetSection("MqttHeartbeat"));
             services.AddHostedService<MqttNetworkHeartbeatService>();
 
