@@ -27,7 +27,6 @@ public sealed class DatabaseStartupTests
     private const string Setting = "Database:ApplyMigrationsOnStartup";
     private const string EnvironmentSetting = "Database__ApplyMigrationsOnStartup";
     private const string Baseline = "20260505150257_AddingSuperVisorRecord";
-    private const string Latest = "20261124122834_ParkingFinancialIntegrityV2";
 
     [Theory]
     [InlineData("Development", true)]
@@ -49,12 +48,16 @@ public sealed class DatabaseStartupTests
     public async Task EnabledStartupMigratesThenSeedsBeforeAnyWorkerStarts()
     {
         await using var database = await StartupDatabase.CreateAtBaselineAsync();
+        await using var baselineDb = database.Open();
+        var pending = (await baselineDb.Database.GetPendingMigrationsAsync()).ToArray();
+        Assert.NotEmpty(pending);
         var seedingBegan = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var finishSeeding = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var probe = new StartupProbe(async db =>
         {
             Assert.Empty(await db.Database.GetPendingMigrationsAsync());
-            Assert.Contains(Latest, await db.Database.GetAppliedMigrationsAsync());
+            var applied = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
+            Assert.All(pending, migration => Assert.Contains(migration, applied));
             seedingBegan.SetResult();
             await finishSeeding.Task;
         });
@@ -75,7 +78,7 @@ public sealed class DatabaseStartupTests
         }
 
         Assert.True(probe.WorkerStarted);
-        Assert.Contains(probe.Logs, l => l.Message.Contains(Latest));
+        Assert.All(pending, migration => Assert.Contains(probe.Logs, l => l.Message.Contains(migration)));
         Assert.Contains(probe.Logs, l => l.Message.Contains("migrations completed successfully"));
         await host.StopAsync();
     }
@@ -166,6 +169,9 @@ public sealed class DatabaseStartupTests
     public async Task DisabledOrMissingSettingBlocksStartupAndSeedingWhenMigrationsArePending()
     {
         await using var database = await StartupDatabase.CreateAtBaselineAsync();
+        await using var db = database.Open();
+        var pending = (await db.Database.GetPendingMigrationsAsync()).ToArray();
+        Assert.NotEmpty(pending);
 
         foreach (var enabled in new bool?[] { false, null })
         {
@@ -173,14 +179,13 @@ public sealed class DatabaseStartupTests
             using var host = CreateHost(database.ConnectionString, enabled, probe);
             var error = await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
             Assert.Contains(Setting, error.Message);
-            Assert.Contains(probe.Logs, l => l.Message.Contains(Latest));
+            Assert.All(pending, migration => Assert.Contains(probe.Logs, l => l.Message.Contains(migration)));
             Assert.Contains(probe.Logs, l => l.Level == LogLevel.Warning && l.Message.Contains("disabled"));
             Assert.False(probe.SeedingStarted);
             Assert.False(probe.WorkerStarted);
         }
 
-        await using var db = database.Open();
-        Assert.Equal(Latest, Assert.Single(await db.Database.GetPendingMigrationsAsync()));
+        Assert.Equal(pending, (await db.Database.GetPendingMigrationsAsync()).ToArray());
     }
 
     [SqlFact]
@@ -214,6 +219,9 @@ public sealed class DatabaseStartupTests
     public async Task CancellationDuringMigrationStopsInitialization()
     {
         await using var database = await StartupDatabase.CreateAtBaselineAsync();
+        await using var db = database.Open();
+        var pending = (await db.Database.GetPendingMigrationsAsync()).ToArray();
+        Assert.NotEmpty(pending);
         using var cancellation = new CancellationTokenSource();
         var interceptor = new PauseMigrationCommand();
         var probe = new StartupProbe();
@@ -234,8 +242,7 @@ public sealed class DatabaseStartupTests
         Assert.Contains(probe.Logs, l => l.Level == LogLevel.Warning && l.Message.Contains("was canceled"));
         Assert.False(probe.SeedingStarted);
         Assert.False(probe.WorkerStarted);
-        await using var db = database.Open();
-        Assert.Equal(Latest, Assert.Single(await db.Database.GetPendingMigrationsAsync()));
+        Assert.Equal(pending, (await db.Database.GetPendingMigrationsAsync()).ToArray());
     }
 
     [Fact]

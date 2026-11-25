@@ -23,6 +23,7 @@ public interface IGateOperationDispatcher
 
 internal sealed class GateOperationRecoveryService(IServiceScopeFactory scopes, IMqttPublisher publisher,
     GateAckSubscriptionState ackSubscription, IOptions<GateOperationOptions> options, IOptions<MqttOptions> brokerOptions,
+    IOptions<SubscriberButtonLockOptions> locks, IOptions<AutomaticVisitorEntryOptions> visitors,
     TimeProvider time, ILogger<GateOperationRecoveryService> logger)
     : BackgroundService, IGateOperationDispatcher
 {
@@ -94,8 +95,12 @@ internal sealed class GateOperationRecoveryService(IServiceScopeFactory scopes, 
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NParkDBContext>();
         var cutoff = time.GetUtcNow().UtcDateTime.AddSeconds(-options.Value.DispatchWaitTimeoutSeconds);
+        var lockControllers = locks.Value.Enabled ? locks.Value.SupportedControllerIds : [];
+        var visitorControllers = visitors.Value.Enabled ? visitors.Value.SupportedControllerIds : [];
         var ids = await db.Set<GateOperation>().AsNoTracking()
             .Where(op => op.Status == GateOperationStatus.Pending && op.DispatchStartedAtUtc == null && op.CreatedAtUtc > cutoff)
+            .Where(op => (op.Type != GateOperationType.LockCardButton || lockControllers.Contains(op.ControllerId)) &&
+                (!op.IsAutomaticVisitorEntry || visitorControllers.Contains(op.ControllerId)))
             .OrderBy(op => op.CreatedAtUtc).Select(op => op.Id).ToListAsync(ct);
         if (ids.Count == 0)
             return;
@@ -145,10 +150,10 @@ internal sealed class GateOperationRecoveryService(IServiceScopeFactory scopes, 
         try
         {
             var raw = Convert.FromHexString(operation.Payload);
-            logger.LogInformation("Publishing Open Gate command. OperationId={OperationId}, CommandId={CommandId}, " +
+            logger.LogInformation("Publishing gate command. OperationType={OperationType}, OperationId={OperationId}, CommandId={CommandId}, " +
                 "ControllerId={ControllerId}, Topic={Topic}, PayloadHex={PayloadHex}, PayloadLength={PayloadLength}, " +
                 "BrokerHost={BrokerHost}, BrokerPort={BrokerPort}, Qos={Qos}, Retain={Retain}",
-                id, operation.CommandId, operation.ControllerId, operation.Topic, operation.Payload,
+                operation.OperationType, id, operation.CommandId, operation.ControllerId, operation.Topic, operation.Payload,
                 raw.Length, brokerOptions.Value.Host, brokerOptions.Value.Port, options.Value.CommandQos, false);
             await publisher.PublishBytesAsync(operation.Topic, raw,
                 new MqttPublishOptions(options.Value.CommandQos, false), timeout.Token,
@@ -156,13 +161,13 @@ internal sealed class GateOperationRecoveryService(IServiceScopeFactory scopes, 
         }
         catch (Exception error)
         {
-            logger.LogWarning(error, "MQTT publish failed for gate operation {OperationId}, command {CommandId}",
-                id, operation.CommandId);
+            logger.LogWarning(error, "MQTT publish failed. OperationType={OperationType}, OperationId={OperationId}, CommandId={CommandId}",
+                operation.OperationType, id, operation.CommandId);
             return await AdvanceAsync(id, GateTransition.DeliveryUnknown, null, CancellationToken.None);
         }
 
-        logger.LogInformation("MQTT broker accepted Open Gate command. OperationId={OperationId}, CommandId={CommandId}, " +
-            "ControllerId={ControllerId}, Topic={Topic}", id, operation.CommandId, operation.ControllerId, operation.Topic);
+        logger.LogInformation("MQTT broker accepted gate command. OperationType={OperationType}, OperationId={OperationId}, CommandId={CommandId}, " +
+            "ControllerId={ControllerId}, Topic={Topic}", operation.OperationType, id, operation.CommandId, operation.ControllerId, operation.Topic);
         return await AdvanceAsync(id, GateTransition.Published, null, CancellationToken.None);
     }
 

@@ -307,7 +307,8 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
     [SqlBrokerFact]
     public async Task ConfirmedEntryAndExitPricingPreserveTheActualCashierAndReportOnlyTheirSettlement()
     {
-        await using var fixture = await Fixture.StartAsync();
+        var time = new ManualParkingTime(new DateTimeOffset(2026, 11, 25, 10, 0, 0, TimeSpan.Zero));
+        await using var fixture = await Fixture.StartAsync(time);
         using var simulator = new MqttFactory().CreateMqttClient();
         var frames = System.Threading.Channels.Channel.CreateUnbounded<byte[]>();
         simulator.ApplicationMessageReceivedAsync += args =>
@@ -357,6 +358,7 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
         entry.ThrowIfFailed();
         await CompleteGateAsync(simulator, await frames.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(12)));
         await fixture.WaitForStatusAsync(entry.Value.OperationId, GateOperationStatus.Completed);
+        time.Advance(TimeSpan.FromMinutes(1));
 
         var unquoted = await fixture.SendAsync(new ColletByCachierCommand { TicketId = ticketId },
             seeded.ExitGate, seeded.ExitCashier, "ExitCashier");
@@ -443,15 +445,17 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
         public int Port { get; }
         public MqttTestLogs Logs { get; }
         public ParkingBusinessClock Clock { get; }
+        public TestNotifications Notifications { get; }
 
         private Fixture(WebApplication host, string connection, int port, TimeProvider time,
-            Func<WebApplication> createHost, MqttTestLogs logs)
+            Func<WebApplication> createHost, MqttTestLogs logs, TestNotifications notifications)
         {
             this.host = host;
             this.connection = connection;
             this.createHost = createHost;
             Port = port;
             Logs = logs;
+            Notifications = notifications;
             Clock = new(time, Microsoft.Extensions.Options.Options.Create(new NPark.Application.Options.ParkingBusinessOptions()));
         }
 
@@ -462,7 +466,8 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
 
         public static async Task<Fixture> StartAsync(TimeProvider? time = null, bool seedCatalog = true,
             bool includeObsoleteSettings = false, int? brokerPort = null, bool enableMqttNetworkServices = false,
-            int recoveryIntervalSeconds = 1, IMqttPublisher? publisher = null, bool failNotifications = false)
+            int recoveryIntervalSeconds = 1, IMqttPublisher? publisher = null, bool failNotifications = false,
+            Dictionary<string, string?>? entranceSettings = null)
         {
             var port = brokerPort ?? (int.TryParse(Environment.GetEnvironmentVariable("NPARK_TEST_MQTT_PORT"), out var configuredPort)
                 ? configuredPort : 1);
@@ -473,6 +478,7 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
             await db.Database.MigrateAsync();
 
             var logs = new MqttTestLogs();
+            var notifications = new TestNotifications(failNotifications);
             var testTime = time ?? TimeProvider.System;
             var settings = new Dictionary<string, string?>
             {
@@ -509,13 +515,16 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
                 hostBuilder.Logging.ClearProviders();
                 hostBuilder.Logging.AddProvider(logs);
                 hostBuilder.Configuration.AddInMemoryCollection(settings);
+                if (entranceSettings is not null)
+                    hostBuilder.Configuration.AddInMemoryCollection(entranceSettings);
                 hostBuilder.Services.AddControllers().AddApplicationPart(typeof(TicketController).Assembly);
                 hostBuilder.Services.AddHttpContextAccessor();
                 NPark.Application.Bootstrap.Bootstrap.AddApplicationBootstrap(hostBuilder.Services);
                 NPark.Infrastructure.Bootstrap.Bootstrap.InfrastructureInjection(hostBuilder.Services, hostBuilder.Configuration);
                 hostBuilder.Services.AddSingleton(testTime);
-                hostBuilder.Services.AddSingleton<IRealtimeNotifier>(new TestNotifications(failNotifications));
+                hostBuilder.Services.AddSingleton<IRealtimeNotifier>(notifications);
                 hostBuilder.Services.AddSingleton<IMqttCaptureSignalRNotifier, TestNotifications>();
+                hostBuilder.Services.AddSingleton<ILprSignalRNotifier>(notifications);
                 if (publisher is not null)
                     hostBuilder.Services.AddSingleton(publisher);
                 hostBuilder.Services.AddTransient<IRequestHandler<RollbackProbe, Result<int>>, RollbackProbeHandler>();
@@ -528,7 +537,7 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
 
             var host = BuildHost();
             await host.StartAsync();
-            return new(host, sql, port, testTime, BuildHost, logs) { SeedCatalog = seedCatalog };
+            return new(host, sql, port, testTime, BuildHost, logs, notifications) { SeedCatalog = seedCatalog };
         }
 
         public async Task RestartAsync()
@@ -701,13 +710,26 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
         public void Advance(TimeSpan duration) => Interlocked.Add(ref utcTicks, duration.Ticks);
     }
 
-    private sealed class TestNotifications(bool fail = false) : IRealtimeNotifier, IMqttCaptureSignalRNotifier
+    private sealed class TestNotifications(bool fail = false) : IRealtimeNotifier, IMqttCaptureSignalRNotifier, ILprSignalRNotifier
     {
+        public System.Collections.Concurrent.ConcurrentQueue<(Guid GateId, string VehicleNumber)> Lpr { get; } = new();
+        public System.Collections.Concurrent.ConcurrentQueue<TicketAddedNotification> Added { get; } = new();
         public Task NotifyGateOperationAsync(GateOperationResponse payload) => fail
             ? Task.FromException(new InvalidOperationException("Injected SignalR notification failure")) : Task.CompletedTask;
-        public Task NotifyTicketAddedAsync(TicketAddedNotification payload) => Task.CompletedTask;
+        public Task NotifyTicketAddedAsync(TicketAddedNotification payload)
+        {
+            Added.Enqueue(payload);
+            return Task.CompletedTask;
+        }
         public Task NotifyTicketExitedAsync(TicketExitedNotification payload) => Task.CompletedTask;
         public Task NotifyCaptureDetectedAsync(MqttCaptureDetectedResponse payload, CancellationToken ct) => Task.CompletedTask;
+        public Task NotifyVehicleDetectedAsync(
+            NPark.Application.Feature.LprSignalRManagement.Command.VehicleDetected.LprVehicleDetectedCommandResponse payload,
+            CancellationToken ct)
+        {
+            Lpr.Enqueue((payload.GateId, payload.VehicleNumber));
+            return Task.CompletedTask;
+        }
     }
 }
 

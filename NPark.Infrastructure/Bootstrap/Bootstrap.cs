@@ -14,6 +14,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using NPark.Application.Abstraction;
 using NPark.Application.Abstraction.Security;
@@ -24,6 +25,7 @@ using NPark.Infrastructure.Authorization;
 using NPark.Infrastructure.Options;
 using NPark.Infrastructure.Services;
 using NPark.Infrastructure.Services.Camera;
+using NPark.Infrastructure.Services.Lpr;
 using NPark.Infrastructure.Services.Mqtt;
 using NPark.Infrastructure.Services.Seeders;
 using NPark.Infrastructure.Services.Token;
@@ -87,6 +89,7 @@ namespace NPark.Infrastructure.Bootstrap
             services.AddHostedService<MqttNetworkHeartbeatService>();
 
             services.AddSingleton<IMqttPublisher, MqttPublisher>();
+            services.AddEntranceIntegration(configuration);
             services.Configure<CameraOptions>(configuration.GetSection("Camera"));
 
             services.AddHttpClient<ICameraSnapshotService, OnvifCameraSnapshotService>((sp, client) =>
@@ -100,6 +103,36 @@ namespace NPark.Infrastructure.Bootstrap
             services.AddSingleton<IMqttExitQrPacketDecoder, MqttExitQrPacketDecoder>();
             return services;
         }
+
+        private static void AddEntranceIntegration(this IServiceCollection services, IConfiguration configuration)
+        {
+            services.AddOptions<LprCaptureOptions>().Bind(configuration.GetSection("LprCapture"))
+                .Validate(x => x.RetentionDays is >= 1 and <= 365 && x.ArchiveCheckIntervalMinutes is >= 1 and <= 1440
+                    && x.ArchiveBatchSize is >= 1 and <= 5000 && (x.MaxMatchingAgeSeconds is null or > 0),
+                    "Invalid LPR capture retention, batch, interval or matching age.").ValidateOnStart();
+            services.AddOptions<MqttParkingEventsOptions>().Bind(configuration.GetSection("MqttParkingEvents"))
+                .Validate(x => x.SubscriptionQos is 0 or 1, "Invalid MQTT parking event subscription QoS.").ValidateOnStart();
+            services.AddOptions<SubscriberButtonLockOptions>().Bind(configuration.GetSection("SubscriberButtonLock"))
+                .Validate<IOptions<LprCaptureOptions>, IOptions<GateOperationOptions>>((x, lpr, gates) =>
+                    !x.Enabled || lpr.Value.Enabled && ValidEntranceCommandSettings(gates.Value, x.SupportedControllerIds)
+                        && x.DuplicateWindowSeconds is >= 1 and <= 60,
+                    "Subscriber button lock requires LPR persistence, supported controller IDs and the v1.1.11 MQTT command settings.")
+                .ValidateOnStart();
+            services.AddOptions<AutomaticVisitorEntryOptions>().Bind(configuration.GetSection("AutomaticVisitorEntry"))
+                .Validate<IOptions<MqttParkingEventsOptions>, IOptions<GateOperationOptions>>((x, mqtt, gates) =>
+                    !x.Enabled || mqtt.Value.Enabled && x.SystemUserId.HasValue && x.SystemUserId != Guid.Empty &&
+                        ValidEntranceCommandSettings(gates.Value, x.SupportedControllerIds),
+                    "Automatic visitor entry requires MQTT event intake, a system user ID, supported controller IDs and the v1.1.11 MQTT command settings.")
+                .ValidateOnStart();
+            services.AddSingleton<ParkingEventStorage>();
+            services.AddHostedService<LprCaptureArchiveService>();
+            services.AddHostedService<MqttParkingEventSubscriber>();
+            services.AddHostedService<ParkingEventProcessingService>();
+        }
+
+        private static bool ValidEntranceCommandSettings(GateOperationOptions gates, int[] controllers) =>
+            controllers.Length > 0 && controllers.All(id => id is >= 1 and <= ushort.MaxValue) &&
+            gates is { CommandTopicTemplate: "sub/network/{controllerId}", CommandQos: 1, Retain: false };
 
         private static IServiceCollection AddDbConfig(this IServiceCollection services, IConfiguration configuration)
         {

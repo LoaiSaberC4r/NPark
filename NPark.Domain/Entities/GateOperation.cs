@@ -8,7 +8,7 @@ public sealed class GateOperation : Entity<Guid>
     private GateOperation() { }
 
     public GateOperation(Guid id, Guid? ticketId, Guid gateId, Guid? userId,
-        ushort controllerId, GateOperationType type, DateTime utc)
+        ushort controllerId, GateOperationType type, DateTime utc, bool isAutomaticVisitorEntry = false)
     {
         Id = id;
         TicketIdSnapshot = ticketId;
@@ -18,6 +18,7 @@ public sealed class GateOperation : Entity<Guid>
         ControllerId = controllerId;
         ReservedControllerId = controllerId;
         Type = type;
+        IsAutomaticVisitorEntry = isAutomaticVisitorEntry;
         Status = GateOperationStatus.Pending;
         CreatedAtUtc = utc;
     }
@@ -30,6 +31,7 @@ public sealed class GateOperation : Entity<Guid>
     public Guid? UserId { get; private set; }
     public int ControllerId { get; private set; }
     public GateOperationType Type { get; private set; }
+    public bool IsAutomaticVisitorEntry { get; private set; }
     public GateOperationStatus Status { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime? DispatchStartedAtUtc { get; private set; }

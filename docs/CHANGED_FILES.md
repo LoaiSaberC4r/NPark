@@ -187,3 +187,63 @@
 ### Removed
 
 The configured overnight sanction, policy mode, and obsolete eligibility reason were removed from the existing source and configuration files. This follow-up removed no files.
+
+## NPARK-MQTT-001-002
+
+Both repositories use `codex/mqtt-v111-entrance`. The backend starts from `a5ceb15b840180f8a55bd69652d185309dd8ca30`, and Angular starts from `3e78f72e6200a5a24ac3245a08d2dd6b4c65f2cc`.
+
+### NPark backend
+
+| Full path | Change | Purpose |
+|---|---|---|
+| `E:/NPark/ITC/NPark.Api/RealTime/RealtimeNotifier.cs` | Modified | Sends automatic TicketAdded events to the entrance gate's group. |
+| `E:/NPark/ITC/NPark.Api/appsettings.json` | Modified | Defines LPR retention and disabled defaults for the new hardware features. |
+| `E:/NPark/ITC/NPark.Application/Bootstrap/Bootstrap.cs` | Modified | Registers the shared subscriber and ticket services. |
+| `E:/NPark/ITC/NPark.Application/Feature/LprSignalRManagement/Command/VehicleDetected/LprVehicleDetectedCommandHandler.cs` | Modified | Stores accepted captures, checks the camera source, and waits for Lock before notifying. |
+| `E:/NPark/ITC/NPark.Application/Feature/TicketsManagement/Command/Add/AddTicketCommandHandler.cs` | Modified | Shares subscriber eligibility, visitor ticket construction, and ticket notifications. |
+| `E:/NPark/ITC/NPark.Application/Feature/TicketsManagement/Command/Add/IssueAutomaticVisitorTicket.cs` | Added | Validates the event and creates the ticket and capture association in a serializable transaction. |
+| `E:/NPark/ITC/NPark.Application/Options/EntranceIntegrationOptions.cs` | Added | Defines LPR, Lock, and automatic visitor options. |
+| `E:/NPark/ITC/NPark.Application/Services/GateOperationService.cs` | Modified | Authorizes and correlates ticketless B2 and automatic B1 operations. |
+| `E:/NPark/ITC/NPark.Application/Services/GatePacketCodec.cs` | Modified | Encodes B2 and selects the wire opcode by operation type. |
+| `E:/NPark/ITC/NPark.Application/Services/ParkingBusinessClock.cs` | Modified | Safely converts an unambiguous firmware wall-clock timestamp. |
+| `E:/NPark/ITC/NPark.Application/Services/ParkingEventPacketCodec.cs` | Added | Validates Schema 01 and 02 frames and encodes the storage ACK. |
+| `E:/NPark/ITC/NPark.Application/Services/SubscriberEligibilityService.cs` | Added | Uses existing date and active-ticket rules for subscriber eligibility. |
+| `E:/NPark/ITC/NPark.Application/Services/TicketIssuanceService.cs` | Added | Shares visitor initialization and TicketAdded notification construction. |
+| `E:/NPark/ITC/NPark.Application/Shared/Dto/TicketAddedNotification.cs` | Modified | Adds the automatic issuance indicator. |
+| `E:/NPark/ITC/NPark.Domain/Entities/GateOperation.cs` | Modified | Persists the automatic visitor operation marker. |
+| `E:/NPark/ITC/NPark.Domain/Entities/LprCapture.cs` | Added | Models a received detection and guards its one-ticket association. |
+| `E:/NPark/ITC/NPark.Domain/Entities/LprCaptureArchive.cs` | Added | Preserves the identity and history of an archived detection. |
+| `E:/NPark/ITC/NPark.Domain/Entities/ParkingHardwareEvent.cs` | Added | Stores binary event identity, evidence, and durable progress. |
+| `E:/NPark/ITC/NPark.Domain/Entities/Ticket.cs` | Modified | Assigns a visitor card while preserving the visitor's pricing and ticket state. |
+| `E:/NPark/ITC/NPark.Domain/Enums/TicketLifecycle.cs` | Modified | Adds LockCardButton as persisted operation type 4. |
+| `E:/NPark/ITC/NPark.Infrastructure/Bootstrap/Bootstrap.cs` | Modified | Validates options on startup and registers the archive and MQTT workers. |
+| `E:/NPark/ITC/NPark.Infrastructure/Configuration/ParkingEntranceConfiguration.cs` | Added | Maps the entrance tables, indexes, and constraints. |
+| `E:/NPark/ITC/NPark.Infrastructure/Migrations/20261125135033_AddLprAndParkingEventIntegration.cs` | Added | Creates the entrance tables and adds the visitor flag to GateOperations. |
+| `E:/NPark/ITC/NPark.Infrastructure/Migrations/20261125135033_AddLprAndParkingEventIntegration.Designer.cs` | Added | Records the generated EF migration target model. |
+| `E:/NPark/ITC/NPark.Infrastructure/Migrations/NParkDBContextModelSnapshot.cs` | Modified | Records the current EF model. |
+| `E:/NPark/ITC/NPark.Infrastructure/NParkDBContext.cs` | Modified | Exposes the three new table sets. |
+| `E:/NPark/ITC/NPark.Infrastructure/Options/MqttParkingEventsOptions.cs` | Added | Defines event subscription enablement and QoS settings. |
+| `E:/NPark/ITC/NPark.Infrastructure/Services/Lpr/LprCaptureArchiveService.cs` | Added | Moves expired captures to the archive in bounded SQL transactions. |
+| `E:/NPark/ITC/NPark.Infrastructure/Services/Mqtt/GateOperationRecoveryService.cs` | Modified | Applies feature and controller allowlists to pending automatic dispatch. |
+| `E:/NPark/ITC/NPark.Infrastructure/Services/Mqtt/MqttParkingEventSubscriber.cs` | Added | Maintains the separate parking MQTT subscription and bounded binary intake. |
+| `E:/NPark/ITC/NPark.Infrastructure/Services/Mqtt/ParkingEventProcessingService.cs` | Added | Recovers acknowledged events, authorizes B1, and records operation outcomes. |
+| `E:/NPark/ITC/NPark.Infrastructure/Services/Mqtt/ParkingEventStorage.cs` | Added | Commits event data, checks replays, and publishes storage acknowledgments. |
+| `E:/NPark/ITC/NPark.Tests/EntranceMqttIntegrationTests.cs` | Added | Exercises entrance processing with disposable SQL and MQTT simulation. |
+| `E:/NPark/ITC/NPark.Tests/DatabaseStartupTests.cs` | Modified | Checks the full pending migration list on startup, cancellation, and disabled startup. |
+| `E:/NPark/ITC/NPark.Tests/MqttGateIntegrationTests.cs` | Modified | Captures archive worker diagnostics in the SQL and MQTT fixture. |
+| `E:/NPark/ITC/NPark.Tests/ParkingEventProtocolTests.cs` | Added | Verifies binary encoding and strict frame decoding. |
+| `E:/NPark/ITC/NPark.Tests/ParkingWorkflowIntegrationTests.cs` | Modified | Supports entrance test configuration and records notification payloads. |
+| `E:/NPark/ITC/docs/API_CONTRACT_CHANGES.md` | Modified | Documents additive HTTP and SignalR behavior. |
+| `E:/NPark/ITC/docs/CHANGED_FILES.md` | Modified | Lists the changed files for both feature branches. |
+| `E:/NPark/ITC/docs/FRONTEND_INTEGRATION.md` | Modified | Documents operation normalization and the passive ticket refresh. |
+| `E:/NPark/ITC/docs/MQTT_GATE_PROTOCOL.md` | Modified | Documents wire frames, recovery, configuration, and deployment limits. |
+| `E:/NPark/ITC/docs/TEST_RESULTS.md` | Modified | Records executed checks and outstanding verification. |
+
+### NParkAngular
+
+| Full path | Change | Purpose |
+|---|---|---|
+| `E:/NPark/Npark/NParkAngular/src/app/Domain/Gate/gate-operation.models.ts` | Modified | Normalizes LockCardButton, terminal status, and automatic entry metadata. |
+| `E:/NPark/Npark/NParkAngular/src/app/Domain/Gate/gate-operation.models.spec.ts` | Added | Tests numeric and string Lock normalization and terminal SignalR behavior. |
+| `E:/NPark/Npark/NParkAngular/src/app/Domain/OverView/dashboard-notifications.model.ts` | Modified | Models the automatic TicketAdded flag and ticket identity. |
+| `E:/NPark/Npark/NParkAngular/src/app/Feature/Entry-Component/ticket-component.ts` | Modified | Refreshes same-gate automatic tickets without triggering a cashier action. |

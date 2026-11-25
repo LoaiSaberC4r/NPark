@@ -51,3 +51,46 @@ An active ticket operation stays bound to its original controller after a gate r
 Stop all pre-release API and gate-worker instances that share the database before starting this version. Disable overlapping IIS recycling during the rollout and enable traffic after the updated instances start. Startup honors `Database:ApplyMigrationsOnStartup`. After the schema check and before starting any MQTT worker, an idempotent SQL transaction clears both reservation fields for terminal operations and clears the controller reservation for successful `Acknowledged` records. It preserves history and ticket reservations awaiting completion. This release uses the existing schema, filtered unique indexes, row versions, and command ID sequence. Apply the same coordinated stop procedure if rolling back to a release with the previous reservation rules.
 
 Before rollout, verify the simulator and compatible physical firmware, then test entry, same-day and overdue exit, timeout and late ACK, restart, database recovery, and manual open. The simulator covers the protocol paths listed in [test results](TEST_RESULTS.md).
+
+## MQTT v1.1.11 entrance integration
+
+The backend persists accepted LPR detections with the raw plate, normalized plate, gate, controller snapshot, and UTC receipt time. The archive worker moves captures older than 72 hours in transactions of up to 1,000 rows, checking at startup and every 60 minutes by default. Archived captures keep their original identifiers and ticket references.
+
+For the subscriber path, an entrance controller must be on the v1.1.11 Lock allowlist. The LPR request must originate from the mapped camera IP as seen by the API. An eligible subscriber has a current membership and no active subscriber ticket. The backend sends B2 and waits within the existing operation deadline for a terminal result before sending the usual LPR notification. A 60-second default deduplication window applies to the same normalized plate and gate. The firmware holds the lock for up to 60 seconds and releases it on Open. SQL releases its controller reservation through the gate lifecycle. The frontend continues subscriber issuance and B1 opening.
+
+| Frame | Topic | Example for controller 1 |
+|---|---|---|
+| Lock with command ID 101 | `sub/network/1` | `7B 00 01 00 00 00 00 00 00 00 65 AE BE C1 B2 7D` |
+| Open with command ID 102 | `sub/network/1` | `7B 00 01 00 00 00 00 00 00 00 66 AE BE C1 B1 7D` |
+| Successful Lock ACK | `ack/network/1` | `7B 00 01 00 00 00 00 00 00 00 65 00 7D` |
+| Visitor pickup event | `parking/v1/event/1` | `7B 00 01 00 00 03 15 00 00 00 01 01 01 01 1D 6B 05 27 E0 04 7B 00 7D AB 7D` |
+| Storage ACK | `parking/v1/ack/1` | `7B 00 01 00 00 03 15 00 00 00 01 00 7D` |
+
+Commands and storage ACKs are raw binary, use QoS 1 with retain disabled, and use canonical decimal controller suffixes. Command dispatch still requires a usable subscription on `ack/network/#` or `ack/network/+`. Lock and Open have separate sequence-generated command IDs. ACK status 00 confirms the matching action. Statuses 01, 02, and 03 fail the matching operation. A B2 result does not affect a ticket.
+
+| Schema 01 byte offset | Field |
+|---|---|
+| 0 | Start marker `7B` |
+| 1–2 | Controller ID, unsigned big-endian |
+| 3–10 | Eight-byte Event ID |
+| 11–14 | Schema, lane, outcome, flags |
+| 15–18 | Raw unsigned site wall-clock seconds |
+| 19 | UID length `0` or `4` |
+| 20 through 19 + UID length | UID bytes in reader order |
+| 20 + UID length | End marker `7D` |
+
+The decoder accepts exact lengths of 21 or 25 bytes for Schema 01. Schema 02 adds four expiry bytes, one card gate byte, and one grace byte ahead of the end marker. A validated Schema 02, exit event, or failed card read is stored for audit with no visitor action. The visitor pickup requires schema 01, lane 01, outcome 01, and four UID bytes. The 13-byte storage acknowledgment copies bytes 0–10, appends status `00`, and ends in `7D`.
+
+The subscriber uses MQTT 3.1.1 with a distinct `<Mqtt.ClientId>-parking-events` client ID, a bounded intake queue, and a `parking/v1/event/+` subscription. Valid intake commits to SQL before any successful storage ACK. A byte-identical replay receives another storage ACK. A conflicting payload with the same controller and Event ID keeps the original row and receives no success ACK. The worker resumes committed events and records the original UTC receipt, raw event payload, flags, and optional Cairo wall-clock conversion. Full UID-bearing frames are available in restricted SQL audit records. Routine logs carry protocol and operational identifiers.
+
+### Enablement and rollout
+
+1. Disable overlapping IIS recycling and stop older instances sharing the database before applying the additive migration. Keep `Database:ApplyMigrationsOnStartup` in line with the site's migration procedure. Review the schema and existing reservation indexes before starting workers.
+2. Retain the existing broker configuration. Development and Testing point to `192.168.1.40:1883` by default. Override the broker to an isolated listener when testing. Use distinct MQTT client IDs for multiple workers. Enforce broker topic ACLs and network isolation for firmware using plain unauthenticated MQTT. Keep the legacy LPR endpoint on the trusted camera network. Ensure the API sees the mapped camera address before enabling B2 behind any proxy.
+3. Enable `SubscriberButtonLock` and list verified controllers. Enable `MqttParkingEvents` for intake. To permit visitor issuance, enable `AutomaticVisitorEntry`, set its controller allowlist, and provision a dedicated existing database user for `SystemUserId`. Use Exit Pricing and gates that do not require scanner photographs. Use a configuration test environment with features enabled explicitly.
+4. Verify the physical firmware before enabling either movement feature on site. Ordinary card pickup on v1.1.11 may already pulse the relay. Bit 2, `RelayPulseIssued`, is recorded, and the backend still sends one correlated B1 command for successful automatic issuance. The resulting movement may repeat, or the controller may return Busy. Under Entrance Pricing, the backend stores the event and declines issuance and B1. A local pulse may already have happened. A command ACK confirms the controller's relay pulse and provides no physical barrier-position feedback.
+5. To roll back, turn off both movement features, drain or inspect outstanding operations, and coordinate IIS worker shutdown before restarting. Keep the additive schema to retain event and capture history. The EF Down migration removes the new history tables.
+
+Firmware parking events begin at QoS 0, even with a QoS 1 subscription. An application storage ACK covers an SQL commit. Events that never reach the API during an outage may be lost because the firmware has no durable offline replay. Retained deliveries identifiable by the MQTT flag are ignored.
+
+Set `SubscriberButtonLock__SupportedControllerIds__0` and `AutomaticVisitorEntry__SupportedControllerIds__0` for the first allowed controller in each feature. Set `AutomaticVisitorEntry__SystemUserId` to the provisioned account's database ID. The corresponding `__Enabled` environment keys enable each feature, including `MqttParkingEvents__Enabled` for intake. Leave both movement features disabled during migration and initial broker verification.

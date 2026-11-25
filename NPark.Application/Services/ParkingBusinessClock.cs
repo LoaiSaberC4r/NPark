@@ -12,6 +12,8 @@ public sealed class ParkingBusinessClock(TimeProvider time, IOptions<ParkingBusi
         TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), zone);
     public DateTime ToUtc(DateTime local) =>
         TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), zone);
+    public DateTime? TryConvertHardwareTime(DateTime local) =>
+        zone.IsInvalidTime(local) || zone.IsAmbiguousTime(local) ? null : ToUtc(local);
     public DateTime LocalNow => ToBusinessTime(UtcNow);
     public DateOnly BusinessDate => DateOnly.FromDateTime(LocalNow);
 }

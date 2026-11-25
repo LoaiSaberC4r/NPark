@@ -22,7 +22,9 @@ namespace NPark.Api.RealTime
             => _hub.Clients.Group(NotificationsHub.GateGroup(payload.GateId)).GateOperationStatusChanged(payload);
 
         public Task NotifyTicketAddedAsync(TicketAddedNotification payload)
-            => _hub.Clients.All.TicketAdded(payload);
+            => (payload.IsAutomatic
+                ? _hub.Clients.Group(NotificationsHub.GateGroup(payload.GateId))
+                : _hub.Clients.All).TicketAdded(payload);
 
         public Task NotifyTicketExitedAsync(TicketExitedNotification payload)
             => _hub.Clients.All.TicketExited(payload);

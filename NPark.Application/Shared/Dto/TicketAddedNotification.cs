@@ -9,5 +9,6 @@
         public bool IsSubscriber { get; init; }
         public string? VehicleNumber { get; init; }
         public string GateNumber { get; init; } = string.Empty;
+        public bool IsAutomatic { get; init; }
     }
 }

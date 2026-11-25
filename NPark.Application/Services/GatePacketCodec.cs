@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Globalization;
+using NPark.Domain.Enums;
 
 namespace NPark.Application.Services;
 
@@ -7,11 +8,22 @@ public readonly record struct GateAck(ushort ControllerId, ulong CommandId, byte
 
 public static class GatePacketCodec
 {
-    public static byte[] EncodeOpen(ushort controller, ulong commandId)
+    public static byte[] EncodeOpen(ushort controller, ulong commandId) => Encode(controller, commandId, 0xB1);
+
+    public static byte[] EncodeLock(ushort controller, ulong commandId) => Encode(controller, commandId, 0xB2);
+
+    public static byte[] EncodeOperation(GateOperationType type, ushort controller, ulong commandId) => type switch
+    {
+        GateOperationType.LockCardButton => EncodeLock(controller, commandId),
+        GateOperationType.Entry or GateOperationType.Exit or GateOperationType.Manual => EncodeOpen(controller, commandId),
+        _ => throw new ArgumentOutOfRangeException(nameof(type))
+    };
+
+    private static byte[] Encode(ushort controller, ulong commandId, byte opcode)
     {
         ArgumentOutOfRangeException.ThrowIfZero(controller);
         ArgumentOutOfRangeException.ThrowIfZero(commandId);
-        byte[] bytes = [0x7B, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xAE, 0xBE, 0xC1, 0xB1, 0x7D];
+        byte[] bytes = [0x7B, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xAE, 0xBE, 0xC1, opcode, 0x7D];
         BinaryPrimitives.WriteUInt16BigEndian(bytes.AsSpan(1, 2), controller);
         BinaryPrimitives.WriteUInt64BigEndian(bytes.AsSpan(3, 8), commandId);
         return bytes;
