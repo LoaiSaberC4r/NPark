@@ -5,6 +5,7 @@ using BuildingBlock.Domain.Results;
 using MediatR;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using NPark.Application.Options;
 using NPark.Domain.Entities;
 using NPark.Domain.Enums;
@@ -18,7 +19,8 @@ public sealed record GateOperationResponse(
     DateTime CreatedAtUtc, DateTime? CompletedAtUtc,
     bool RetryAllowed, bool RequiresReconciliation, string? ReasonCode, string Topic, string Payload);
 
-public sealed class GateOperationService(IUnitOfWork db, IServiceScopeFactory scopes, IOptions<GateOperationOptions> options)
+public sealed class GateOperationService(IUnitOfWork db, IServiceScopeFactory scopes,
+    IOptions<GateOperationOptions> options, ILogger<GateOperationService> logger)
 {
     public async Task<Result<GateOperationResponse>> AuthorizeAsync(
         Guid? ticketId, Guid? gateId, ushort? controller, Guid? userId, GateOperationType type, CancellationToken ct)
@@ -27,20 +29,33 @@ public sealed class GateOperationService(IUnitOfWork db, IServiceScopeFactory sc
         await using var phase = scopes.CreateAsyncScope();
         var sender = phase.ServiceProvider.GetRequiredService<ISender>();
         var operationDb = phase.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        var result = await sender.Send(new AuthorizeGateOperation(id, ticketId, gateId, controller, userId, type), ct);
+        var request = new AuthorizeGateOperation(id, ticketId, gateId, controller, userId, type);
+        var result = await sender.Send(request, ct);
         if (result.IsFailure)
         {
             // A concurrent request can win the reservation after this request reads eligibility.
-            var existing = ticketId.HasValue
+            var existing = ticketId.HasValue && result.Errors.Any(e => e.Type is ErrorType.Infrastructure or ErrorType.Unknown ||
+                e.Code is "GateOperationPending" or ErrorCodes.Common.Conflict)
                 ? await TicketExitEligibilityService.FindReservationAsync(operationDb, ticketId.Value, ct)
                 : null;
-            if (existing is not null && existing.Type == type &&
-                (gateId is null || existing.GateId == gateId) &&
-                (controller is null || existing.ControllerId == controller))
-                return Result<GateOperationResponse>.Ok(ToResponse(existing));
+            if (existing is not null &&
+                await AuthorizeGateOperationHandler.ResolveGateAsync(operationDb, request, ct) is { } mapping)
+            {
+                var prior = AuthorizeGateOperationHandler.CheckPrior(existing, mapping.Gate.Id, mapping.Controller, type, logger);
+                return prior.IsSuccess ? Result<GateOperationResponse>.Ok(ToResponse(existing))
+                    : Result<GateOperationResponse>.Fail(prior.Errors);
+            }
+            logger.LogInformation("Gate authorization declined for {OperationType}, ticket {TicketId}, gate {GateId}, " +
+                "requested controller {ControllerId}, reasons {Reasons}", type, ticketId, gateId, controller,
+                string.Join(",", result.Errors.Select(e => e.Code)));
             return Result<GateOperationResponse>.Fail(result.Errors);
         }
         var operation = await operationDb.Repository<GateOperation>().GetByIdAsync(result.Value, ct);
+        if (operation?.Id == id)
+            logger.LogInformation("Gate operation created. OperationId={OperationId}, CommandId={CommandId}, " +
+                "ControllerId={ControllerId}, TicketId={TicketId}, GateId={GateId}, Status={Status}",
+                operation.Id, operation.CommandId, operation.ControllerId, operation.TicketIdSnapshot,
+                operation.GateId, operation.Status);
         return operation is null
             ? Result<GateOperationResponse>.Fail(new Error("GateOperationNotFound", "Gate operation not found.", ErrorType.NotFound))
             : Result<GateOperationResponse>.Ok(ToResponse(operation));
@@ -99,39 +114,24 @@ internal sealed record AuthorizeGateOperation(Guid OperationId, Guid? TicketId, 
     ushort? Controller, Guid? UserId, GateOperationType Type) : ITransactionalCommand<Guid>;
 
 internal sealed class AuthorizeGateOperationHandler(IUnitOfWork db, ITicketExitEligibilityService eligibility,
-    ParkingBusinessClock clock) : ICommandHandler<AuthorizeGateOperation, Guid>
+    ParkingBusinessClock clock, ILogger<AuthorizeGateOperationHandler> logger) : ICommandHandler<AuthorizeGateOperation, Guid>
 {
     public async Task<Result<Guid>> Handle(AuthorizeGateOperation command, CancellationToken ct)
     {
-        ParkingGate? gate;
-        if (command.GateId is Guid gateId)
-            gate = await db.Repository<ParkingGate>().GetByIdAsync(gateId, ct);
-        else if (command.Controller is ushort controller)
-        {
-            var controllerText = controller.ToString(CultureInfo.InvariantCulture);
-            var matches = await db.ListWithSpecAsync(new Matching<ParkingGate>(g => g.ControlIp == controllerText, 2), ct);
-            gate = matches.Count == 1 ? matches[0] : null;
-        }
-        else
-            gate = null;
-
-        if (gate is null || !ushort.TryParse(gate.ControlIp, NumberStyles.None, CultureInfo.InvariantCulture, out var numeric)
-            || numeric == 0 || command.Controller.HasValue && command.Controller != numeric)
+        if (await ResolveGateAsync(db, command, ct) is not { } mapping)
             return Fail("InvalidExitGate");
 
-        var registered = numeric.ToString(CultureInfo.InvariantCulture);
-        var mappings = await db.ListWithSpecAsync(new Matching<ParkingGate>(x => x.ControlIp == registered, 2), ct);
-        if (mappings.Count != 1 || mappings[0].Id != gate.Id)
-            return Fail("InvalidExitGate");
+        var (gate, numeric) = mapping;
+        logger.LogInformation("Gate authorization requested. OperationType={OperationType}, TicketId={TicketId}, " +
+            "GateId={GateId}, ControllerId={ControllerId}", command.Type, command.TicketId, gate.Id, numeric);
 
         if (command.TicketId is Guid ticketId)
         {
-            var prior = await db.FirstOrDefaultWithSpecAsync(new Matching<GateOperation>(x =>
-                x.TicketIdSnapshot == ticketId && (x.ReservedTicketId != null ||
-                    x.Type == command.Type && x.Status == GateOperationStatus.Completed)), ct);
+            var prior = await TicketExitEligibilityService.FindReservationAsync(db, ticketId, ct)
+                ?? await db.FirstOrDefaultWithSpecAsync(new Matching<GateOperation>(x => x.TicketIdSnapshot == ticketId &&
+                    x.Type == command.Type && x.Status == GateOperationStatus.Completed), ct);
             if (prior is not null)
-                return prior.GateId == gate.Id && prior.Type == command.Type
-                    ? Result<Guid>.Ok(prior.Id) : Fail("GateOperationPending");
+                return CheckPrior(prior, gate.Id, numeric, command.Type, logger);
 
             var ticket = await db.Repository<Ticket>().GetByIdAsync(ticketId, ct);
             if (command.Type == GateOperationType.Exit)
@@ -152,12 +152,59 @@ internal sealed class AuthorizeGateOperationHandler(IUnitOfWork db, ITicketExitE
         var reserved = await db.FirstOrDefaultWithSpecAsync(
             new Matching<GateOperation>(x => x.ReservedControllerId == numeric), ct);
         if (reserved is not null)
-            return reserved.Type == GateOperationType.Manual && command.Type == GateOperationType.Manual
-                && reserved.GateId == gate.Id ? Result<Guid>.Ok(reserved.Id) : Fail("GateOperationPending");
+            return command.Type == GateOperationType.Manual
+                ? CheckPrior(reserved, gate.Id, numeric, command.Type, logger) : Fail("GateOperationPending");
 
         await db.Repository<GateOperation>().AddAsync(new GateOperation(command.OperationId,
             command.TicketId, gate.Id, command.UserId, numeric, command.Type, clock.UtcNow), ct);
         return Result<Guid>.Ok(command.OperationId);
+    }
+
+    internal static async Task<(ParkingGate Gate, ushort Controller)?> ResolveGateAsync(
+        IUnitOfWork db, AuthorizeGateOperation command, CancellationToken ct)
+    {
+        var gate = command.GateId is Guid gateId
+            ? await db.Repository<ParkingGate>().GetByIdAsync(gateId, ct)
+            : null;
+        var controller = command.Controller;
+        if (command.GateId.HasValue)
+        {
+            if (gate is null || !ushort.TryParse(gate.ControlIp, NumberStyles.None, CultureInfo.InvariantCulture, out var mapped) ||
+                controller.HasValue && controller.Value != mapped)
+                return null;
+            controller = mapped;
+        }
+        if (controller is null or 0)
+            return null;
+
+        var registered = controller.Value.ToString(CultureInfo.InvariantCulture);
+        var matches = await db.ListWithSpecAsync(new Matching<ParkingGate>(x => x.ControlIp == registered, 2), ct);
+        if (matches.Count != 1 || gate is not null && matches[0].Id != gate.Id)
+            return null;
+        return (matches[0], controller.Value);
+    }
+
+    internal static Result<Guid> CheckPrior(GateOperation prior, Guid gateId, ushort controller, GateOperationType type,
+        ILogger logger)
+    {
+        var sameRequest = prior.GateId == gateId && prior.Type == type;
+        if (sameRequest && prior.Status == GateOperationStatus.Completed)
+            return Result<Guid>.Ok(prior.Id);
+
+        var changedController = sameRequest && prior.ControllerId != controller;
+        var reason = changedController ? "GateOperationControllerChanged" : prior.ErrorCode ?? "GateOperationPending";
+        if (changedController || !sameRequest || prior.Status is GateOperationStatus.TimedOut or GateOperationStatus.Unknown)
+            logger.LogWarning("Existing gate operation blocks a new command. OperationId={OperationId}, TicketId={TicketId}, " +
+                "GateId={GateId}, CommandId={CommandId}, ControllerId={ControllerId}, CurrentGateControllerId={CurrentControllerId}, " +
+                "Status={Status}, Reason={Reason}, ReservedTicketId={ReservedTicketId}, ReservedControllerId={ReservedControllerId}, " +
+                "DispatchStartedAtUtc={DispatchStartedAtUtc}, PublishedAtUtc={PublishedAtUtc}, AcknowledgedAtUtc={AcknowledgedAtUtc}",
+                prior.Id, prior.TicketIdSnapshot, prior.GateId, prior.CommandId, prior.ControllerId, controller,
+                prior.Status, reason, prior.ReservedTicketId, prior.ReservedControllerId, prior.DispatchStartedAtUtc,
+                prior.PublishedAtUtc, prior.AcknowledgedAtUtc);
+        if (changedController)
+            return Result<Guid>.Fail(Error.Conflict(reason, string.Format(CultureInfo.CurrentCulture,
+                WorkflowMessages.Get(reason), prior.Id, prior.ControllerId, controller, prior.Status)));
+        return sameRequest ? Result<Guid>.Ok(prior.Id) : Fail("GateOperationPending");
     }
 
     private static Result<Guid> Fail(string reason) => Result<Guid>.Fail(TicketExitEligibilityService.AsError(reason));

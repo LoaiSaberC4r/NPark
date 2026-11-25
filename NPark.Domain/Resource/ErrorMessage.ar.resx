@@ -665,6 +665,9 @@
   <data name="ParkingWorkflow_GateOperationPending" xml:space="preserve">
     <value>توجد عملية غير مكتملة للبوابة.</value>
   </data>
+  <data name="ParkingWorkflow_GateOperationControllerChanged" xml:space="preserve">
+    <value>عملية البوابة {0} لم تُحسم بعد ({3}) على وحدة التحكم {1}. تستخدم البوابة الآن وحدة التحكم {2}. يجب حسم العملية الحالية قبل طلب أمر جديد.</value>
+  </data>
   <data name="ParkingWorkflow_TicketAlreadyExited" xml:space="preserve">
     <value>تم خروج التذكرة بالفعل.</value>
   </data>

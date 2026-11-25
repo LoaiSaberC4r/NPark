@@ -663,6 +663,9 @@
   <data name="ParkingWorkflow_GateOperationPending" xml:space="preserve">
     <value>A gate operation is unresolved.</value>
   </data>
+  <data name="ParkingWorkflow_GateOperationControllerChanged" xml:space="preserve">
+    <value>Gate operation {0} is unresolved ({3}) on controller {1}. The gate now uses controller {2}. Resolve the existing operation before requesting a new command.</value>
+  </data>
   <data name="ParkingWorkflow_TicketAlreadyExited" xml:space="preserve">
     <value>The ticket has already exited.</value>
   </data>

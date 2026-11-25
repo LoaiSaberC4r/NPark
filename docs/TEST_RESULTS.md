@@ -48,3 +48,20 @@ The dated exit scenario ran against an isolated SQL Server Express database and 
 The simulator received one correlated open command. A timeout left the ticket active. A late success ACK survived an injected archive failure, and recovery archived the ticket once using the original ACK. Ticket ID, QR, entry date, and attachments survived. After exit, the supervisor settled both independent sanctions for 100. The base payment remained a separate 20, and the financial snapshots retained their individual source IDs.
 
 Additional relational tests exercised an empty sanction catalog, obsolete deployment settings, subscriber issuance and renewal, changed catalog amounts, same-day ordinary payment, concurrent renewal, and rollback at payment insert, coverage insert, ticket update, and duplicate coverage. The EF model and existing migrations were unchanged.
+
+## MQTT dispatch and acknowledgment follow-up
+
+The previous Development and Testing settings inherited `192.168.1.14` from the base configuration. A diagnostic API instance in the Testing environment used `192.168.1.40:1883` and received a QoS 1 grant for `ack/network/#`. Its isolated database contained zero gates and zero operations. Separate MQTT monitors saw heartbeat frames on `sub/network/1` and `sub/network/5` during the passive observation window. The physical controller exit requires a verified safe test setup. IIS deployment overrides could not be read with the available Windows permissions.
+
+The authenticated HTTP integration test reproduces a timeout on Controller 5, reassigns the gate to Controller 1, and confirms that the next exit request returns HTTP 409. The original SQL row keeps its command ID, controller, reservations, and publication timestamp. After supervisor reconciliation, the API authorizes a fresh command, which the recovery worker sends through loopback Mosquitto. The broker outage test uses a separate loopback MQTT broker to exercise subscription rejection, retained ACK rejection, pending recovery after an API restart, and manual dispatch after reconnect.
+
+| Isolated Controller 1 wire evidence | Hex |
+|---|---|
+| Backend command on `sub/network/1`, 16 bytes, QoS 1, retain disabled | `7B00010000000000000002AEBEC1B17D` |
+| Simulator ACK on `ack/network/1`, 13 bytes, status `00` | `7B00010000000000000002007D` |
+
+Both frames carry command ID `2`. An induced SQL ACK write failure left the operation `Published` and the archive empty. The persistent session redelivered the ACK after the failure cleared. SQL then recorded ACK status `00`, the acknowledgment and completion timestamps, one archive row with the original ticket identity and base price, and released reservations. Duplicate ACKs caused no additional archive or outbound command. The existing late-ACK regression also verified recovery from an archive failure without another gate command.
+
+The recorded isolated operation was `5739a08c-9eaf-4104-b9f4-714b1b3cb4d6` for ticket `dcc2aefc-2b32-42a3-88cc-6e76b569b568`. The fixed test clock put dispatch, publication, ACK persistence, and completion at `2026-11-24T10:00:03Z`. The assertions checked the database and HTTP state at each stage.
+
+On November 24, 2026, `dotnet build NPark.sln` succeeded with 40 warnings and zero errors. `dotnet test NPark.sln` passed all 36 tests, with zero failures or skips, using disposable SQL Server Express databases and loopback MQTT brokers.

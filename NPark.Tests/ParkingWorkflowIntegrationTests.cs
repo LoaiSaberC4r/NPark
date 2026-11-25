@@ -1,9 +1,12 @@
 using System.Buffers.Binary;
+using System.Net.Http.Headers;
 using System.Security.Claims;
 using BuildingBlock.Application.Abstraction;
 using BuildingBlock.Application.Repositories;
 using BuildingBlock.Domain.Results;
 using MediatR;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
@@ -11,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Protocol;
@@ -40,6 +44,7 @@ using NPark.Domain.Enums;
 using NPark.Domain.FileNames;
 using NPark.Infrastructure;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace NPark.Tests;
 
@@ -53,7 +58,7 @@ public sealed class SqlBrokerFactAttribute : FactAttribute
     }
 }
 
-public sealed partial class ParkingWorkflowIntegrationTests
+public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper output)
 {
     [SqlBrokerFact]
     public async Task OvernightRenewalAcrossMidnightAndLateAckArchiving()
@@ -404,16 +409,21 @@ public sealed partial class ParkingWorkflowIntegrationTests
 
     private sealed class Fixture : IAsyncDisposable
     {
-        private readonly IHost host;
+        private WebApplication host;
         private readonly string connection;
+        private readonly Func<WebApplication> createHost;
         public int Port { get; }
+        public MqttTestLogs Logs { get; }
         public ParkingBusinessClock Clock { get; }
 
-        private Fixture(IHost host, string connection, int port, TimeProvider time)
+        private Fixture(WebApplication host, string connection, int port, TimeProvider time,
+            Func<WebApplication> createHost, MqttTestLogs logs)
         {
             this.host = host;
             this.connection = connection;
+            this.createHost = createHost;
             Port = port;
+            Logs = logs;
             Clock = new(time, Microsoft.Extensions.Options.Options.Create(new NPark.Application.Options.ParkingBusinessOptions()));
         }
 
@@ -423,45 +433,91 @@ public sealed partial class ParkingWorkflowIntegrationTests
             new(new DbContextOptionsBuilder<NParkDBContext>().UseSqlServer(connection).Options);
 
         public static async Task<Fixture> StartAsync(TimeProvider? time = null, bool seedCatalog = true,
-            bool includeObsoleteSettings = false)
+            bool includeObsoleteSettings = false, int? brokerPort = null, bool enableMqttNetworkServices = false)
         {
-            var port = int.TryParse(Environment.GetEnvironmentVariable("NPARK_TEST_MQTT_PORT"), out var configuredPort)
-                ? configuredPort : 1;
+            var port = brokerPort ?? (int.TryParse(Environment.GetEnvironmentVariable("NPARK_TEST_MQTT_PORT"), out var configuredPort)
+                ? configuredPort : 1);
             var builder = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NPARK_TEST_SQL"))
                 { InitialCatalog = "NParkV2Test_" + Guid.NewGuid().ToString("N") };
             var sql = builder.ConnectionString;
             await using var db = OpenDb(sql);
             await db.Database.MigrateAsync();
 
-            var hostBuilder = Host.CreateApplicationBuilder();
+            var logs = new MqttTestLogs();
+            var testTime = time ?? TimeProvider.System;
             var settings = new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Database"] = sql,
                 ["Mqtt:Host"] = "127.0.0.1",
                 ["Mqtt:Port"] = port.ToString(),
                 ["Mqtt:ClientId"] = builder.InitialCatalog,
+                ["Mqtt:ReconnectSeconds"] = "1",
                 ["Mqtt:UseTls"] = "false",
-                ["MqttHeartbeat:Enabled"] = "false",
-                ["MqttNetworkSubscriber:Enabled"] = "false",
+                ["MqttHeartbeat:Enabled"] = enableMqttNetworkServices.ToString(),
+                ["MqttHeartbeat:IntervalSeconds"] = "1",
+                ["MqttHeartbeat:TopicPrefix"] = "sub/network",
+                ["MqttHeartbeat:Payload"] = "7BFFA31A2A3A4A7D",
+                ["MqttNetworkSubscriber:Enabled"] = enableMqttNetworkServices.ToString(),
+                ["MqttNetworkSubscriber:ReconnectSeconds"] = "1",
                 ["GateOperation:RecoveryIntervalSeconds"] = "1",
-                ["GateOperation:AckTimeoutSeconds"] = "2"
+                ["GateOperation:AckTimeoutSeconds"] = "2",
+                ["Jwt:Issuer"] = "npark-test",
+                ["Jwt:Audience"] = "npark-test",
+                ["Jwt:ExpiryMinutes"] = "5",
+                ["Jwt:Secret"] = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
             };
             if (includeObsoleteSettings)
             {
                 settings["OvernightParking:PenaltyMode"] = "obsolete";
                 settings["OvernightParking:OvernightSanctionId"] = Guid.NewGuid().ToString();
             }
-            hostBuilder.Configuration.AddInMemoryCollection(settings);
-            hostBuilder.Services.AddHttpContextAccessor();
-            NPark.Application.Bootstrap.Bootstrap.AddApplicationBootstrap(hostBuilder.Services);
-            NPark.Infrastructure.Bootstrap.Bootstrap.InfrastructureInjection(hostBuilder.Services, hostBuilder.Configuration);
-            hostBuilder.Services.AddSingleton(time ?? TimeProvider.System);
-            hostBuilder.Services.AddSingleton<IRealtimeNotifier, TestNotifications>();
-            hostBuilder.Services.AddSingleton<IMqttCaptureSignalRNotifier, TestNotifications>();
-            hostBuilder.Services.AddTransient<IRequestHandler<RollbackProbe, Result<int>>, RollbackProbeHandler>();
-            var host = hostBuilder.Build();
+            WebApplication BuildHost()
+            {
+                var hostBuilder = WebApplication.CreateBuilder();
+                hostBuilder.WebHost.UseUrls("http://127.0.0.1:0");
+                hostBuilder.Logging.ClearProviders();
+                hostBuilder.Logging.AddProvider(logs);
+                hostBuilder.Configuration.AddInMemoryCollection(settings);
+                hostBuilder.Services.AddControllers().AddApplicationPart(typeof(TicketController).Assembly);
+                hostBuilder.Services.AddHttpContextAccessor();
+                NPark.Application.Bootstrap.Bootstrap.AddApplicationBootstrap(hostBuilder.Services);
+                NPark.Infrastructure.Bootstrap.Bootstrap.InfrastructureInjection(hostBuilder.Services, hostBuilder.Configuration);
+                hostBuilder.Services.AddSingleton(testTime);
+                hostBuilder.Services.AddSingleton<IRealtimeNotifier, TestNotifications>();
+                hostBuilder.Services.AddSingleton<IMqttCaptureSignalRNotifier, TestNotifications>();
+                hostBuilder.Services.AddTransient<IRequestHandler<RollbackProbe, Result<int>>, RollbackProbeHandler>();
+                var app = hostBuilder.Build();
+                app.UseAuthentication();
+                app.UseAuthorization();
+                app.MapControllers();
+                return app;
+            }
+
+            var host = BuildHost();
             await host.StartAsync();
-            return new(host, sql, port, time ?? TimeProvider.System) { SeedCatalog = seedCatalog };
+            return new(host, sql, port, testTime, BuildHost, logs) { SeedCatalog = seedCatalog };
+        }
+
+        public async Task RestartAsync()
+        {
+            await host.StopAsync();
+            await host.DisposeAsync();
+            host = createHost();
+            await host.StartAsync();
+        }
+
+        public async Task<HttpClient> CreateHttpClientAsync(Guid gateId, Guid userId)
+        {
+            await using var db = OpenDb();
+            await using var scope = host.Services.CreateAsyncScope();
+            var provider = scope.ServiceProvider.GetRequiredService<IJwtProvider>();
+            var token = await provider.Generate(await db.Set<User>().SingleAsync(x => x.Id == userId),
+                await db.Set<ParkingGate>().SingleAsync(x => x.Id == gateId));
+            return new HttpClient
+            {
+                BaseAddress = new Uri(Assert.Single(host.Urls)),
+                DefaultRequestHeaders = { Authorization = new AuthenticationHeaderValue("Bearer", token.Token) }
+            };
         }
 
         private bool SeedCatalog { get; init; }
@@ -524,7 +580,7 @@ public sealed partial class ParkingWorkflowIntegrationTests
             return new DefaultHttpContext { User = principal };
         }
 
-        public async Task<Seed> SeedAsync()
+        public async Task<Seed> SeedAsync(bool sameDay = false, string exitController = "54321")
         {
             await using var db = OpenDb();
             var configuration = ParkingSystemConfiguration.Create(1, 1, 100, PriceType.Enter,
@@ -532,7 +588,7 @@ public sealed partial class ParkingWorkflowIntegrationTests
             db.Add(configuration);
             await db.SaveChangesAsync();
             var entry = ParkingGate.Create(1, GateType.Entrance, configuration.Id, controlIp: "54320");
-            var exit = ParkingGate.Create(2, GateType.Exit, configuration.Id, controlIp: "54321");
+            var exit = ParkingGate.Create(2, GateType.Exit, configuration.Id, controlIp: exitController);
             var entryCashier = NewUser("test-entry", SystemRoles.EntranceCashierRoleId);
             var exitCashier = NewUser("test-exit", SystemRoles.ExitCashierRoleId);
             var supervisor = NewUser("test-supervisor", SystemRoles.SupervisorRoleId);
@@ -544,7 +600,7 @@ public sealed partial class ParkingWorkflowIntegrationTests
             await db.SaveChangesAsync();
             using var scope = host.Services.CreateScope();
             var clock = scope.ServiceProvider.GetRequiredService<ParkingBusinessClock>();
-            var start = clock.LocalNow.Date.AddDays(-1).AddHours(10);
+            var start = sameDay ? clock.LocalNow.Date : clock.LocalNow.Date.AddDays(-1).AddHours(10);
             var ticket = Ticket.Create(start, 20, entry.Id, entryCashier.Id, DateOnly.FromDateTime(start), PriceType.Enter);
             ticket.SetVehicleNumber("TEST 123");
             ticket.AddAttachment("existing-test-attachment.jpg");
@@ -581,10 +637,7 @@ public sealed partial class ParkingWorkflowIntegrationTests
         public async ValueTask DisposeAsync()
         {
             await host.StopAsync();
-            if (host is IAsyncDisposable asyncHost)
-                await asyncHost.DisposeAsync();
-            else
-                host.Dispose();
+            await host.DisposeAsync();
             await using var db = OpenDb();
             await db.Database.EnsureDeletedAsync();
         }
