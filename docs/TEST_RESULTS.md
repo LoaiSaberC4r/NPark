@@ -114,3 +114,47 @@ The configured test broker at `192.168.1.40:1883` accepted the TCP probe and pas
 | `dotnet test NPark.sln` with `NPARK_TEST_SQL` and `NPARK_TEST_MQTT_PORT` | 47 passed, zero failed, zero skipped. |
 | `dotnet ef migrations has-pending-model-changes` | No changes since the last migration. |
 | `git diff --check` | Passed. |
+
+## MQTT v1.1.11 entrance verification
+
+The entrance tests use disposable SQL Server Express databases, an HTTP API test host, and a loopback-only Mosquitto listener. The MQTT simulator publishes Schema 01 and Schema 02 events and returns synthetic command ACKs. The tests exercise subscriber B2 and subsequent B1, consecutive lock failures and timeouts, matched and card-only visitor tickets, duplicate and conflicting events, storage failure, Entrance Pricing, scanner and actor rejection, restart around gate authorization, terminal failures, archive rollback, and retained capture references.
+
+| Check | Evidence |
+|---|---|
+| Backend restore | `dotnet restore NPark.sln` succeeded. |
+| Backend build | `dotnet build NPark.sln --no-restore --nologo -clp:ErrorsOnly` succeeded with 17 warnings and zero errors. |
+| Angular install and build | `npm ci` and `npm run build` succeeded. |
+| Angular compatibility tests | ChromeHeadless, 2 passed, 0 failed, 0 skipped. |
+| Angular full suite | 17 passed, 29 failed, 0 skipped. The reviewed baseline returned 15 passed and the same 29 named failures. Existing failures include missing Angular test providers. |
+| EF migrations | `migrations list --no-connect` includes the new migration. `migrations has-pending-model-changes --no-build` reported no model changes. |
+| SQL migration script | Generated and inspected the idempotent script. Applied it twice on an isolated database with `sqlcmd -b -I` and inspected all three tables and their indexes. `-I` enables quoted identifiers for the existing filtered indexes. |
+
+| Final backend group | Executed | Passed | Failed | Skipped |
+|---|---:|---:|---:|---:|
+| Entrance and parking event protocol | 18 | 18 | 0 | 0 |
+| Gate dispatch, timeouts, and restart | 6 | 6 | 0 | 0 |
+| Pricing, payment, and settlement regression | 7 | 7 | 0 | 0 |
+| Startup, legacy migration, and gate protocol | 34 | 34 | 0 | 0 |
+| Total | 65 | 65 | 0 | 0 |
+
+The final backend run used `dotnet test NPark.Tests --no-build --artifacts-path <isolated-build> --filter <group> --logger "console;verbosity=normal"` across four disjoint filters covering all cases listed by `dotnet test --list-tests`. Set `NPARK_TEST_SQL` to an isolated SQL Server connection and `NPARK_TEST_MQTT_PORT` to a loopback broker. Each concurrent group that exercised MQTT used a separate listener. Earlier whole-solution runs exposed startup tests that assumed a single pending migration and a timing-dependent settlement fixture. The updated startup tests validate the full pending list, and the settlement fixture controls elapsed parking time independently of host scheduling.
+
+The Angular test runner was invoked as `node ./node_modules/@angular/cli/bin/ng.js test --watch=false --browsers=ChromeHeadless`. The focused run added `--include=src/app/Domain/Gate/gate-operation.models.spec.ts`. The migration commands use `--project NPark.Infrastructure --startup-project NPark.Api --context NParkDBContext`.
+
+Physical relay behavior, IIS rollout, live broker ACLs, and browser-to-physical-gate acceptance remain unverified. Firmware local actuation and offline event loss must be evaluated before rollout. The backend and simulator cases use isolated resources.
+
+## NPARK-MQTT-FIX-01
+
+The new integration test timed out waiting for B2 on the reviewed handler. After the fix, both a direct HTTP request from a different address and a request forwarded through a loopback HTTP relay produced the expected correlated B2 command. The entrance cases also covered the matching-address request, unregistered `lprIp`, non-subscriber notification, expired membership, unsupported controller, exit gate, disabled Lock feature, duplicate detections, and release after failure or timeout.
+
+| Final backend group | Executed | Passed | Failed | Skipped |
+|---|---:|---:|---:|---:|
+| Entrance and parking event protocol | 19 | 19 | 0 | 0 |
+| Gate dispatch, timeouts, and restart | 6 | 6 | 0 | 0 |
+| Pricing, payment, and settlement regression | 7 | 7 | 0 | 0 |
+| Startup, legacy migration, and gate protocol | 34 | 34 | 0 | 0 |
+| Total | 66 | 66 | 0 | 0 |
+
+`dotnet restore NPark.sln` succeeded. `dotnet build NPark.sln --no-restore` succeeded with 28 warnings and zero errors. The supplied `FullyQualifiedName~EntranceMqttIntegrationTests` filter discovered zero tests because the file contributes to the partial `ParkingWorkflowIntegrationTests` class. The final verification ran `dotnet test NPark.Tests --no-build --filter <group>` with four disjoint filters covering all cases listed by `--list-tests`. Use `FullyQualifiedName~SubscriberLockUsesRegisteredLprIpForDirectAndRelayedRequests` for the new regression alone.
+
+The initial full run encountered a SQL Express connectivity failure during test setup. The successful rerun used a dedicated SQL Server LocalDB instance, disposable databases, and loopback MQTT brokers. Physical cameras and controllers were outside this verification.

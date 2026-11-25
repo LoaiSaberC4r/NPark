@@ -36,3 +36,11 @@ Reference checkout reviewed locally at `1bc959325350a05054a80c4924e26e8d6a277009
 - In the exit component, display `basePrice`, `exceedPrice`, `paidAmount`, and `outstandingAmount` separately. Display the selected catalog total as the prospective charge. Use `requiresOvernightPenalty` to prompt for selection because `requiredOvernightAmount` is always zero. On a price or validity conflict, refresh the quote or ticket and request fresh confirmation. Pass `expectedBasePrice` with CollectCashier when the operator confirms the amount.
 - In `src/app/Feature/supervisor-collections-report/` and `src/app/Services/Tickets/ticket-supervisor.service.ts`, use `sourceRecordId` and `financialItemType` for history. Display the actual responsible cashier when present and “Unknown” for null attribution. Show the global pending sanction summary independently from supervisor totals.
 - In the dashboard models and views, surface pending entry, unresolved exit, and acknowledged exits awaiting archival independently from occupancy and historical completed exits.
+
+## MQTT v1.1.11 entrance compatibility
+
+The Angular change starts from `3e78f72e6200a5a24ac3245a08d2dd6b4c65f2cc`. Gate operation normalization recognizes `LockCardButton` and numeric value 4, preserves Manual as 3, and treats Failed, TimedOut, and Unknown as terminal. Lock records are excluded from entry completion and do not enter the cashier's Open flow.
+
+The existing LPR membership check, subscriber AddTicket, manual visitor AddTicket, printing, and operator Open flow continue at their existing entry points. The automatic visitor flow uses the existing authenticated dashboard hub. The entry screen refreshes its same-gate ticket list on automatic `TicketAdded`, completed automatic Entry status, and reconnect. These notifications do not invoke AddTicket, Open, printing, or the cashier's interactive pending-entry state. The backend still requires the correlated Open ACK before it confirms entry.
+
+Automatic visitor tickets may have a null vehicle number. Use the existing ticket ID for the list refresh. Treat the initial issuance and later entry confirmation as separate events.

@@ -40,6 +40,8 @@ namespace NPark.Application.Bootstrap
             services.AddScoped<ITicketExitEligibilityService, TicketExitEligibilityService>();
             services.AddScoped<ITicketArchiveService, TicketArchiveService>();
             services.AddScoped<GateOperationService>();
+            services.AddScoped<SubscriberEligibilityService>();
+            services.AddScoped<TicketIssuanceService>();
             services.AddScoped<IFinancialSettlementService, FinancialSettlementService>();
             services.AddScoped<SettlementAudit>();
             services.AddFluentValidation();

@@ -10,8 +10,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using NPark.Application.Abstraction;
 using NPark.Application.Abstraction.Security;
-using NPark.Application.Shared.Dto;
-using NPark.Application.Specifications.ParkingMembershipSpecification;
 using NPark.Application.Specifications.ParkingSystemConfigurationSpec;
 using NPark.Domain.Entities;
 using NPark.Domain.Enums;
@@ -23,25 +21,22 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
     public sealed class AddTicketCommandHandler
          : ICommandHandler<AddTicketCommand, AddTicketCommandResponse>
     {
-        private readonly IGenericRepository<Ticket> _ticketRepository;
         private readonly IGenericRepository<ParkingGate> _parkingGateRepository;
         private readonly IGenericRepository<PricingScheme> _pricingSchemaRepository;
         private readonly IGenericRepository<ParkingSystemConfiguration> _parkingSystemConfigurationRepository;
-        private readonly IGenericRepository<ParkingMemberships> _parkingMembershipsRepository;
         private readonly IQRCodeService _qrCodeService;
         private readonly IByteVerificationService _byteVerificationService;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly ITokenReader _tokenReader;
         private readonly IMediaService _mediaService;
         private readonly ILogger<AddTicketCommandHandler> _logger;
-        private readonly IRealtimeNotifier _realtimeNotifier;
         private readonly ParkingBusinessClock _clock;
+        private readonly SubscriberEligibilityService _subscribers;
+        private readonly TicketIssuanceService _issuance;
         private readonly ISender _sender;
         private readonly IServiceScopeFactory _scopes;
 
         public AddTicketCommandHandler(
-            IGenericRepository<Ticket> ticketRepository,
-            IGenericRepository<ParkingMemberships> parkingMembershipsRepository,
             IQRCodeService qrCodeService,
             IHttpContextAccessor httpContextAccessor,
             IByteVerificationService byteVerificationService,
@@ -49,15 +44,15 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             IGenericRepository<PricingScheme> pricingSchemaRepository,
             IMediaService mediaService,
             ILogger<AddTicketCommandHandler> logger,
-            IRealtimeNotifier realtimeNotifier,
             IGenericRepository<ParkingSystemConfiguration> parkingSystemConfigurationRepository,
-            IGenericRepository<ParkingGate> parkingGateRepository, ParkingBusinessClock clock, ISender sender, IServiceScopeFactory scopes)
+            IGenericRepository<ParkingGate> parkingGateRepository, ParkingBusinessClock clock, ISender sender, IServiceScopeFactory scopes,
+            SubscriberEligibilityService subscribers, TicketIssuanceService issuance)
         {
             _clock = clock;
+            _subscribers = subscribers;
+            _issuance = issuance;
             _sender = sender;
             _scopes = scopes;
-            _ticketRepository = ticketRepository ?? throw new ArgumentNullException(nameof(ticketRepository));
-            _parkingMembershipsRepository = parkingMembershipsRepository ?? throw new ArgumentNullException(nameof(parkingMembershipsRepository));
             _qrCodeService = qrCodeService ?? throw new ArgumentNullException(nameof(qrCodeService));
             _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
             _byteVerificationService = byteVerificationService ?? throw new ArgumentNullException(nameof(byteVerificationService));
@@ -65,7 +60,6 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             _pricingSchemaRepository = pricingSchemaRepository ?? throw new ArgumentNullException(nameof(pricingSchemaRepository));
             _mediaService = mediaService ?? throw new ArgumentNullException(nameof(mediaService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _realtimeNotifier = realtimeNotifier ?? throw new ArgumentNullException(nameof(realtimeNotifier));
             _parkingSystemConfigurationRepository = parkingSystemConfigurationRepository ?? throw new ArgumentNullException(nameof(parkingSystemConfigurationRepository));
             _parkingGateRepository = parkingGateRepository ?? throw new ArgumentNullException(nameof(parkingGateRepository));
         }
@@ -193,70 +187,16 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             ParkingGate gateInfo,
             CancellationToken cancellationToken)
         {
-            var cardSpec = new GetCardSummaryByIdSpec(
-                request.CardNumber ?? string.Empty,
-                request.VehicleNumber ?? string.Empty);
-
-            var subscriber = await _parkingMembershipsRepository
-                .FirstOrDefaultWithSpecAsync(cardSpec, cancellationToken);
-
-            if (subscriber is null)
+            var now = _clock.LocalNow;
+            var eligibility = await _subscribers.EvaluateAsync(request.CardNumber, request.VehicleNumber, now, cancellationToken);
+            if (eligibility.IsFailure)
             {
-                _logger.LogWarning(
-                    "Subscriber card not found. CardNumber={CardNumber}, VehicleNumber={VehicleNumber}",
-                    request.CardNumber,
-                    request.VehicleNumber);
-
-                return Result<AddTicketCommandResponse>.Fail(
-                    new Error(
-                        Code: "Subscriber.Card.NotFound",
-                        Message: "المشترك غير موجود ",
-                        Type: ErrorType.NotFound));
+                _logger.LogWarning("Subscriber ticket issuance declined. GateId={GateId}, ReasonCodes={ReasonCodes}",
+                    gateId, string.Join(",", eligibility.Errors.Select(error => error.Code)));
+                return Result<AddTicketCommandResponse>.Fail(eligibility.Errors);
             }
 
-            var issuedAtUtc = _clock.UtcNow;
-            var now = _clock.ToBusinessTime(issuedAtUtc);
-
-            if (now < subscriber.CreatedAt || now >= subscriber.EndDate)
-            {
-                _logger.LogWarning(
-                    "Invalid subscriber card date. CardNumber={CardNumber}, VehicleNumber={VehicleNumber}, Start={Start}, End={End}, Now={Now}",
-                    subscriber.CardNumber,
-                    subscriber.VehicleNumber,
-                    subscriber.CreatedAt,
-                    subscriber.EndDate,
-                    now);
-
-                return Result<AddTicketCommandResponse>.Fail(
-                    new Error(
-                        Code: "Subscriber.Card.InvalidDate",
-                        Message: ErrorMessage.Subscriber_Card_InvalidDate,
-                        Type: ErrorType.Validation));
-            }
-
-            var activeSubscriberTicketSpec = new GetActiveSubscriberTicketSpec(
-                cardNumber: subscriber.CardNumber,
-                subscriberNationalId: subscriber.NationalId,
-                vehicleNumber: subscriber.VehicleNumber);
-
-            var activeSubscriberTicket = await _ticketRepository
-                .FirstOrDefaultWithSpecAsync(activeSubscriberTicketSpec, cancellationToken);
-
-            if (activeSubscriberTicket is not null)
-            {
-                _logger.LogWarning(
-                    "Subscriber is already inside park. SubscriberNationalId={SubscriberNationalId}, CardNumber={CardNumber}, ActiveTicketId={TicketId}",
-                    subscriber.NationalId,
-                    subscriber.CardNumber,
-                    activeSubscriberTicket.Id);
-
-                return Result<AddTicketCommandResponse>.Fail(
-                    new Error(
-                        Code: "Subscriber.AlreadyInsidePark",
-                        Message: ErrorMessage.Subscriber_AlreadyInsidePark,
-                        Type: ErrorType.Validation));
-            }
-
+            var subscriber = eligibility.Value;
             var ticketEntity = Ticket.Create(
                 startDate: now,
                 price: 0m,
@@ -272,11 +212,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             if (persisted.IsFailure)
                 return Result<AddTicketCommandResponse>.Fail(persisted.Errors);
 
-            await NotifyDashboardTicketAddedAsync(
-                ticketEntity,
-                gateInfo,
-                isSubscriber: true,
-                cancellationToken);
+            await _issuance.NotifyTicketAddedAsync(ticketEntity, gateInfo);
 
             var response = BuildResponse(
                 ticketEntity,
@@ -295,8 +231,6 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             CancellationToken cancellationToken)
         {
             var issuedAtUtc = _clock.UtcNow;
-            var now = _clock.ToBusinessTime(issuedAtUtc);
-
             Ticket ticketEntity;
 
             if (configuration.PriceType == PriceType.Enter)
@@ -339,27 +273,14 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
                             Message: ErrorMessage.EnterPriceSchema_InvalidForEnterTicket,
                             Type: ErrorType.Validation));
                 }
-                ticketEntity = Ticket.Create(
-                    startDate: now,
-                    price: pricingScheme.Salary,
-                    gateId: gateId,
-                    userId: userId, businessDate: DateOnly.FromDateTime(now), pricingMode: configuration.PriceType);
-
+                ticketEntity = _issuance.CreateVisitor(gateId, userId, configuration.PriceType, pricingScheme.Salary,
+                    issuedAtUtc, request.VehicleNumber);
                 ticketEntity.ConfirmBasePayment(userId, gateId, issuedAtUtc);
-
             }
             else
             {
-                ticketEntity = Ticket.Create(
-                    startDate: now,
-                    price: 0m,
-                    gateId: gateId,
-                    userId: userId, businessDate: DateOnly.FromDateTime(now), pricingMode: configuration.PriceType);
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.VehicleNumber))
-            {
-                ticketEntity.SetVehicleNumber(request.VehicleNumber);
+                ticketEntity = _issuance.CreateVisitor(gateId, userId, configuration.PriceType, 0m,
+                    issuedAtUtc, request.VehicleNumber);
             }
 
             var generatedQr = GenerateTicketQrCode(ticketEntity);
@@ -368,8 +289,7 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             if (persisted.IsFailure)
                 return Result<AddTicketCommandResponse>.Fail(persisted.Errors);
 
-            await NotifyDashboardTicketAddedAsync(
-                ticketEntity, gateInfo, isSubscriber: false, cancellationToken);
+            await _issuance.NotifyTicketAddedAsync(ticketEntity, gateInfo);
             return Result<AddTicketCommandResponse>.Ok(response);
         }
 
@@ -424,40 +344,6 @@ namespace NPark.Application.Feature.TicketsManagement.Command.Add
             catch (Exception error)
             {
                 _logger.LogWarning(error, "Could not verify issuance or remove temporary media for ticket {TicketId}", ticketId);
-            }
-        }
-
-        private async Task NotifyDashboardTicketAddedAsync(
-            Ticket ticketEntity,
-            ParkingGate gateInfo,
-            bool isSubscriber,
-            CancellationToken cancellationToken)
-        {
-            try
-            {
-                var gateNumber = gateInfo.GateType == GateType.Entrance
-                    ? $"{ErrorMessage.EntranceGate} {gateInfo.GateNumber}"
-                    : $"{ErrorMessage.ExitGate} {gateInfo.GateNumber}";
-
-                var payload = new TicketAddedNotification
-                {
-                    TicketId = ticketEntity.Id,
-                    GateId = ticketEntity.GateId,
-                    StartDate = ticketEntity.StartDate,
-                    Price = ticketEntity.Price,
-                    IsSubscriber = isSubscriber,
-                    VehicleNumber = ticketEntity.VehicleNumber,
-                    GateNumber = gateNumber
-                };
-
-                await _realtimeNotifier.NotifyTicketAddedAsync(payload);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Failed to send realtime notification for ticket {TicketId}",
-                    ticketEntity.Id);
             }
         }
 

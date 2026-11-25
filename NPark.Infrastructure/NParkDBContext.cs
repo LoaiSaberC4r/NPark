@@ -1,5 +1,6 @@
 using BuildingBlock.Infrastracture.Extensions;
 using Microsoft.EntityFrameworkCore;
+using NPark.Domain.Entities;
 
 namespace NPark.Infrastructure
 {
@@ -7,6 +8,10 @@ namespace NPark.Infrastructure
     {
         public NParkDBContext(DbContextOptions<NParkDBContext> options)
 : base(options) { }
+
+        public DbSet<LprCapture> LprCaptures => Set<LprCapture>();
+        public DbSet<LprCaptureArchive> LprCapturesArchive => Set<LprCaptureArchive>();
+        public DbSet<ParkingHardwareEvent> ParkingHardwareEvents => Set<ParkingHardwareEvent>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

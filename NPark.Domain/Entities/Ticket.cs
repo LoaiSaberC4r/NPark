@@ -77,6 +77,16 @@ namespace NPark.Domain.Entities
 
         public void SetVehicleNumber(string vehicleNumber) => VehicleNumber = vehicleNumber;
 
+        public void AssignVisitorCard(string cardNumber)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(cardNumber);
+            if (IsSubscriber || EndDate.HasValue ||
+                CardNumber is not null && !string.Equals(CardNumber, cardNumber, StringComparison.Ordinal))
+                throw new InvalidOperationException("This ticket cannot accept the visitor card.");
+
+            CardNumber = cardNumber;
+        }
+
         public void ConfirmEntry(DateTime utc)
         {
             if (EntryConfirmationStatus == EntryConfirmationStatus.Confirmed)
