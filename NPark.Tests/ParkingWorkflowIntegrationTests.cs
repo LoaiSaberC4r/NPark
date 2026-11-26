@@ -494,6 +494,7 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
                 ["MqttHeartbeat:Payload"] = "7BFFA31A2A3A4A7D",
                 ["MqttNetworkSubscriber:Enabled"] = enableMqttNetworkServices.ToString(),
                 ["MqttNetworkSubscriber:ReconnectSeconds"] = "1",
+                ["GateOperation:EnableExitGateMqtt"] = "true",
                 ["GateOperation:RecoveryIntervalSeconds"] = recoveryIntervalSeconds.ToString(),
                 ["GateOperation:AckTimeoutSeconds"] = "2",
                 ["GateOperation:EnableAutomaticRetry"] = "true",
@@ -523,7 +524,7 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
                 NPark.Infrastructure.Bootstrap.Bootstrap.InfrastructureInjection(hostBuilder.Services, hostBuilder.Configuration);
                 hostBuilder.Services.AddSingleton(testTime);
                 hostBuilder.Services.AddSingleton<IRealtimeNotifier>(notifications);
-                hostBuilder.Services.AddSingleton<IMqttCaptureSignalRNotifier, TestNotifications>();
+                hostBuilder.Services.AddSingleton<IMqttCaptureSignalRNotifier>(notifications);
                 hostBuilder.Services.AddSingleton<ILprSignalRNotifier>(notifications);
                 if (publisher is not null)
                     hostBuilder.Services.AddSingleton(publisher);
@@ -714,15 +715,27 @@ public sealed partial class ParkingWorkflowIntegrationTests(ITestOutputHelper ou
     {
         public System.Collections.Concurrent.ConcurrentQueue<(Guid GateId, string VehicleNumber)> Lpr { get; } = new();
         public System.Collections.Concurrent.ConcurrentQueue<TicketAddedNotification> Added { get; } = new();
-        public Task NotifyGateOperationAsync(GateOperationResponse payload) => fail
-            ? Task.FromException(new InvalidOperationException("Injected SignalR notification failure")) : Task.CompletedTask;
+        public System.Collections.Concurrent.ConcurrentQueue<GateOperationResponse> Operations { get; } = new();
+        public System.Collections.Concurrent.ConcurrentQueue<TicketExitedNotification> Exited { get; } = new();
+        public Channel<MqttCaptureDetectedResponse> Captures { get; } = Channel.CreateUnbounded<MqttCaptureDetectedResponse>();
+        public Func<TicketExitedNotification, Task>? OnExitAsync { get; set; }
+        public Task NotifyGateOperationAsync(GateOperationResponse payload)
+        {
+            Operations.Enqueue(payload);
+            return fail ? Task.FromException(new InvalidOperationException("Injected SignalR notification failure")) : Task.CompletedTask;
+        }
         public Task NotifyTicketAddedAsync(TicketAddedNotification payload)
         {
             Added.Enqueue(payload);
             return Task.CompletedTask;
         }
-        public Task NotifyTicketExitedAsync(TicketExitedNotification payload) => Task.CompletedTask;
-        public Task NotifyCaptureDetectedAsync(MqttCaptureDetectedResponse payload, CancellationToken ct) => Task.CompletedTask;
+        public Task NotifyTicketExitedAsync(TicketExitedNotification payload)
+        {
+            Exited.Enqueue(payload);
+            return OnExitAsync?.Invoke(payload) ?? Task.CompletedTask;
+        }
+        public Task NotifyCaptureDetectedAsync(MqttCaptureDetectedResponse payload, CancellationToken ct) =>
+            Captures.Writer.WriteAsync(payload, ct).AsTask();
         public Task NotifyVehicleDetectedAsync(
             NPark.Application.Feature.LprSignalRManagement.Command.VehicleDetected.LprVehicleDetectedCommandResponse payload,
             CancellationToken ct)

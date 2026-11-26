@@ -23,6 +23,65 @@ public sealed class LegacyMigrationTests
     private const string Baseline = "20260505150257_AddingSuperVisorRecord";
 
     [SqlFact]
+    public async Task ExitCompletionModeMigrationKeepsLegacyOperationsReservationsAndCommandSequence()
+    {
+        var connection = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NPARK_TEST_SQL"))
+            { InitialCatalog = "NParkV2Test_" + Guid.NewGuid().ToString("N") };
+        await using var db = new NParkDBContext(new DbContextOptionsBuilder<NParkDBContext>()
+            .UseSqlServer(connection.ConnectionString).Options);
+        var id = Guid.NewGuid();
+        var ticket = Guid.NewGuid();
+        var gate = Guid.NewGuid();
+        var now = new DateTime(2026, 11, 26, 10, 0, 0, DateTimeKind.Utc);
+        try
+        {
+            await db.Database.MigrateAsync("20261125135033_AddLprAndParkingEventIntegration");
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO [GateOperations] ([Id], [TicketIdSnapshot], [ReservedTicketId], [ReservedControllerId],
+                    [GateId], [ControllerId], [Type], [Status], [CreatedAtUtc], [CreatedOnUtc], [DispatchStartedAtUtc], [PublishedAtUtc], [RetryCount])
+                VALUES ({id}, {ticket}, {ticket}, 54321, {gate}, 54321, {(int)GateOperationType.Exit},
+                    {(int)GateOperationStatus.Published}, {now}, {now}, {now}, {now}, 0);
+                """);
+            var commandId = await db.Database.SqlQuery<long>($"SELECT [CommandId] AS [Value] FROM [GateOperations] WHERE [Id] = {id}")
+                .SingleAsync();
+            await db.Database.MigrateAsync();
+
+            var legacy = await db.Set<GateOperation>().AsNoTracking().SingleAsync();
+            Assert.Equal((id, gate, commandId, GateOperationCompletionMode.Hardware, GateOperationStatus.Published),
+                (legacy.Id, legacy.GateId, legacy.CommandId, legacy.CompletionMode, legacy.Status));
+            Assert.Equal((ticket, 54321, now),
+                (legacy.ReservedTicketId!.Value, legacy.ReservedControllerId!.Value, legacy.PublishedAtUtc!.Value));
+            Assert.NotEmpty(legacy.RowVersion);
+            Assert.Empty(await db.Database.GetPendingMigrationsAsync());
+
+            var duplicate = new GateOperation(Guid.NewGuid(), ticket, gate, null, 2, GateOperationType.Exit, now,
+                completionMode: GateOperationCompletionMode.Software);
+            db.Add(duplicate);
+            var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+            Assert.Contains("IX_GateOperations_ReservedTicketId", error.InnerException?.Message);
+            db.ChangeTracker.Clear();
+
+            db.Add(new GateOperation(Guid.NewGuid(), null, gate, null, 54321, GateOperationType.Manual, now));
+            error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+            Assert.Contains("IX_GateOperations_ReservedControllerId", error.InnerException?.Message);
+            db.ChangeTracker.Clear();
+
+            var software = new GateOperation(Guid.NewGuid(), Guid.NewGuid(), gate, null, 54321, GateOperationType.Exit, now,
+                completionMode: GateOperationCompletionMode.Software);
+            db.Add(software);
+            await db.SaveChangesAsync();
+            Assert.True(software.CommandId > commandId);
+            Assert.Null(software.ReservedControllerId);
+            Assert.Equal(GateOperationCompletionMode.Software, (await db.Set<GateOperation>().AsNoTracking()
+                .SingleAsync(x => x.Id == software.Id)).CompletionMode);
+        }
+        finally
+        {
+            await db.Database.EnsureDeletedAsync();
+        }
+    }
+
+    [SqlFact]
     public async Task UpgradesLegacyCashAndSettlementRecordsAndRejectsDuplicateHistory()
     {
         var connection = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NPARK_TEST_SQL"))

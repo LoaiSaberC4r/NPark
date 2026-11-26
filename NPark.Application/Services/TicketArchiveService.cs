@@ -1,37 +1,59 @@
 using BuildingBlock.Application.Repositories;
 using NPark.Application.Feature.TicketsManagement.Command.ExitTicket;
+using NPark.Application.Shared.Dto;
 using NPark.Domain.Entities;
+using NPark.Domain.Enums;
 
 namespace NPark.Application.Services;
 
 public interface ITicketArchiveService
 {
-    Task<TicketArchive> CompleteAsync(GateOperation operation, CancellationToken ct);
+    Task<TicketExitedNotification> CompleteAsync(GateOperation operation, CancellationToken ct);
 }
 
 public sealed class TicketArchiveService(IUnitOfWork db, ParkingBusinessClock clock) : ITicketArchiveService
 {
-    public async Task<TicketArchive> CompleteAsync(GateOperation operation, CancellationToken ct)
+    public async Task<TicketExitedNotification> CompleteAsync(GateOperation operation, CancellationToken ct)
     {
-        if (operation.AckStatusCode != 0 || operation.AcknowledgedAtUtc is not DateTime acknowledgedAt ||
-            operation.TicketIdSnapshot is not Guid ticketId)
-            throw new InvalidOperationException("The exit operation has no confirmed acknowledgment.");
+        if (operation.Type != GateOperationType.Exit || operation.TicketIdSnapshot is not Guid ticketId || ticketId == Guid.Empty)
+            throw new InvalidOperationException("Archiving requires an exit operation with a valid ticket.");
 
-        var existing = await db.Repository<TicketArchive>().GetByIdAsync(ticketId, ct);
-        var ticket = await db.FirstOrDefaultWithSpecAsync(new GetTicketForExitArchiveSpec(ticketId), ct);
-        if (existing != null)
+        var confirmedAt = operation.CompletionMode switch
         {
-            if (ticket != null || existing.ExitOperationId != operation.Id)
-                throw new InvalidOperationException($"Inconsistent active or historical records for ticket {ticketId}.");
-            return existing;
-        }
-        if (ticket is null)
-            throw new InvalidOperationException($"Active ticket {ticketId} was not found.");
+            GateOperationCompletionMode.Hardware when operation.Status == GateOperationStatus.Acknowledged &&
+                operation.AckStatusCode == 0 && operation.AcknowledgedAtUtc is DateTime acknowledgedAt => acknowledgedAt,
+            GateOperationCompletionMode.Software when operation.Status == GateOperationStatus.Completed &&
+                operation.CompletedAtUtc is DateTime completedAt && operation.DispatchStartedAtUtc is null &&
+                operation.PublishedAtUtc is null && operation.AcknowledgedAtUtc is null && operation.AckStatusCode is null => completedAt,
+            _ => throw new InvalidOperationException("Archiving requires valid exit confirmation.")
+        };
 
-        ticket.CompleteExit(operation.GateId, clock.ToBusinessTime(acknowledgedAt));
-        var archive = TicketArchive.CreateFromTicket(ticket, operation.Id);
-        await db.Repository<TicketArchive>().AddAsync(archive, ct);
-        db.Repository<Ticket>().Delete(ticket);
-        return archive;
+        var archive = await db.Repository<TicketArchive>().GetByIdAsync(ticketId, ct);
+        var ticket = await db.FirstOrDefaultWithSpecAsync(new GetTicketForExitArchiveSpec(ticketId), ct);
+        if (archive != null)
+        {
+            if (ticket != null || archive.ExitOperationId != operation.Id)
+                throw new InvalidOperationException($"Inconsistent active or historical records for ticket {ticketId}.");
+        }
+        else
+        {
+            if (ticket is null)
+                throw new InvalidOperationException($"Active ticket {ticketId} was not found.");
+
+            ticket.CompleteExit(operation.GateId, clock.ToBusinessTime(confirmedAt));
+            archive = TicketArchive.CreateFromTicket(ticket, operation.Id);
+            await db.Repository<TicketArchive>().AddAsync(archive, ct);
+            db.Repository<Ticket>().Delete(ticket);
+        }
+
+        var gate = await db.Repository<ParkingGate>().GetByIdAsync(operation.GateId, ct);
+        return new()
+        {
+            TicketId = archive.Id,
+            GateId = operation.GateId,
+            UserId = operation.UserId ?? archive.UserId,
+            ExitDate = archive.EndDate,
+            GateNumber = gate?.GateNumber.ToString() ?? string.Empty
+        };
     }
 }

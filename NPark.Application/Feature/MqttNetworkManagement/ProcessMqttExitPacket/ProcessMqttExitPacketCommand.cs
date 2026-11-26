@@ -43,6 +43,6 @@ namespace NPark.Application.Feature.MqttNetworkManagement.ProcessMqttExitPacket
 
         public string? ErrorMessage { get; init; }
 
-        public bool WorkflowSucceeded => IsValidForExit && TicketExited && GateOpened;
+        public bool WorkflowSucceeded => IsValidForExit && TicketExited;
     }
 }

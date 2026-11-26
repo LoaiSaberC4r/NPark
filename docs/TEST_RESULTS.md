@@ -2,6 +2,102 @@
 
 The solution targets .NET 8 and uses the existing EF Core SQL Server stack. Verification used a local SQL Server Express instance with disposable databases and a dedicated loopback Mosquitto listener. No production database or physical gate was used.
 
+## Software-confirmed exits, November 26, 2026
+
+The review baseline and both remote `master` references resolved to `4f3f89252660655aceb2596f6b96487be7b6c463`. Verification used SDK `8.0.413`, EF Core tools `9.0.10`, disposable databases on local SQL Server Express, and Mosquitto bound to `127.0.0.1:28883`. Tests that exercised unavailable MQTT used loopback port `1`. Hardware confirmation used a protocol simulator on the loopback broker.
+
+### Release build and tests
+
+| Command | Exit code | Output |
+|---|---:|---|
+| `dotnet restore NPark.sln` | 0 | Restored the solution. Reported 14 existing NuGet version and advisory warnings. |
+| `dotnet build NPark.sln --no-restore --configuration Release` | 0 | Build succeeded with 17 warnings and 0 errors on the final build. Warnings were the existing NuGet resolution and advisory warnings and xUnit analyzer findings. |
+| `dotnet test NPark.sln --no-build --configuration Release --logger "console;verbosity=detailed" --logger "trx;LogFileName=software-exit-verified.trx" --results-directory <verification-directory>` | 0 | 75 passed, 0 failed, 0 skipped. VSTest reported 8.2645 minutes. |
+| `git diff --check` and `git diff --cached --check` | 0 | No whitespace errors. |
+
+The migration test initially needed a required `CreatedOnUtc` value in its pre-migration seed. The first full run also exposed hardware tests inheriting the shipped Software setting. The corrected fixture selects Hardware explicitly for those cases. The final run used the settings for both modes and passed the complete suite.
+
+### Coverage and observations
+
+| Area | Verified behavior |
+|---|---|
+| REST authorization and replay | HTTP 200 for an eligible paid visitor during broker and ACK subscription unavailability, including when a different operation reserved the controller. Anonymous requests are rejected. A conflicting request ID returns HTTP 409. Concurrent requests archive one ticket and emit one logical exit notification. |
+| MQTT QR processing and restart | An eligible subscriber was archived through an incoming QR message. The capture reported `ticketExited: true`, `gateOpened: false`, and `workflowSucceeded: true`. The loopback monitor observed zero outbound B1 frames during software exit and its subsequent restart. The publisher spy recorded zero calls for disabled legacy exits and the subsequent fresh software exit. |
+| Eligibility and finance | Unpaid base fees, unpaid sanctions, expired exit validity, pending entry confirmation, and an invalid gate blocked exit. An overnight renewal preserved the payment through an injected archive write failure. The operation and archive rolled back, retry reused the payment, and supervisor settlement found both financial records. |
+| Operation audit | Software completion left dispatch, publication, and ACK evidence null. Late ACKs left the software operation unchanged. Entry, Manual, and LockCardButton rejected software completion. |
+| Legacy recovery and rollback | An unsent hardware exit failed with `GateExitMqttDisabled`. Published or claimed attempts kept timeout or uncertain outcomes. The acknowledged legacy exit archived using its persisted ACK. After a configuration restart in Hardware mode, the next exit published B1 and archived after the simulated matching ACK. |
+| Notifications and entrance | The notification callback read the archive and completed operation from a new SQL connection. Injected SignalR failure left the archive committed and replay emitted no duplicate notifications. Entrance, automatic visitor, and subscriber B2 regressions ran with exit MQTT disabled. |
+
+### Migration and deployment checks
+
+- `dotnet ef migrations has-pending-model-changes --project NPark.Infrastructure --startup-project NPark.Api --context NParkDBContext --configuration Release --no-build` exited `0` with no pending model changes.
+- `dotnet ef migrations script 20261125135033_AddLprAndParkingEventIntegration 20261126140423_AddGateOperationCompletionMode --idempotent --project NPark.Infrastructure --startup-project NPark.Api --context NParkDBContext --configuration Release --no-build --output software-exit-migration.sql` exited `0`. The script adds one non-null `int` column with default `0` and records the migration.
+- `dotnet ef database update 20261125135033_AddLprAndParkingEventIntegration --project NPark.Infrastructure --startup-project NPark.Api --context NParkDBContext --configuration Release --no-build --connection <disposable-local-connection>` prepared an isolated SQL database. `sqlcmd -S .\SQLEXPRESS -d <disposable-database> -E -C -b -i software-exit-migration.sql` exited `0` on both runs. The database reported one history row for the migration and one non-null `CompletionMode` column. The legacy-row test also verifies existing command IDs, both filtered reservation indexes, and the next command allocation.
+
+### Captured API responses
+
+Software exit returned HTTP 200. Two competing REST requests and a replay returned the same logical operation. The payload below was captured from the SQL Server test host.
+
+```json
+{
+  "operationId": "676e93e4-01be-4528-834d-f21aff99f648",
+  "ticketId": "71a7c2c5-6377-40e8-9c0c-a2241ffd1f41",
+  "gateId": "ecf88381-8812-464b-c86b-08df4bc788e1",
+  "commandId": "2",
+  "controllerId": 54321,
+  "operationType": "Exit",
+  "status": "Completed",
+  "isAcknowledged": false,
+  "ticketExited": true,
+  "archived": true,
+  "acknowledgedAtUtc": null,
+  "publishedAtUtc": null,
+  "ackStatusCode": null,
+  "createdAtUtc": "2026-11-25T10:00:00Z",
+  "completedAtUtc": "2026-11-25T10:00:00Z",
+  "retryAllowed": false,
+  "requiresReconciliation": false,
+  "reasonCode": null,
+  "topic": "",
+  "payload": "",
+  "reasonMessage": null,
+  "isAutomaticVisitorEntry": false,
+  "completionMode": "Software"
+}
+```
+
+After switching back to Hardware mode, the new exit returned HTTP 202 with these fields. The loopback device received the frame, sent its matching ACK, and the status endpoint then returned HTTP 200 with `status: "Completed"`, `ackStatusCode: 0`, `isAcknowledged: true`, `ticketExited: true`, and `archived: true` for the same operation.
+
+```json
+{
+  "operationId": "440ef61d-1e0c-4c92-97e1-e15ecf1d92b0",
+  "ticketId": "009f0e14-38f8-48ec-aa8c-8a14562238a3",
+  "gateId": "3fca7e5b-535e-4ba2-c869-08df4bc788e1",
+  "commandId": "2",
+  "controllerId": 54321,
+  "operationType": "Exit",
+  "status": "Pending",
+  "isAcknowledged": false,
+  "ticketExited": false,
+  "archived": false,
+  "acknowledgedAtUtc": null,
+  "publishedAtUtc": null,
+  "ackStatusCode": null,
+  "createdAtUtc": "2026-11-25T10:00:00Z",
+  "completedAtUtc": null,
+  "retryAllowed": false,
+  "requiresReconciliation": false,
+  "reasonCode": null,
+  "topic": "sub/network/54321",
+  "payload": "7BD4310000000000000002AEBEC1B17D",
+  "reasonMessage": null,
+  "isAutomaticVisitorEntry": false,
+  "completionMode": "Hardware"
+}
+```
+
+The verification scope used local SQL Server and simulated controllers. Production IIS configuration, live broker permissions, and operation of the external gate button remain site rollout checks.
+
 ## Results
 
 | Check | Result |

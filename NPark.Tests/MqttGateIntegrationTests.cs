@@ -353,6 +353,7 @@ public sealed partial class ParkingWorkflowIntegrationTests
         {
             public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
             public bool IsEnabled(LogLevel logLevel) => category.Contains(".Services.Mqtt") ||
+                category.EndsWith(".GateOperationNotifier", StringComparison.Ordinal) ||
                 category.EndsWith(".GateOperationTransitions", StringComparison.Ordinal) ||
                 category.EndsWith(".LprCaptureArchiveService", StringComparison.Ordinal);
             public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,

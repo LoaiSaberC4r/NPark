@@ -34,6 +34,8 @@ public sealed class GateOperationTransitions(IUnitOfWork db, ParkingBusinessCloc
             x.CommandId == (long)ack.CommandId && x.ControllerId == ack.ControllerId), ct);
         if (operation is null)
             return IgnoreAck(ack, "NoMatchingOperation");
+        if (operation.CompletionMode != GateOperationCompletionMode.Hardware)
+            return IgnoreAck(ack, "OperationNotAwaitingAck", operation);
 
         var previous = Snapshot(operation);
         if (operation.Status == GateOperationStatus.Acknowledged)
@@ -66,14 +68,17 @@ public sealed class GateOperationTransitions(IUnitOfWork db, ParkingBusinessCloc
         var operation = await db.Repository<GateOperation>().GetByIdAsync(command.OperationId, ct);
         if (operation is null || command.GateId.HasValue && operation.GateId != command.GateId)
             return Result<GateTransitionResult>.Fail(new Error("GateOperationNotFound", "Gate operation not found.", ErrorType.NotFound));
+        if (operation.CompletionMode != GateOperationCompletionMode.Hardware)
+            return Unchanged();
 
         var previous = Snapshot(operation);
         var now = clock.UtcNow;
         var dispatchDeadline = operation.CreatedAtUtc.AddSeconds(options.Value.DispatchWaitTimeoutSeconds);
+        var exitMqttDisabled = operation.Type == GateOperationType.Exit && !options.Value.EnableExitGateMqtt;
         switch (command.Transition)
         {
             case GateTransition.Dispatch when operation.Status == GateOperationStatus.Pending &&
-                !operation.DispatchStartedAtUtc.HasValue:
+                !operation.DispatchStartedAtUtc.HasValue && !exitMqttDisabled:
                 if (now >= dispatchDeadline)
                 {
                     operation.MarkDispatchExpired();
@@ -96,6 +101,8 @@ public sealed class GateOperationTransitions(IUnitOfWork db, ParkingBusinessCloc
                 var attempted = operation.PublishedAtUtc ?? operation.DispatchStartedAtUtc;
                 if (attempted.HasValue && now >= AckDeadline(attempted.Value))
                     operation.MarkUncertain(timeout: operation.PublishedAtUtc.HasValue);
+                else if (!attempted.HasValue && exitMqttDisabled)
+                    operation.CancelUndispatchedHardwareExit();
                 else if (!attempted.HasValue && now >= dispatchDeadline)
                     operation.MarkDispatchExpired();
                 if (operation.Status != previous.Status)
@@ -115,18 +122,7 @@ public sealed class GateOperationTransitions(IUnitOfWork db, ParkingBusinessCloc
     {
         TicketExitedNotification? notification = null;
         if (operation.Type == GateOperationType.Exit)
-        {
-            var archive = await archives.CompleteAsync(operation, ct);
-            var gate = await db.Repository<ParkingGate>().GetByIdAsync(operation.GateId, ct);
-            notification = new()
-            {
-                TicketId = archive.Id,
-                GateId = operation.GateId,
-                UserId = operation.UserId ?? archive.UserId,
-                ExitDate = archive.EndDate,
-                GateNumber = gate?.GateNumber.ToString() ?? string.Empty
-            };
-        }
+            notification = await archives.CompleteAsync(operation, ct);
         else if (operation.Type == GateOperationType.Entry)
         {
             var ticket = await db.Repository<Ticket>().GetByIdAsync(operation.TicketIdSnapshot!.Value, ct)

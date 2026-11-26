@@ -117,6 +117,11 @@ namespace NPark.Infrastructure.Migrations
                     b.Property<DateTime?>("CompletedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("CompletionMode")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
                     b.Property<int>("ControllerId")
                         .HasColumnType("int");
 

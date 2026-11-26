@@ -4,7 +4,7 @@
 
 `POST /api/Ticket/ExitTicket` takes the existing `{ "ticketId": "…" }` body. `POST /api/Gate/open` takes `{ "controllerId": "2", "operationType": "Entry", "ticketId": "…" }` or `{ "controllerId": "2", "operationType": "Manual" }`. Ticket-associated exit uses the ticket route. Controller IDs are unsigned 16-bit IDs from the gate's registered control value.
 
-Both routes return an operation. HTTP 202 contains a `Location` header for the pending operation. HTTP 200 carries a terminal operation whose `status` identifies success or failure. Existing validation and authorization errors use the normal problem response. This is a pending exit response.
+Both routes return an operation. HTTP 202 contains a `Location` header for the pending operation. HTTP 200 carries a terminal operation whose `status` identifies success or failure. Existing validation and authorization errors use the normal problem response. A pending hardware exit can return the following fields.
 
 ```json
 {
@@ -13,6 +13,7 @@ Both routes return an operation. HTTP 202 contains a `Location` header for the p
   "commandId": "43",
   "controllerId": 2,
   "operationType": "Exit",
+  "completionMode": "Hardware",
   "status": "Published",
   "isAcknowledged": false,
   "ticketExited": false,
@@ -22,11 +23,45 @@ Both routes return an operation. HTTP 202 contains a `Location` header for the p
 
 - `GET /api/Gate/operations/{operationId}` reads current state. `GET /api/Gate/operations` lists up to 100 recent matching operations. Filters include `ticketId`, `controllerId`, and `status`.
 - Both authorization bodies accept optional `requestId`, a non-empty UUID generated once per deliberate gate action. Send the same UUID, body, and authenticated operator/gate when replaying an HTTP request with an uncertain response. Once accepted, its `operationId` is that UUID and replays return the same operation, including after termination or a gate remap. Reusing the UUID for different request details returns HTTP 409 with `GateRequestIdConflict`. Requests without a UUID retain active-operation deduplication. Only a UUID replay can identify a previously accepted request after unsuccessful termination. A different UUID submitted while the gate or ticket is reserved may receive HTTP 409. Handle the conflict and require a new operator action before sending another request.
-- `Pending` and `Published` reserve the controller and, for ticket operations, the ticket. `Acknowledged` means hardware success is durable and ticket completion may still be pending. It reserves only the ticket. `Completed` indicates success. `Failed`, `TimedOut`, and `Unknown` are unsuccessful terminal attempts with `retryAllowed`, `requiresReconciliation`, `ticketExited`, and `archived` all false.
+- Hardware `Pending` and `Published` operations reserve the controller and, for ticket operations, the ticket. `Acknowledged` means hardware success is durable and ticket completion may still be pending. It reserves only the ticket. `Completed` indicates success. `Failed`, `TimedOut`, and `Unknown` are unsuccessful terminal attempts with `retryAllowed`, `requiresReconciliation`, `ticketExited`, and `archived` all false.
 - `POST /api/Gate/operations/{operationId}/retry` attempts database completion for `Acknowledged` only. Terminal operations return HTTP 409 with `GateFreshRequestRequired`. Start another authorized attempt through the normal endpoint. A completed entry or exit remains protected against repeat execution.
 - `POST /api/Gate/operations/{operationId}/reconcile-non-execution` is an optional audit action for `TimedOut` and `Unknown`. It requires a Supervisor at the selected gate and `{ "evidence": "…" }` with a verified reason. It records the actor, evidence, and time on the original attempt while preserving its status and reason code.
 - Operation reads and actions require the authenticated gate. Gate-scoped clients receive `GateOperationStatusChanged` on `/hubs/notifications`. Treat events as refresh signals and handle duplicates. `TicketExited` follows archive commit. The existing QR capture notification can contain an operation ID while its terminal booleans are false.
-- Clients must preserve `commandId` as a decimal string. `topic` and `payload` describe the binary command as its destination and hex text. ACK and operation timestamps are UTC. Terminal failure responses include a stable `reasonCode` and a localized `reasonMessage`. Codes include `GateDispatchTimeout`, `GateAckTimeout`, `GateDeliveryUnknown`, `GateExecutionFailed`, `GateBusy`, and `GateRejected`.
+- Clients must preserve `commandId` as a decimal string. For hardware operations, `topic` and `payload` describe the command destination and hex text. ACK and operation timestamps are UTC. Terminal failure responses include a stable `reasonCode` and a localized `reasonMessage`. Codes include `GateDispatchTimeout`, `GateAckTimeout`, `GateDeliveryUnknown`, `GateExecutionFailed`, `GateBusy`, `GateRejected`, and `GateExitMqttDisabled`.
+
+### Software-confirmed exits
+
+`GateOperation:EnableExitGateMqtt=false` makes an eligible exit commit and return HTTP 200 synchronously. `completionMode` is an additive string field with values `Hardware` and `Software`. The operation keeps its persisted controller, ticket, gate, operation, and command identifiers. Historical operations report `Hardware`.
+
+```json
+{
+  "operationId": "182c0b45-5c60-4b61-8ba7-847be44b048e",
+  "ticketId": "d027285e-7301-473a-9586-e0ca6ee75e33",
+  "gateId": "a3e7b38d-31a7-499d-a58d-7b8c2b58f158",
+  "commandId": "44",
+  "controllerId": 2,
+  "operationType": "Exit",
+  "status": "Completed",
+  "completionMode": "Software",
+  "isAcknowledged": false,
+  "ticketExited": true,
+  "archived": true,
+  "createdAtUtc": "2026-11-26T10:00:00Z",
+  "publishedAtUtc": null,
+  "acknowledgedAtUtc": null,
+  "completedAtUtc": "2026-11-26T10:00:00Z",
+  "ackStatusCode": null,
+  "retryAllowed": false,
+  "requiresReconciliation": false,
+  "reasonCode": null,
+  "reasonMessage": null,
+  "topic": "",
+  "payload": "",
+  "isAutomaticVisitorEntry": false
+}
+```
+
+An eligible incoming MQTT QR capture reports `isValidForExit: true`, `ticketExited: true`, `gateOpened: false`, `operationStatus: "Completed"`, and `workflowSucceeded: true`, with empty `openGateTopic` and `openGatePayload`. `GateOperationStatusChanged` and `TicketExited` follow the successful archive commit. A replay returns the committed operation without emitting new exit notifications. Software confirmation records a logical business exit. It provides no evidence of physical gate movement or vehicle departure.
 
 ## Eligibility and financial fields
 

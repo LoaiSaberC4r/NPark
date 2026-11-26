@@ -529,6 +529,7 @@ public sealed partial class ParkingWorkflowIntegrationTests
 
     private static Dictionary<string, string?> EntranceSettings(Guid? systemUserId = null) => new()
     {
+        ["GateOperation:EnableExitGateMqtt"] = "false",
         ["SubscriberButtonLock:Enabled"] = "true",
         ["SubscriberButtonLock:SupportedControllerIds:0"] = EntranceController.ToString(),
         ["MqttParkingEvents:Enabled"] = systemUserId.HasValue.ToString(),

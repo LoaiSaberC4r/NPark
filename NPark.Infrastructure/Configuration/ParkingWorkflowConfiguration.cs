@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using NPark.Domain.Entities;
+using NPark.Domain.Enums;
 
 namespace NPark.Infrastructure.Configuration;
 
@@ -13,6 +14,7 @@ internal sealed class GateOperationConfiguration : IEntityTypeConfiguration<Gate
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.CommandId).HasDefaultValueSql("NEXT VALUE FOR [GateCommandIds]").ValueGeneratedOnAdd();
+        builder.Property(x => x.CompletionMode).HasDefaultValue(GateOperationCompletionMode.Hardware);
         builder.Property(x => x.RowVersion).IsRowVersion();
         builder.Property(x => x.ReconciliationEvidence).HasMaxLength(500);
         builder.Property(x => x.ErrorCode).HasMaxLength(64);

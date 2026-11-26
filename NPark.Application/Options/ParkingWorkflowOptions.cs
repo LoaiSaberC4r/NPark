@@ -15,6 +15,7 @@ public sealed class GateOperationOptions
     public int DispatchWaitTimeoutSeconds { get; set; } = 10;
     public int AckTimeoutSeconds { get; set; } = 3;
     public bool RequireAcknowledgment { get; set; } = true;
+    public bool EnableExitGateMqtt { get; set; } = true;
     public int RecoveryIntervalSeconds { get; set; } = 2;
 
     public string CommandTopic(int controller) => CommandTopicTemplate.Replace(
