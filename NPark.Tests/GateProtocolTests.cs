@@ -7,6 +7,44 @@ namespace NPark.Tests;
 
 public sealed class GateProtocolTests
 {
+    [Theory]
+    [InlineData(GateOperationType.Entry)]
+    [InlineData(GateOperationType.Manual)]
+    [InlineData(GateOperationType.LockCardButton)]
+    public void OtherOperationsCannotUseSoftwareConfirmation(GateOperationType type)
+    {
+        var operation = new GateOperation(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null, 1, type, DateTime.UnixEpoch);
+        Assert.Throws<InvalidOperationException>(() => operation.CompleteSoftwareExit(DateTime.UnixEpoch));
+        Assert.Throws<InvalidOperationException>(() => new GateOperation(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null,
+            1, type, DateTime.UnixEpoch, completionMode: GateOperationCompletionMode.Software));
+    }
+
+    [Fact]
+    public void SoftwareCompletionRequiresItsOwnPendingTicketReservationAndNeverAcceptsHardwareEvidence()
+    {
+        var now = DateTime.UnixEpoch;
+        var ticketId = Guid.NewGuid();
+        var gateId = Guid.NewGuid();
+        var hardwareExit = new GateOperation(Guid.NewGuid(), ticketId, gateId, null, 1, GateOperationType.Exit, now);
+        Assert.Throws<InvalidOperationException>(() => hardwareExit.CompleteSoftwareExit(now));
+        Assert.Throws<InvalidOperationException>(() => new GateOperation(Guid.NewGuid(), Guid.Empty, gateId, null, 1,
+            GateOperationType.Exit, now, completionMode: GateOperationCompletionMode.Software));
+
+        var softwareExit = new GateOperation(Guid.NewGuid(), ticketId, gateId, null, 1, GateOperationType.Exit, now,
+            completionMode: GateOperationCompletionMode.Software);
+        Assert.Equal(ticketId, softwareExit.ReservedTicketId);
+        Assert.Null(softwareExit.ReservedControllerId);
+        Assert.Throws<InvalidOperationException>(() => softwareExit.BeginDispatch(now));
+        Assert.False(softwareExit.Acknowledge(0, now));
+        Assert.Throws<InvalidOperationException>(() => softwareExit.Complete(now));
+        softwareExit.CompleteSoftwareExit(now);
+        Assert.Equal(GateOperationStatus.Completed, softwareExit.Status);
+        Assert.Equal(now, softwareExit.CompletedAtUtc);
+        Assert.Null(softwareExit.ReservedTicketId);
+        Assert.Null(softwareExit.AckStatusCode);
+        Assert.Throws<InvalidOperationException>(() => softwareExit.CompleteSoftwareExit(now.AddSeconds(1)));
+    }
+
     [Fact]
     public void EncodesTheApprovedOpenFrame()
     {

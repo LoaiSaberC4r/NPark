@@ -672,6 +672,9 @@
   <data name="ParkingWorkflow_GateDispatchTimeout" xml:space="preserve">
     <value>The gate command could not be sent in time. You can request a new attempt.</value>
   </data>
+  <data name="ParkingWorkflow_GateExitMqttDisabled" xml:space="preserve">
+    <value>The exit gate command was canceled before dispatch. Submit a new exit request.</value>
+  </data>
   <data name="ParkingWorkflow_GateDeliveryUnknown" xml:space="preserve">
     <value>Gate command delivery could not be confirmed. Check the gate before requesting a new attempt.</value>
   </data>

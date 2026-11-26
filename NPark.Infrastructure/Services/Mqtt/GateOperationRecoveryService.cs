@@ -24,7 +24,7 @@ public interface IGateOperationDispatcher
 internal sealed class GateOperationRecoveryService(IServiceScopeFactory scopes, IMqttPublisher publisher,
     GateAckSubscriptionState ackSubscription, IOptions<GateOperationOptions> options, IOptions<MqttOptions> brokerOptions,
     IOptions<SubscriberButtonLockOptions> locks, IOptions<AutomaticVisitorEntryOptions> visitors,
-    TimeProvider time, ILogger<GateOperationRecoveryService> logger)
+    TimeProvider time, GateOperationNotifier notifications, ILogger<GateOperationRecoveryService> logger)
     : BackgroundService, IGateOperationDispatcher
 {
     private bool publisherUnavailable;
@@ -61,9 +61,12 @@ internal sealed class GateOperationRecoveryService(IServiceScopeFactory scopes, 
         var now = time.GetUtcNow().UtcDateTime;
         var ackCutoff = now.AddSeconds(-options.Value.AckTimeoutSeconds);
         var dispatchCutoff = now.AddSeconds(-options.Value.DispatchWaitTimeoutSeconds);
+        var enableExitGateMqtt = options.Value.EnableExitGateMqtt;
         var candidates = await db.Set<GateOperation>().AsNoTracking()
+            .Where(op => op.CompletionMode == GateOperationCompletionMode.Hardware)
             .Where(op => op.Status == GateOperationStatus.Pending &&
-                    (op.DispatchStartedAtUtc == null && op.CreatedAtUtc <= dispatchCutoff || op.DispatchStartedAtUtc <= ackCutoff) ||
+                    (op.DispatchStartedAtUtc == null && (op.CreatedAtUtc <= dispatchCutoff ||
+                        (!enableExitGateMqtt && op.Type == GateOperationType.Exit)) || op.DispatchStartedAtUtc <= ackCutoff) ||
                 op.Status == GateOperationStatus.Published && op.PublishedAtUtc <= ackCutoff)
             .Select(op => new { op.Id, op.Status })
             .ToListAsync(ct);
@@ -95,9 +98,12 @@ internal sealed class GateOperationRecoveryService(IServiceScopeFactory scopes, 
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NParkDBContext>();
         var cutoff = time.GetUtcNow().UtcDateTime.AddSeconds(-options.Value.DispatchWaitTimeoutSeconds);
+        var enableExitGateMqtt = options.Value.EnableExitGateMqtt;
         var lockControllers = locks.Value.Enabled ? locks.Value.SupportedControllerIds : [];
         var visitorControllers = visitors.Value.Enabled ? visitors.Value.SupportedControllerIds : [];
         var ids = await db.Set<GateOperation>().AsNoTracking()
+            .Where(op => op.CompletionMode == GateOperationCompletionMode.Hardware &&
+                (enableExitGateMqtt || op.Type != GateOperationType.Exit))
             .Where(op => op.Status == GateOperationStatus.Pending && op.DispatchStartedAtUtc == null && op.CreatedAtUtc > cutoff)
             .Where(op => (op.Type != GateOperationType.LockCardButton || lockControllers.Contains(op.ControllerId)) &&
                 (!op.IsAutomaticVisitorEntry || visitorControllers.Contains(op.ControllerId)))
@@ -193,7 +199,8 @@ internal sealed class GateOperationRecoveryService(IServiceScopeFactory scopes, 
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NParkDBContext>();
-        var ids = await db.Set<GateOperation>().AsNoTracking().Where(op => op.Status == GateOperationStatus.Acknowledged)
+        var ids = await db.Set<GateOperation>().AsNoTracking().Where(op =>
+                op.CompletionMode == GateOperationCompletionMode.Hardware && op.Status == GateOperationStatus.Acknowledged)
             .OrderBy(op => op.CreatedAtUtc).Select(op => op.Id).ToListAsync(ct);
         await ProcessBatchAsync(ids, async (id, token) => await RetryAsync(id, null, token), ct);
     }
@@ -270,17 +277,6 @@ internal sealed class GateOperationRecoveryService(IServiceScopeFactory scopes, 
             message, operation.OperationId, operation.CommandId, operation.ControllerId, operation.TicketId, operation.GateId,
             operation.OperationType, change.PreviousStatus, operation.Status, operation.ReasonCode, change.ControllerReleased,
             change.TicketReleased, operation.AckStatusCode);
-        try
-        {
-            await using var scope = scopes.CreateAsyncScope();
-            var realtime = scope.ServiceProvider.GetRequiredService<IRealtimeNotifier>();
-            var gateStatus = realtime.NotifyGateOperationAsync(operation);
-            var ticketStatus = change.Exit is { } exit ? realtime.NotifyTicketExitedAsync(exit) : Task.CompletedTask;
-            await Task.WhenAll(gateStatus, ticketStatus).WaitAsync(TimeSpan.FromSeconds(1));
-        }
-        catch (Exception error)
-        {
-            logger.LogWarning(error, "Post-commit notification failed for gate operation {OperationId}", operation.OperationId);
-        }
+        await notifications.NotifyAsync(operation, change.Exit);
     }
 }

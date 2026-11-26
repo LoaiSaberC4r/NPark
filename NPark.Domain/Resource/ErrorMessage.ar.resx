@@ -674,6 +674,9 @@
   <data name="ParkingWorkflow_GateDispatchTimeout" xml:space="preserve">
     <value>تعذر إرسال أمر البوابة في الوقت المحدد. يمكنك المحاولة مرة أخرى.</value>
   </data>
+  <data name="ParkingWorkflow_GateExitMqttDisabled" xml:space="preserve">
+    <value>تم إلغاء أمر بوابة الخروج قبل إرساله. أرسل طلب خروج جديداً.</value>
+  </data>
   <data name="ParkingWorkflow_GateDeliveryUnknown" xml:space="preserve">
     <value>تعذر تأكيد وصول أمر البوابة. تحقق من حالة البوابة قبل المحاولة مرة أخرى.</value>
   </data>

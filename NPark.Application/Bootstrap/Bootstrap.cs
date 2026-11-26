@@ -39,6 +39,7 @@ namespace NPark.Application.Bootstrap
             services.AddScoped<SanctionCatalogSelection>();
             services.AddScoped<ITicketExitEligibilityService, TicketExitEligibilityService>();
             services.AddScoped<ITicketArchiveService, TicketArchiveService>();
+            services.AddSingleton<GateOperationNotifier>();
             services.AddScoped<GateOperationService>();
             services.AddScoped<SubscriberEligibilityService>();
             services.AddScoped<TicketIssuanceService>();

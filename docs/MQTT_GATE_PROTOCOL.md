@@ -16,7 +16,7 @@ Command example for controller 2 and command 43 is `7B 00 02 00 00 00 00 00 00 0
 | `02` | Gate busy |
 | `03` | Command rejected |
 
-SQL Server allocates positive BIGINT command IDs from a noncycling sequence. MQTT broker acknowledgment confirms delivery to the broker. NPark accepts operational success when a matching hardware ACK with code `00` is durably recorded. The approved convention does not require a physical sensor confirmation.
+SQL Server allocates positive BIGINT command IDs from a noncycling sequence. MQTT broker acknowledgment confirms delivery to the broker. In Hardware mode, NPark accepts operational success when a matching hardware ACK with code `00` is durably recorded. The ACK records the controller's reported execution. It provides no physical sensor confirmation.
 
 ## Broker configuration
 
@@ -40,15 +40,38 @@ Set `Mqtt__ClientId` to a distinct, stable value for every API process that can 
 | `Acknowledged` | Released in the ACK transaction | Until completion commits |
 | `Completed`, `Failed`, `TimedOut`, `Unknown` | Released | Released |
 
-Manual operations have no ticket reservation. A valid hardware error ACK commits `Failed`. An unclaimed command can be dispatched after a restart if the publisher and ACK subscription are ready before `GateOperation:DispatchWaitTimeoutSeconds` (default 10 seconds from creation). Unclaimed expiry is `TimedOut` with `GateDispatchTimeout`. A committed dispatch claim is used once. The publisher has `GateOperation:AckTimeoutSeconds` (default 3 seconds) from the claim to settle the attempt. A thrown, canceled, or abandoned publish becomes `Unknown` with `GateDeliveryUnknown` after the attempt settles or its SQL dispatch lock is gone. A published operation has the configured ACK interval from `PublishedAtUtc` and becomes `TimedOut` with `GateAckTimeout` on expiry. The worker checks deadlines at `GateOperation:RecoveryIntervalSeconds` (default 2 seconds).
+The table describes hardware operations. Manual operations have no ticket reservation. A valid hardware error ACK commits `Failed`. An unclaimed command can be dispatched after a restart if dispatch is enabled and the publisher and ACK subscription are ready before `GateOperation:DispatchWaitTimeoutSeconds` (default 10 seconds from creation). Unclaimed expiry is `TimedOut` with `GateDispatchTimeout`. A committed dispatch claim is used once. The publisher has `GateOperation:AckTimeoutSeconds` (default 3 seconds) from the claim to settle the attempt. A thrown, canceled, or abandoned publish becomes `Unknown` with `GateDeliveryUnknown` after the attempt settles or its SQL dispatch lock is gone. A published operation has the configured ACK interval from `PublishedAtUtc` and becomes `TimedOut` with `GateAckTimeout` on expiry. The worker checks deadlines at `GateOperation:RecoveryIntervalSeconds` (default 2 seconds).
 
 An ACK must match the controller and command and be processed before the applicable deadline. The exact deadline belongs to expiry. Late ACKs are logged and leave terminal execution outcomes unchanged. A successful ACK releases the controller before ticket confirmation or archival. Recovery can repeat the database completion transaction after a failure while preserving the ticket reservation and the original ACK. The timeout and unknown outcomes can follow actual relay execution. A newly authorized request may move the relay again if the earlier command did execute.
 
 An active ticket operation stays bound to its original controller after a gate reassignment. The exit endpoint returns HTTP 409 with `GateOperationControllerChanged` and the existing operation ID. A fresh request after unsuccessful termination uses the current mapping. The ACK subscriber must receive a QoS 1 or 2 subscription grant before recovery can dispatch. A disconnect clears readiness. A failed ACK database write leaves the MQTT delivery unconfirmed so the persistent session can redeliver it within the applicable deadline.
 
-## Deployment
+## Software-confirmed exits
 
-Stop all pre-release API and gate-worker instances that share the database before starting this version. Disable overlapping IIS recycling during the rollout and enable traffic after the updated instances start. Startup honors `Database:ApplyMigrationsOnStartup`. After the schema check and before starting any MQTT worker, an idempotent SQL transaction clears both reservation fields for terminal operations and clears the controller reservation for successful `Acknowledged` records. It preserves history and ticket reservations awaiting completion. This release uses the existing schema, filtered unique indexes, row versions, and command ID sequence. Apply the same coordinated stop procedure if rolling back to a release with the previous reservation rules.
+The shipped `NPark.Api/appsettings.json` sets `GateOperation:EnableExitGateMqtt` to `false`. The option defaults to `true` when absent. Development and Testing inherit the shipped value unless their environment overrides it. The standard override is `GateOperation__EnableExitGateMqtt`. `GateOperation:RequireAcknowledgment` remains `true`.
+
+| Effective value | Ticket exit lifecycle |
+|---|---|
+| `true`, or absent | `Pending → Published → Acknowledged → Completed`, subject to the existing hardware deadlines and failure states |
+| `false` | `Pending → Completed` in the authorization transaction, with a ticket reservation for the duration of the transaction and no controller reservation |
+
+Both the REST exit and the incoming MQTT QR path use the selected mode. In Software mode, the logical business exit is recorded in SQL with no outgoing B1, broker connectivity dependency, or hardware ACK. Operators use the external gate button independently. The archived record provides no evidence of physical gate movement or actual vehicle departure. The `TicketExited` notification follows commit, and archive time uses the Cairo business clock. Entry, Manual, automatic visitor entry and subscriber B2 operations use hardware confirmation.
+
+The database records the completion mode for each operation. After switching to Software mode, already acknowledged hardware exits complete from their genuine ACK. Recovery marks a pending hardware exit with no dispatch claim `Failed` with `GateExitMqttDisabled` and releases its reservations. A claimed or published hardware command keeps its original ACK deadline and may finish from a matching in-window ACK. Otherwise it reaches `Unknown` or `TimedOut`, as applicable. Recovery never retransmits a claimed command. Replaying an old request returns its original operation. An eligible ticket with a failed or expired hardware attempt can be submitted as a fresh request with a new request ID.
+
+## IIS deployment and rollback
+
+1. Quiesce exit traffic. Inspect `GateOperations` for ticket exits in `Pending`, `Published`, or `Acknowledged`, including dispatch and ACK timestamps. Where possible, let acknowledged operations archive before cutover and record the status of in-flight hardware attempts.
+2. Disable overlapping recycling for the IIS app pool. Stop every API instance and gate worker sharing the database, including older workers, and confirm they have stopped before changing mode. Use a consistent effective setting on every instance.
+3. Back up the target database and apply `20261126140423_AddGateOperationCompletionMode`. The upgrade adds `GateOperations.CompletionMode int NOT NULL DEFAULT 0`, which reads all old operations as `Hardware`. `Software` is stored as `1`. The migration preserves the filtered reservation indexes, `RowVersion`, and `GateCommandIds`. For a database at `20261125135033_AddLprAndParkingEventIntegration`, generate the idempotent SQL with the command below and apply it using the site's normal database procedure. With earlier schemas, apply all pending migrations in order. Alternatively, use a designated startup migration instance where permitted by `Database:ApplyMigrationsOnStartup`. The base configuration disables startup migration and Development and Testing enable it. Start the rest of the fleet after migration succeeds.
+4. Verify the deployed configuration and any higher-precedence IIS environment variables. For an explicit override, place `<environmentVariable name="GateOperation__EnableExitGateMqtt" value="false" />` under the ASP.NET Core Module's `<aspNetCore><environmentVariables>` section in `web.config`. Start the application and verify startup reservation cleanup and legacy recovery before restoring exit traffic.
+5. Verify entrance MQTT operation and watch outbound messages during eligible REST and QR exits. A software exit returns `Completed` and archives with no outgoing exit B1. Inspect the post-commit notification and confirm that the independent gate button is operational under the site's normal procedure.
+
+```powershell
+dotnet ef migrations script 20261125135033_AddLprAndParkingEventIntegration 20261126140423_AddGateOperationCompletionMode --idempotent --project NPark.Infrastructure --startup-project NPark.Api --context NParkDBContext --configuration Release --output software-exit-migration.sql
+```
+
+To restore hardware control, quiesce exit traffic and stop the IIS workers using the same procedure. Set `GateOperation:EnableExitGateMqtt=true` or the equivalent IIS override and restart. New exits follow the MQTT and ACK workflow. Keep the column and completed software-exit records during rollback. Review unresolved hardware attempts before accepting new exit requests.
 
 Before rollout, verify the simulator and compatible physical firmware, then test entry, same-day and overdue exit, timeout and late ACK, restart, database recovery, and manual open. The simulator covers the protocol paths listed in [test results](TEST_RESULTS.md).
 

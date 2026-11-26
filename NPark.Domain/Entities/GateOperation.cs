@@ -8,16 +8,23 @@ public sealed class GateOperation : Entity<Guid>
     private GateOperation() { }
 
     public GateOperation(Guid id, Guid? ticketId, Guid gateId, Guid? userId,
-        ushort controllerId, GateOperationType type, DateTime utc, bool isAutomaticVisitorEntry = false)
+        ushort controllerId, GateOperationType type, DateTime utc, bool isAutomaticVisitorEntry = false,
+        GateOperationCompletionMode completionMode = GateOperationCompletionMode.Hardware)
     {
+        if (completionMode != GateOperationCompletionMode.Hardware &&
+            (completionMode != GateOperationCompletionMode.Software || type != GateOperationType.Exit ||
+             ticketId is null || ticketId == Guid.Empty || isAutomaticVisitorEntry))
+            throw new InvalidOperationException("Software confirmation requires a ticket exit operation.");
+
         Id = id;
         TicketIdSnapshot = ticketId;
         ReservedTicketId = ticketId;
         GateId = gateId;
         UserId = userId;
         ControllerId = controllerId;
-        ReservedControllerId = controllerId;
+        ReservedControllerId = completionMode == GateOperationCompletionMode.Hardware ? controllerId : null;
         Type = type;
+        CompletionMode = completionMode;
         IsAutomaticVisitorEntry = isAutomaticVisitorEntry;
         Status = GateOperationStatus.Pending;
         CreatedAtUtc = utc;
@@ -31,6 +38,7 @@ public sealed class GateOperation : Entity<Guid>
     public Guid? UserId { get; private set; }
     public int ControllerId { get; private set; }
     public GateOperationType Type { get; private set; }
+    public GateOperationCompletionMode CompletionMode { get; private set; }
     public bool IsAutomaticVisitorEntry { get; private set; }
     public GateOperationStatus Status { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
@@ -48,7 +56,8 @@ public sealed class GateOperation : Entity<Guid>
 
     public void BeginDispatch(DateTime utc)
     {
-        if (Status != GateOperationStatus.Pending || DispatchStartedAtUtc.HasValue)
+        if (CompletionMode != GateOperationCompletionMode.Hardware ||
+            Status != GateOperationStatus.Pending || DispatchStartedAtUtc.HasValue)
             throw new InvalidOperationException("Only an unclaimed pending operation can be dispatched.");
         DispatchStartedAtUtc = utc;
     }
@@ -63,16 +72,29 @@ public sealed class GateOperation : Entity<Guid>
 
     public void MarkDispatchExpired()
     {
-        if (Status != GateOperationStatus.Pending || DispatchStartedAtUtc.HasValue)
+        if (CompletionMode != GateOperationCompletionMode.Hardware ||
+            Status != GateOperationStatus.Pending || DispatchStartedAtUtc.HasValue)
             return;
         Status = GateOperationStatus.TimedOut;
         ErrorCode = "GateDispatchTimeout";
         Release();
     }
 
+    public void CancelUndispatchedHardwareExit()
+    {
+        if (CompletionMode != GateOperationCompletionMode.Hardware || Type != GateOperationType.Exit ||
+            Status != GateOperationStatus.Pending || DispatchStartedAtUtc.HasValue)
+            return;
+
+        Status = GateOperationStatus.Failed;
+        ErrorCode = "GateExitMqttDisabled";
+        Release();
+    }
+
     public void MarkUncertain(bool timeout)
     {
-        if (Status is not (GateOperationStatus.Pending or GateOperationStatus.Published))
+        if (CompletionMode != GateOperationCompletionMode.Hardware ||
+            Status is not (GateOperationStatus.Pending or GateOperationStatus.Published))
             return;
         Status = timeout ? GateOperationStatus.TimedOut : GateOperationStatus.Unknown;
         ErrorCode = timeout ? "GateAckTimeout" : "GateDeliveryUnknown";
@@ -81,7 +103,8 @@ public sealed class GateOperation : Entity<Guid>
 
     public bool Acknowledge(byte code, DateTime utc)
     {
-        if (Status is not (GateOperationStatus.Pending or GateOperationStatus.Published) ||
+        if (CompletionMode != GateOperationCompletionMode.Hardware ||
+            Status is not (GateOperationStatus.Pending or GateOperationStatus.Published) ||
             !DispatchStartedAtUtc.HasValue || AckStatusCode.HasValue || ReservedControllerId is null || code > 3)
             return false;
         AckStatusCode = code;
@@ -96,8 +119,25 @@ public sealed class GateOperation : Entity<Guid>
 
     public void Complete(DateTime utc)
     {
-        if (Status != GateOperationStatus.Acknowledged || AckStatusCode != 0)
+        if (CompletionMode != GateOperationCompletionMode.Hardware ||
+            Status != GateOperationStatus.Acknowledged || AckStatusCode != 0)
             throw new InvalidOperationException("A successful hardware ACK is required.");
+        Finish(utc);
+    }
+
+    public void CompleteSoftwareExit(DateTime utc)
+    {
+        if (CompletionMode != GateOperationCompletionMode.Software || Type != GateOperationType.Exit ||
+            Status != GateOperationStatus.Pending || TicketIdSnapshot is null || TicketIdSnapshot == Guid.Empty ||
+            ReservedTicketId != TicketIdSnapshot || ReservedControllerId.HasValue || DispatchStartedAtUtc.HasValue ||
+            PublishedAtUtc.HasValue || AcknowledgedAtUtc.HasValue || AckStatusCode.HasValue)
+            throw new InvalidOperationException("Only an authorized pending software exit can be confirmed.");
+
+        Finish(utc);
+    }
+
+    private void Finish(DateTime utc)
+    {
         Status = GateOperationStatus.Completed;
         CompletedAtUtc = utc;
         Release();

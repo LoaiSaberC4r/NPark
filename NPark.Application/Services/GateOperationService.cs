@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NPark.Application.Options;
+using NPark.Application.Shared.Dto;
 using NPark.Domain.Entities;
 using NPark.Domain.Enums;
 
@@ -21,11 +22,12 @@ public sealed record GateOperationResponse(
 {
     public string? ReasonMessage => ReasonCode is null ? null : WorkflowMessages.Get(ReasonCode);
     public bool IsAutomaticVisitorEntry { get; init; }
+    public string CompletionMode { get; init; } = nameof(GateOperationCompletionMode.Hardware);
 }
 
 public sealed class GateOperationService(IUnitOfWork db, IServiceScopeFactory scopes,
     IOptions<GateOperationOptions> options, IOptions<SubscriberButtonLockOptions> lockOptions,
-    ParkingBusinessClock clock, ILogger<GateOperationService> logger)
+    ParkingBusinessClock clock, GateOperationNotifier notifications, ILogger<GateOperationService> logger)
 {
     public Task<Result<GateOperationResponse>> AuthorizeAsync(
         Guid? ticketId, Guid? gateId, ushort? controller, Guid? userId, GateOperationType type, CancellationToken ct,
@@ -102,11 +104,14 @@ public sealed class GateOperationService(IUnitOfWork db, IServiceScopeFactory sc
                     return Result<GateOperationResponse>.Ok(ToResponse(lockWinner));
                 if (await AuthorizeGateOperationHandler.ResolveGateAsync(freshDb, gateId, controller, ct) is { } mapping)
                 {
+                    var softwareExit = type == GateOperationType.Exit && !options.Value.EnableExitGateMqtt;
                     var existing = ticketId is Guid ticket ? await TicketExitEligibilityService.FindReservationAsync(freshDb, ticket, ct) : null;
+                    if (existing is null && softwareExit && ticketId is Guid exitTicket)
+                        existing = await AuthorizeGateOperationHandler.FindCompletedAsync(freshDb, exitTicket, type, ct);
                     if (existing is not null)
                         return PriorResponse(existing, AuthorizeGateOperationHandler.CheckPrior(existing, mapping.Gate.Id,
                             mapping.Controller, type, request.HasRequestId, logger));
-                    if (await AuthorizeGateOperationHandler.FindControllerReservationAsync(freshDb, mapping.Controller, ct) is { } reserved)
+                    if (!softwareExit && await AuthorizeGateOperationHandler.FindControllerReservationAsync(freshDb, mapping.Controller, ct) is { } reserved)
                         return type == GateOperationType.Manual
                             ? PriorResponse(reserved, AuthorizeGateOperationHandler.CheckPrior(reserved, mapping.Gate.Id,
                                 mapping.Controller, type, request.HasRequestId, logger))
@@ -124,9 +129,13 @@ public sealed class GateOperationService(IUnitOfWork db, IServiceScopeFactory sc
                 "ControllerId={ControllerId}, TicketId={TicketId}, GateId={GateId}, NewStatus={NewStatus}, OperationType={OperationType}",
                 operation.Id, operation.CommandId, operation.ControllerId, operation.TicketIdSnapshot,
                 operation.GateId, operation.Status, operation.Type);
-        return operation is null
-            ? Result<GateOperationResponse>.Fail(new Error("GateOperationNotFound", "Gate operation not found.", ErrorType.NotFound))
-            : Result<GateOperationResponse>.Ok(ToResponse(operation));
+        if (operation is null)
+            return Result<GateOperationResponse>.Fail(new Error("GateOperationNotFound", "Gate operation not found.", ErrorType.NotFound));
+
+        var response = ToResponse(operation);
+        if (result.Value.Exit is { } exit)
+            await notifications.NotifyAsync(response, exit);
+        return Result<GateOperationResponse>.Ok(response);
     }
 
     private Result<GateOperationResponse> PriorResponse(GateOperation operation, Result<GateAuthorization> prior) =>
@@ -150,15 +159,20 @@ public sealed class GateOperationService(IUnitOfWork db, IServiceScopeFactory sc
     public GateOperationResponse ToResponse(GateOperation operation)
     {
         var completedExit = operation.Type == GateOperationType.Exit && operation.Status == GateOperationStatus.Completed;
+        var hardware = operation.CompletionMode == GateOperationCompletionMode.Hardware;
         return new GateOperationResponse(operation.Id, operation.TicketIdSnapshot, operation.GateId,
             operation.CommandId.ToString(CultureInfo.InvariantCulture), operation.ControllerId,
-            operation.Type.ToString(), operation.Status.ToString(), operation.AckStatusCode == 0,
+            operation.Type.ToString(), operation.Status.ToString(), hardware && operation.AckStatusCode == 0,
             completedExit, completedExit, AsUtc(operation.AcknowledgedAtUtc), AsUtc(operation.PublishedAtUtc),
             operation.AckStatusCode, AsUtc(operation.CreatedAtUtc)!.Value, AsUtc(operation.CompletedAtUtc),
             operation.Status == GateOperationStatus.Acknowledged, false, operation.ErrorCode,
-            options.Value.CommandTopic(operation.ControllerId),
-            Convert.ToHexString(GatePacketCodec.EncodeOperation(operation.Type, (ushort)operation.ControllerId,
-                (ulong)operation.CommandId))) { IsAutomaticVisitorEntry = operation.IsAutomaticVisitorEntry };
+            hardware ? options.Value.CommandTopic(operation.ControllerId) : string.Empty,
+            hardware ? Convert.ToHexString(GatePacketCodec.EncodeOperation(operation.Type, (ushort)operation.ControllerId,
+                (ulong)operation.CommandId)) : string.Empty)
+        {
+            IsAutomaticVisitorEntry = operation.IsAutomaticVisitorEntry,
+            CompletionMode = operation.CompletionMode.ToString()
+        };
     }
 
     private static DateTime? AsUtc(DateTime? time) =>
@@ -180,11 +194,11 @@ internal sealed record AuthorizeGateOperation(Guid OperationId, Guid? TicketId, 
     ushort? Controller, Guid? UserId, GateOperationType Type, bool HasRequestId, bool HardwareEntry = false)
     : ITransactionalCommand<GateAuthorization>;
 
-internal sealed record GateAuthorization(Guid OperationId, bool Created = false);
+internal sealed record GateAuthorization(Guid OperationId, bool Created = false, TicketExitedNotification? Exit = null);
 
 internal sealed class AuthorizeGateOperationHandler(IUnitOfWork db, ITicketExitEligibilityService eligibility,
-    SubscriberEligibilityService subscribers, IOptions<SubscriberButtonLockOptions> lockOptions,
-    IOptions<AutomaticVisitorEntryOptions> visitorOptions,
+    SubscriberEligibilityService subscribers, ITicketArchiveService archives, IOptions<GateOperationOptions> options,
+    IOptions<SubscriberButtonLockOptions> lockOptions, IOptions<AutomaticVisitorEntryOptions> visitorOptions,
     ParkingBusinessClock clock, ILogger<AuthorizeGateOperationHandler> logger) : ICommandHandler<AuthorizeGateOperation, GateAuthorization>
 {
     public async Task<Result<GateAuthorization>> Handle(AuthorizeGateOperation command, CancellationToken ct)
@@ -211,8 +225,7 @@ internal sealed class AuthorizeGateOperationHandler(IUnitOfWork db, ITicketExitE
         if (command.TicketId is Guid ticketId)
         {
             var prior = await TicketExitEligibilityService.FindReservationAsync(db, ticketId, ct)
-                ?? await db.FirstOrDefaultWithSpecAsync(new Matching<GateOperation>(x => x.TicketIdSnapshot == ticketId &&
-                    x.Type == command.Type && x.Status == GateOperationStatus.Completed), ct);
+                ?? await FindCompletedAsync(db, ticketId, command.Type, ct);
             if (prior is not null)
                 return hardware is not null ? Fail("EntryNotAuthorized") :
                     CheckPrior(prior, gate.Id, numeric, command.Type, command.HasRequestId, logger);
@@ -252,14 +265,27 @@ internal sealed class AuthorizeGateOperationHandler(IUnitOfWork db, ITicketExitE
         else if (command.Type != GateOperationType.Manual)
             return Fail("TicketNotFound");
 
-        var reserved = await FindControllerReservationAsync(db, numeric, ct);
-        if (reserved is not null)
+        var softwareExit = command.Type == GateOperationType.Exit && !options.Value.EnableExitGateMqtt;
+        if (!softwareExit && await FindControllerReservationAsync(db, numeric, ct) is { } reserved)
             return command.Type == GateOperationType.Manual
                 ? CheckPrior(reserved, gate.Id, numeric, command.Type, command.HasRequestId, logger) : Fail("GateOperationPending");
 
-        await db.Repository<GateOperation>().AddAsync(new GateOperation(command.OperationId,
+        var operation = new GateOperation(command.OperationId,
             command.TicketId, gate.Id, command.UserId, numeric, command.Type, clock.UtcNow,
-            isAutomaticVisitorEntry: hardware is not null), ct);
+            isAutomaticVisitorEntry: hardware is not null,
+            completionMode: softwareExit ? GateOperationCompletionMode.Software : GateOperationCompletionMode.Hardware);
+        await db.Repository<GateOperation>().AddAsync(operation, ct);
+
+        if (softwareExit)
+        {
+            // Acquire the ticket reservation under the unique index before archiving.
+            // The transaction pipeline commits creation, completion and archive as one unit.
+            await db.SaveChangesAsync(ct);
+            operation.CompleteSoftwareExit(clock.UtcNow);
+            var exit = await archives.CompleteAsync(operation, ct);
+            return Result<GateAuthorization>.Ok(new(operation.Id, Created: true, Exit: exit));
+        }
+
         hardware?.RecordGateOperation(command.OperationId);
         return Result<GateAuthorization>.Ok(new(command.OperationId, Created: true));
     }
@@ -278,6 +304,10 @@ internal sealed class AuthorizeGateOperationHandler(IUnitOfWork db, ITicketExitE
     internal static Task<GateOperation?> FindControllerReservationAsync(IUnitOfWork db, ushort controller, CancellationToken ct) =>
         db.FirstOrDefaultWithSpecAsync(new Matching<GateOperation>(x => x.ReservedControllerId == controller &&
             (x.Status == GateOperationStatus.Pending || x.Status == GateOperationStatus.Published)), ct);
+
+    internal static Task<GateOperation?> FindCompletedAsync(IUnitOfWork db, Guid ticket, GateOperationType type, CancellationToken ct) =>
+        db.FirstOrDefaultWithSpecAsync(new Matching<GateOperation>(x => x.TicketIdSnapshot == ticket &&
+            x.Type == type && x.Status == GateOperationStatus.Completed), ct);
 
     internal static Result<GateAuthorization> CheckReplay(GateOperation prior, AuthorizeGateOperation request) =>
         prior.TicketIdSnapshot == request.TicketId && prior.GateId == request.GateId && prior.UserId == request.UserId &&
